@@ -1,0 +1,94 @@
+name: upsgi CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and regression/fault suite
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build and test dependencies
+        run: |
+          sudo apt update -qq
+          sudo apt install --no-install-recommends -qqyf \
+            build-essential \
+            python3 \
+            python3-dev \
+            perl \
+            libperl-dev \
+            libpcre2-dev \
+            ca-certificates
+
+      - name: Show resolved default profile
+        run: python3 upsgiconfig.py --cflags default
+
+      - name: Build upsgi default profile
+        run: CPUCOUNT=1 python3 upsgiconfig.py --build default
+
+      - name: Verify public binary identity
+        run: |
+          test -x ./upsgi
+          ./upsgi --version
+
+      - name: Run fork regression and fault suite
+        run: |
+          prove -I tests/fork/lib \
+            tests/fork/regression/*.t \
+            tests/fork/fault/*.t
+
+      - name: Upload fork test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fork-test-artifacts
+          path: tests/fork/artifacts/
+          if-no-files-found: ignore
+
+  soak-advisory:
+    name: Advisory soak checks
+    runs-on: ubuntu-22.04
+    needs: build-and-test
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build and test dependencies
+        run: |
+          sudo apt update -qq
+          sudo apt install --no-install-recommends -qqyf \
+            build-essential \
+            python3 \
+            python3-dev \
+            perl \
+            libperl-dev \
+            libpcre2-dev \
+            ca-certificates
+
+      - name: Build upsgi default profile
+        run: CPUCOUNT=1 python3 upsgiconfig.py --build default
+
+      - name: Run advisory request-burst soak
+        run: |
+          UPSGI_SOAK_BURST_COUNT=10 \
+            tests/fork/soak/request_burst_smoke.sh
+
+      - name: Run advisory reload-cycle soak
+        run: |
+          UPSGI_SOAK_RELOAD_CYCLES=2 \
+            tests/fork/soak/reload_cycle_smoke.sh
+
+      - name: Upload soak artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fork-soak-artifacts
+          path: tests/fork/artifacts/
+          if-no-files-found: ignore

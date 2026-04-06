@@ -1,0 +1,38 @@
+# upsgi
+
+upsgi is a PSGI-first fork of the uWSGI codebase.
+
+Project 1 keeps the proven C prefork server model for Perl/PSGI hosting while
+reducing the default product surface to what matters for real PSGI deployment.
+
+## Baseline fork direction
+- PSGI-first
+- HTTP-socket-first
+- logging-enabled by default
+- static-map kept as a baseline feature
+- compatibility-minded for existing PSGI deployments
+
+## Default embedded plugins
+- `psgi`
+- `logfile`
+- `logsocket`
+- `rsyslog`
+
+## Authoritative docs
+- `docs/upsgi/INDEX.md`
+- `docs/upsgi/QUICKSTART.md`
+- `docs/upsgi/MIGRATION.md`
+- `docs/upsgi/OPTION_SURFACE.md`
+- `docs/upsgi/PACKAGING.md`
+- `docs/upsgi/REPO_LAYOUT.md`
+
+## Compatibility notes
+- `--http-modifier*` and related socket modifier flags remain accepted for migration compatibility only and have no runtime effect in the PSGI-only fork.
+- `--perl-no-die-catch` remains accepted for migration compatibility only.
+- `--log-exceptions` is the canonical flag for explicit PSGI exception logging during debugging.
+
+## Build
+```sh
+make
+./upsgi --version
+```

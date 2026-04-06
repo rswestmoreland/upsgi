@@ -1,0 +1,19 @@
+upsgi install/build notes
+
+This file is the minimal top-level build note for the maintained fork.
+
+Quick local build
+- make
+- ./upsgi --version
+
+Quick local validation
+- prove -I tests/fork/lib tests/fork/regression/*.t tests/fork/fault/*.t
+- tests/fork/soak/request_burst_smoke.sh
+- tests/fork/soak/reload_cycle_smoke.sh
+
+Authoritative docs
+- docs/upsgi/INDEX.md
+- docs/upsgi/QUICKSTART.md
+- docs/upsgi/MIGRATION.md
+- docs/upsgi/PACKAGING.md
+- docs/upsgi/REPO_LAYOUT.md

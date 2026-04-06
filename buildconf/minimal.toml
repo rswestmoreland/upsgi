@@ -1,0 +1,24 @@
+[build]
+xml = false
+yaml = false
+json = false
+ssl = false
+pcre = false
+routing = false
+debug = false
+malloc_implementation = "libc"
+extras = []
+plugins = []
+bin_name = "upsgi"
+append_version = ""
+plugin_dir = "."
+embedded_plugins = ["psgi"]
+as_shared_library = false
+locking = "auto"
+event = "auto"
+timer = "auto"
+filemonitor = "auto"
+blacklist = []
+whitelist = []
+embed_files = []
+embed_config = ""

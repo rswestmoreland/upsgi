@@ -1,0 +1,5 @@
+[build]
+inherit = "minimal"
+main_plugin = "psgi"
+embedded_plugins = ["psgi", "logfile", "logsocket", "rsyslog"]
+bin_name = "upsgi"

@@ -1,0 +1,17 @@
+[uwsgi]
+master = true
+workers = 1
+need-app = true
+strict = true
+vacuum = true
+die-on-term = true
+http-socket = :%(port)s
+psgi = %(app)s
+static-map = /assets=%(static_root)s
+logto = %(log_file)s
+http-modifier1 = 5
+http-modifier2 = 0
+http-socket-modifier1 = 5
+http-socket-modifier2 = 0
+perl-no-die-catch = true
+log-x-forwarded-for = true
