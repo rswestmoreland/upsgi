@@ -1,4 +1,5 @@
 #include "uwsgi.h"
+void uwsgi_validate_runtime_tunables(void);
 
 struct uwsgi_server uwsgi;
 pid_t masterpid;
@@ -4172,7 +4173,7 @@ void uwsgi_opt_log_drain_burst(char *opt, char *value, void *key) {
 		char *endptr;
 		*ptr = (int) strtol(value, &endptr, 10);
 		if (*endptr) {
-			uwsgi_log("[WARNING] non-numeric value "%s" for option "%s" - using %d !\n", value, opt, *ptr);
+			uwsgi_log("[WARNING] non-numeric value \"%s\" for option \"%s\" - using %d !\n", value, opt, *ptr);
 		}
 	}
 	else {

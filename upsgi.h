@@ -3978,6 +3978,7 @@ void uwsgi_opt_add_regexp_custom_list(char *, char *, void *);
 #endif
 void uwsgi_opt_set_int(char *, char *, void *);
 void uwsgi_opt_log_drain_burst(char *, char *, void *);
+void uwsgi_validate_runtime_tunables(void);
 void uwsgi_opt_uid(char *, char *, void *);
 void uwsgi_opt_gid(char *, char *, void *);
 void uwsgi_opt_set_rawint(char *, char *, void *);
