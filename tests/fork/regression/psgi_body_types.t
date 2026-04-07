@@ -10,7 +10,7 @@ use UpSGITest qw(build_artifact_dir default_binary fixture_app fixture_static_ro
 
 my $binary = default_binary();
 my $artifact_dir = build_artifact_dir('psgi_body_types');
-my $config_ini = File::Spec->catfile($artifact_dir, 'baseline.ini');
+my $config_yaml = File::Spec->catfile($artifact_dir, 'baseline.yaml');
 my $server_log = File::Spec->catfile($artifact_dir, 'server.log');
 my $port = pick_port(52);
 my $app = fixture_app('app_psgi_body_types.psgi');
@@ -18,7 +18,7 @@ my $code = slurp($app);
 
 render_profile(
     profile => 'baseline',
-    output_ini => $config_ini,
+    output_yaml => $config_yaml,
     app => $app,
     static_root => fixture_static_root(),
     log_file => $server_log,
@@ -27,7 +27,7 @@ render_profile(
 
 start_server(
     binary => $binary,
-    config_ini => $config_ini,
+    config_yaml => $config_yaml,
     artifact_dir => $artifact_dir,
 );
 

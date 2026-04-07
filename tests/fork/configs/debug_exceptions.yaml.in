@@ -1,0 +1,12 @@
+upsgi:
+  master: true
+  workers: 1
+  need-app: true
+  strict: true
+  vacuum: true
+  die-on-term: true
+  http-socket: :%(port)s
+  psgi: %(app)s
+  static-map: /assets=%(static_root)s
+  logto: %(log_file)s
+  log-exceptions: true

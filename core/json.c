@@ -1,28 +1,28 @@
-#ifdef UWSGI_JSON
+#ifdef UPSGI_JSON
 
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
-#if defined(UWSGI_JSON_YAJL_OLD)
+#if defined(UPSGI_JSON_YAJL_OLD)
 #include <yajl/yajl_parse.h>
 
-struct uwsgi_yajl_old_state {
+struct upsgi_yajl_old_state {
 	char *object;
 	char *key;
 	int in_object;
 	int is_array;
 };
 
-static int uwsgi_yajl_cb_null(void *ctx) {
-	struct uwsgi_yajl_old_state *uyos = (struct uwsgi_yajl_old_state *) ctx;
+static int upsgi_yajl_cb_null(void *ctx) {
+	struct upsgi_yajl_old_state *uyos = (struct upsgi_yajl_old_state *) ctx;
 	if (!uyos->key) return 1;
 	add_exported_option(uyos->key, strdup("0"), 0);
 	return 1;
 }
 
-static int uwsgi_yajl_cb_boolean(void *ctx, int b) {
-        struct uwsgi_yajl_old_state *uyos = (struct uwsgi_yajl_old_state *) ctx;
+static int upsgi_yajl_cb_boolean(void *ctx, int b) {
+        struct upsgi_yajl_old_state *uyos = (struct upsgi_yajl_old_state *) ctx;
         if (!uyos->key) return 1;
 	if (b) {
         	add_exported_option(uyos->key, strdup("1"), 0);
@@ -33,68 +33,68 @@ static int uwsgi_yajl_cb_boolean(void *ctx, int b) {
 	return 1;
 }
 
-static int uwsgi_yajl_cb_integer(void *ctx, long n) {
-        struct uwsgi_yajl_old_state *uyos = (struct uwsgi_yajl_old_state *) ctx;
+static int upsgi_yajl_cb_integer(void *ctx, long n) {
+        struct upsgi_yajl_old_state *uyos = (struct upsgi_yajl_old_state *) ctx;
         if (!uyos->key) return 1;
-        add_exported_option(uyos->key, uwsgi_64bit2str((int64_t) n), 0);
+        add_exported_option(uyos->key, upsgi_64bit2str((int64_t) n), 0);
 	return 1;
 }
 
-static int uwsgi_yajl_cb_double(void *ctx, double n) {
-	return uwsgi_yajl_cb_integer(ctx, (long) n);
+static int upsgi_yajl_cb_double(void *ctx, double n) {
+	return upsgi_yajl_cb_integer(ctx, (long) n);
 }
 
-static int uwsgi_yajl_cb_string(void *ctx, const unsigned char *s, unsigned int s_len) {
-	struct uwsgi_yajl_old_state *uyos = (struct uwsgi_yajl_old_state *) ctx;
+static int upsgi_yajl_cb_string(void *ctx, const unsigned char *s, unsigned int s_len) {
+	struct upsgi_yajl_old_state *uyos = (struct upsgi_yajl_old_state *) ctx;
         if (!uyos->key) return 1;
-        add_exported_option(uyos->key, uwsgi_concat2n((char *)s, (size_t)s_len, "", 0), 0);
+        add_exported_option(uyos->key, upsgi_concat2n((char *)s, (size_t)s_len, "", 0), 0);
 	return 1;
 }
 
-static int uwsgi_yajl_cb_number(void *ctx, const char *n, unsigned int n_len) {
-	return uwsgi_yajl_cb_string(ctx, (const unsigned char *)n, n_len);
+static int upsgi_yajl_cb_number(void *ctx, const char *n, unsigned int n_len) {
+	return upsgi_yajl_cb_string(ctx, (const unsigned char *)n, n_len);
 }
 
-static int uwsgi_yajl_cb_map_key(void *ctx, const unsigned char *s, unsigned int s_len) {
-	struct uwsgi_yajl_old_state *uyos = (struct uwsgi_yajl_old_state *) ctx;
+static int upsgi_yajl_cb_map_key(void *ctx, const unsigned char *s, unsigned int s_len) {
+	struct upsgi_yajl_old_state *uyos = (struct upsgi_yajl_old_state *) ctx;
 	if (!uyos->in_object) {
-		if (!uwsgi_strncmp(uyos->object, strlen(uyos->object), (char *)s, (size_t)s_len)) {
+		if (!upsgi_strncmp(uyos->object, strlen(uyos->object), (char *)s, (size_t)s_len)) {
 			uyos->in_object = 1; 
 		}
 		return 1;
 	}
 
-	uyos->key = uwsgi_concat2n((char *)s, (size_t)s_len, "", 0);
+	uyos->key = upsgi_concat2n((char *)s, (size_t)s_len, "", 0);
 	return 1;
 }
 
 
 static yajl_callbacks callbacks = {
-	.yajl_null = uwsgi_yajl_cb_null,
-	.yajl_boolean = uwsgi_yajl_cb_boolean,
-	.yajl_integer = uwsgi_yajl_cb_integer,
-	.yajl_double = uwsgi_yajl_cb_double,
-	.yajl_number = uwsgi_yajl_cb_number,
-	.yajl_string = uwsgi_yajl_cb_string,
+	.yajl_null = upsgi_yajl_cb_null,
+	.yajl_boolean = upsgi_yajl_cb_boolean,
+	.yajl_integer = upsgi_yajl_cb_integer,
+	.yajl_double = upsgi_yajl_cb_double,
+	.yajl_number = upsgi_yajl_cb_number,
+	.yajl_string = upsgi_yajl_cb_string,
 	.yajl_start_map = NULL,
-	.yajl_map_key = uwsgi_yajl_cb_map_key,
+	.yajl_map_key = upsgi_yajl_cb_map_key,
 	.yajl_end_map = NULL,
 	.yajl_start_array = NULL,
 	.yajl_end_array = NULL,
 };
 
-void uwsgi_json_config(char *file, char *magic_table[]) {
+void upsgi_json_config(char *file, char *magic_table[]) {
         size_t len = 0;
 
-        char *object_asked = "uwsgi";
+        char *object_asked = "upsgi";
         char *colon;
 
-        if (uwsgi_check_scheme(file)) {
-                colon = uwsgi_get_last_char(file, '/');
-                colon = uwsgi_get_last_char(colon, ':');
+        if (upsgi_check_scheme(file)) {
+                colon = upsgi_get_last_char(file, '/');
+                colon = upsgi_get_last_char(colon, ':');
         }
         else {
-                colon = uwsgi_get_last_char(file, ':');
+                colon = upsgi_get_last_char(file, ':');
         }
 
         if (colon) {
@@ -104,38 +104,38 @@ void uwsgi_json_config(char *file, char *magic_table[]) {
                 }
         }
 
-	struct uwsgi_yajl_old_state uyos;
-	memset(&uyos, 0, sizeof(struct uwsgi_yajl_old_state));
+	struct upsgi_yajl_old_state uyos;
+	memset(&uyos, 0, sizeof(struct upsgi_yajl_old_state));
 	uyos.object = object_asked;
-        uwsgi_log_initial("[uWSGI] getting JSON configuration from %s\n", file);
+        upsgi_log_initial("[upsgi] getting JSON configuration from %s\n", file);
 
-        char *json_data = uwsgi_open_and_read(file, &len, 1, magic_table);
+        char *json_data = upsgi_open_and_read(file, &len, 1, magic_table);
 
 	yajl_handle hand = yajl_alloc(&callbacks, NULL, NULL, &uyos);
 
 	yajl_status s = yajl_parse(hand, (const unsigned char *)json_data, len);
 	if (s != yajl_status_ok) {
-		uwsgi_log("%s\n", yajl_get_error(hand, 1, (const unsigned char *)json_data, len));
+		upsgi_log("%s\n", yajl_get_error(hand, 1, (const unsigned char *)json_data, len));
 		exit(1);
 	}
 }
 
 
-#elif defined(UWSGI_JSON_YAJL)
+#elif defined(UPSGI_JSON_YAJL)
 #include <yajl/yajl_tree.h>
 
-void uwsgi_json_config(char *file, char *magic_table[]) {
+void upsgi_json_config(char *file, char *magic_table[]) {
 	size_t len = 0;
 
-        char *object_asked = "uwsgi";
+        char *object_asked = "upsgi";
         char *colon;
 
-        if (uwsgi_check_scheme(file)) {
-                colon = uwsgi_get_last_char(file, '/');
-                colon = uwsgi_get_last_char(colon, ':');
+        if (upsgi_check_scheme(file)) {
+                colon = upsgi_get_last_char(file, '/');
+                colon = upsgi_get_last_char(colon, ':');
         }
         else {
-                colon = uwsgi_get_last_char(file, ':');
+                colon = upsgi_get_last_char(file, ':');
         }
 
         if (colon) {
@@ -145,22 +145,22 @@ void uwsgi_json_config(char *file, char *magic_table[]) {
                 }
         }
 
-        uwsgi_log_initial("[uWSGI] getting JSON configuration from %s\n", file);
+        upsgi_log_initial("[upsgi] getting JSON configuration from %s\n", file);
 
-        char *json_data = uwsgi_open_and_read(file, &len, 1, magic_table);
+        char *json_data = upsgi_open_and_read(file, &len, 1, magic_table);
 
 	char errbuf[1024];
 	yajl_val node = yajl_tree_parse((const char *)json_data, errbuf, sizeof(errbuf));
 
 	if (!node) {
-		uwsgi_log("error parsing JSON data: %s\n", errbuf);
+		upsgi_log("error parsing JSON data: %s\n", errbuf);
                 exit(1);
 	}
 
 	const char * path[] = { object_asked, NULL };
 	yajl_val v = yajl_tree_get(node, path, yajl_t_any);
 	if (!YAJL_IS_OBJECT(v)) {
-		uwsgi_log("you must define a object named %s in your JSON data\n", object_asked);
+		upsgi_log("you must define a object named %s in your JSON data\n", object_asked);
 		exit(1);
 	}
 
@@ -205,7 +205,7 @@ void uwsgi_json_config(char *file, char *magic_table[]) {
 #include <jansson.h>
 
 
-void uwsgi_json_config(char *file, char *magic_table[]) {
+void upsgi_json_config(char *file, char *magic_table[]) {
 
 	size_t len = 0;
 	char *json_data;
@@ -220,16 +220,16 @@ void uwsgi_json_config(char *file, char *magic_table[]) {
 
 	void *config_iter;
 
-	char *object_asked = "uwsgi";
+	char *object_asked = "upsgi";
 	char *colon;
 	int i;
 
-	if (uwsgi_check_scheme(file)) {
-		colon = uwsgi_get_last_char(file, '/');
-		colon = uwsgi_get_last_char(colon, ':');
+	if (upsgi_check_scheme(file)) {
+		colon = upsgi_get_last_char(file, '/');
+		colon = upsgi_get_last_char(colon, ':');
 	}
 	else {
-		colon = uwsgi_get_last_char(file, ':');
+		colon = upsgi_get_last_char(file, ':');
 	}
 
 	if (colon) {
@@ -239,9 +239,9 @@ void uwsgi_json_config(char *file, char *magic_table[]) {
 		}
 	}
 
-	uwsgi_log_initial("[uWSGI] getting JSON configuration from %s\n", file);
+	upsgi_log_initial("[upsgi] getting JSON configuration from %s\n", file);
 
-	json_data = uwsgi_open_and_read(file, &len, 1, magic_table);
+	json_data = upsgi_open_and_read(file, &len, 1, magic_table);
 
 #ifdef JANSSON_MAJOR_VERSION
 	root = json_loads(json_data, 0, &error);
@@ -250,14 +250,14 @@ void uwsgi_json_config(char *file, char *magic_table[]) {
 #endif
 
 	if (!root) {
-		uwsgi_log("error parsing JSON data: line %d %s\n", error.line, error.text);
+		upsgi_log("error parsing JSON data: line %d %s\n", error.line, error.text);
 		exit(1);
 	}
 
 	config = json_object_get(root, object_asked);
 
 	if (!json_is_object(config)) {
-		uwsgi_log("you must define a object named %s in your JSON data\n", object_asked);
+		upsgi_log("you must define a object named %s in your JSON data\n", object_asked);
 		exit(1);
 	}
 
@@ -277,7 +277,7 @@ void uwsgi_json_config(char *file, char *magic_table[]) {
 			add_exported_option((char *) key, strdup("0"), 0);
 		}
 		else if (json_is_integer(config_value)) {
-			add_exported_option((char *) key, uwsgi_num2str(json_integer_value(config_value)), 0);
+			add_exported_option((char *) key, upsgi_num2str(json_integer_value(config_value)), 0);
 		}
 		else if (json_is_array(config_value)) {
 			for (i = 0; i < (int) json_array_size(config_value); i++) {
@@ -292,7 +292,7 @@ void uwsgi_json_config(char *file, char *magic_table[]) {
 					add_exported_option((char *) key, strdup("0"), 0);
 				}
 				else if (json_is_integer(config_array_item)) {
-					add_exported_option((char *) key, uwsgi_num2str(json_integer_value(config_array_item)), 0);
+					add_exported_option((char *) key, upsgi_num2str(json_integer_value(config_array_item)), 0);
 				}
 			}
 		}

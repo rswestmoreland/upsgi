@@ -1,8 +1,8 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
 /*
 
-	uWSGI transformations
+	upsgi transformations
 
 	each body chunk is passed (in chain) to every transformation
 
@@ -14,24 +14,24 @@
 
 */
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 // -1 error, 0 = no buffer, send the body, 1 = buffer
-int uwsgi_apply_transformations(struct wsgi_request *wsgi_req, char *buf, size_t len) {
+int upsgi_apply_transformations(struct wsgi_request *wsgi_req, char *buf, size_t len) {
 	wsgi_req->transformed_chunk = NULL;
 	wsgi_req->transformed_chunk_len = 0;
-	struct uwsgi_transformation *ut = wsgi_req->transformations;
+	struct upsgi_transformation *ut = wsgi_req->transformations;
 	char *t_buf = buf;
 	size_t t_len = len;
 	uint8_t flushed = 0;
 	while(ut) {
 		// allocate the buffer (if needed)
 		if (!ut->chunk) {
-			ut->chunk = uwsgi_buffer_new(t_len);
+			ut->chunk = upsgi_buffer_new(t_len);
 		}
 		// skip final transformations before appending data
 		if (ut->is_final) goto next;
-		if (uwsgi_buffer_append(ut->chunk, t_buf, t_len)) {
+		if (upsgi_buffer_append(ut->chunk, t_buf, t_len)) {
 			return -1;
 		}
 
@@ -68,8 +68,8 @@ next:
 run all the remaining (or buffered) transformations
 
 */
-int uwsgi_apply_final_transformations(struct wsgi_request *wsgi_req) {
-	struct uwsgi_transformation *ut = wsgi_req->transformations;
+int upsgi_apply_final_transformations(struct wsgi_request *wsgi_req) {
+	struct upsgi_transformation *ut = wsgi_req->transformations;
 	wsgi_req->transformed_chunk = NULL;
         wsgi_req->transformed_chunk_len = 0;
 	char *t_buf = NULL;
@@ -92,15 +92,15 @@ int uwsgi_apply_final_transformations(struct wsgi_request *wsgi_req) {
 
 		if (!ut->chunk) {
 			if (t_len > 0) {
-				ut->chunk = uwsgi_buffer_new(t_len);
+				ut->chunk = upsgi_buffer_new(t_len);
 			}
 			else {
-				ut->chunk = uwsgi_buffer_new(uwsgi.page_size);
+				ut->chunk = upsgi_buffer_new(upsgi.page_size);
 			}
 		}
 		
 		if (t_len > 0) {
-			if (uwsgi_buffer_append(ut->chunk, t_buf, t_len)) {
+			if (upsgi_buffer_append(ut->chunk, t_buf, t_len)) {
 				return -1;
                 	}
 		}
@@ -127,15 +127,15 @@ next:
         return 0;
 }
 
-void uwsgi_free_transformations(struct wsgi_request *wsgi_req) {
-	struct uwsgi_transformation *ut = wsgi_req->transformations;
+void upsgi_free_transformations(struct wsgi_request *wsgi_req) {
+	struct upsgi_transformation *ut = wsgi_req->transformations;
 	while(ut) {
-		struct uwsgi_transformation *current_ut = ut;
+		struct upsgi_transformation *current_ut = ut;
 		if (current_ut->chunk) {
-			uwsgi_buffer_destroy(current_ut->chunk);
+			upsgi_buffer_destroy(current_ut->chunk);
 		}
 		if (current_ut->ub) {
-			uwsgi_buffer_destroy(current_ut->ub);
+			upsgi_buffer_destroy(current_ut->ub);
 		}
 		if (current_ut->fd > -1) {
 			close(current_ut->fd);
@@ -145,14 +145,14 @@ void uwsgi_free_transformations(struct wsgi_request *wsgi_req) {
 	}
 }
 
-struct uwsgi_transformation *uwsgi_add_transformation(struct wsgi_request *wsgi_req, int (*func)(struct wsgi_request *, struct uwsgi_transformation *), void *data) {
-	struct uwsgi_transformation *old_ut = NULL, *ut = wsgi_req->transformations;
+struct upsgi_transformation *upsgi_add_transformation(struct wsgi_request *wsgi_req, int (*func)(struct wsgi_request *, struct upsgi_transformation *), void *data) {
+	struct upsgi_transformation *old_ut = NULL, *ut = wsgi_req->transformations;
 	while(ut) {
 		old_ut = ut;
 		ut = ut->next;
 	}
 
-	ut = uwsgi_calloc(sizeof(struct uwsgi_transformation));
+	ut = upsgi_calloc(sizeof(struct upsgi_transformation));
 	ut->func = func;
 	ut->fd = -1;
 	ut->data = data;

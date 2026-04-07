@@ -39,3 +39,9 @@ The stats surface now exposes logging counters for both generic logs and request
 - `log_dropped_messages` and `req_log_dropped_messages`
 
 These counters are intended to make slow sinks and burst pressure visible without changing the default logging durability model.
+
+## Runtime stats sampler design
+The repo now includes a design document for a future low-overhead periodic runtime sampler:
+- `docs/upsgi/RUNTIME_STATS_SAMPLER_DESIGN.md`
+
+This is intended to complement the existing stats socket and stats-push surfaces with a compact operator-facing summary line suitable for normal service logs while tuning production settings.

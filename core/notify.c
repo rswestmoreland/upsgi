@@ -1,12 +1,12 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 
 
-void uwsgi_systemd_notify(char *message) {
+void upsgi_systemd_notify(char *message) {
 
-	struct msghdr *msghdr = (struct msghdr *) uwsgi.notification_object;
+	struct msghdr *msghdr = (struct msghdr *) upsgi.notification_object;
 	struct iovec *iovec = msghdr->msg_iov;
 
 	iovec[0].iov_base = "STATUS=";
@@ -20,84 +20,84 @@ void uwsgi_systemd_notify(char *message) {
 
 	msghdr->msg_iovlen = 3;
 
-	if (sendmsg(uwsgi.notification_fd, msghdr, 0) < 0) {
-		uwsgi_error("sendmsg()");
+	if (sendmsg(upsgi.notification_fd, msghdr, 0) < 0) {
+		upsgi_error("sendmsg()");
 	}
 }
 
-void uwsgi_systemd_notify_ready(void) {
+void upsgi_systemd_notify_ready(void) {
 
-	struct msghdr *msghdr = (struct msghdr *) uwsgi.notification_object;
+	struct msghdr *msghdr = (struct msghdr *) upsgi.notification_object;
 	struct iovec *iovec = msghdr->msg_iov;
 
-	iovec[0].iov_base = "STATUS=uWSGI is ready\nREADY=1\n";
+	iovec[0].iov_base = "STATUS=upsgi is ready\nREADY=1\n";
 	iovec[0].iov_len = 30;
 
 	msghdr->msg_iovlen = 1;
 
-	if (sendmsg(uwsgi.notification_fd, msghdr, 0) < 0) {
-		uwsgi_error("sendmsg()");
+	if (sendmsg(upsgi.notification_fd, msghdr, 0) < 0) {
+		upsgi_error("sendmsg()");
 	}
 }
 
 
-void uwsgi_systemd_init(char *systemd_socket) {
+void upsgi_systemd_init(char *systemd_socket) {
 
 	struct sockaddr_un *sd_sun;
 	struct msghdr *msghdr;
 
-	uwsgi.notification_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
-	if (uwsgi.notification_fd < 0) {
-		uwsgi_error("socket()");
+	upsgi.notification_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+	if (upsgi.notification_fd < 0) {
+		upsgi_error("socket()");
 		return;
 	}
 
 	size_t len = strlen(systemd_socket);
-	sd_sun = uwsgi_malloc(sizeof(struct sockaddr_un));
+	sd_sun = upsgi_malloc(sizeof(struct sockaddr_un));
 	memset(sd_sun, 0, sizeof(struct sockaddr_un));
 	sd_sun->sun_family = AF_UNIX;
 	strncpy(sd_sun->sun_path, systemd_socket, UMIN(len, sizeof(sd_sun->sun_path)));
 	if (sd_sun->sun_path[0] == '@')
 		sd_sun->sun_path[0] = 0;
 
-	msghdr = uwsgi_malloc(sizeof(struct msghdr));
+	msghdr = upsgi_malloc(sizeof(struct msghdr));
 	memset(msghdr, 0, sizeof(struct msghdr));
 
-	msghdr->msg_iov = uwsgi_malloc(sizeof(struct iovec) * 3);
+	msghdr->msg_iov = upsgi_malloc(sizeof(struct iovec) * 3);
 	memset(msghdr->msg_iov, 0, sizeof(struct iovec) * 3);
 
 	msghdr->msg_name = sd_sun;
 	msghdr->msg_namelen = sizeof(struct sockaddr_un) - (sizeof(sd_sun->sun_path) - len);
 
-	uwsgi.notification_object = msghdr;
+	upsgi.notification_object = msghdr;
 
-	uwsgi.notify = uwsgi_systemd_notify;
-	uwsgi.notify_ready = uwsgi_systemd_notify_ready;
+	upsgi.notify = upsgi_systemd_notify;
+	upsgi.notify_ready = upsgi_systemd_notify_ready;
 
 }
 
-int uwsgi_notify_socket_manage(int fd) {
+int upsgi_notify_socket_manage(int fd) {
 	char buf[8192];
         ssize_t rlen = read(fd, buf, 8192);
         if (rlen < 0) {
-                if (uwsgi_is_again()) return 0;
-                uwsgi_error("uwsgi_notify_socket_manage()/read()");
+                if (upsgi_is_again()) return 0;
+                upsgi_error("upsgi_notify_socket_manage()/read()");
                 exit(1);
         }
 
 	if (rlen > 0) {
-		uwsgi_log_verbose("[notify-socket] %.*s\n", rlen, buf);
+		upsgi_log_verbose("[notify-socket] %.*s\n", rlen, buf);
         }
 
         return 0;
 }
 
-int uwsgi_notify_msg(char *dst, char *msg, size_t len) {
+int upsgi_notify_msg(char *dst, char *msg, size_t len) {
 	static int notify_fd = -1;
 	if (notify_fd < 0) {
 		notify_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
 		if (notify_fd < 0) {
-			uwsgi_error("uwsgi_notify_msg()/socket()");
+			upsgi_error("upsgi_notify_msg()/socket()");
 			return -1;
 		}
 	}

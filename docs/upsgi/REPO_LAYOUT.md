@@ -34,18 +34,18 @@ This document defines the authoritative maintained layout for the fork.
 - `plugins/logfile/`, `plugins/logsocket/`, `plugins/rsyslog/` - retained bundled logging sinks
 - `lib/` - retained low-level helper code still used by the build/runtime
 - `upsgi.h`, `upsgi_main.c` - current internal entry-point/header names
-- `uwsgi.h` - temporary compatibility shim that includes `upsgi.h`
+- `upsgi.h` - temporary compatibility shim that includes `upsgi.h`
 
 Unsupported upstream standalone plugin directories and the old external installer helper are no longer part of the maintained fork tree.
 
 ## Intentionally retained legacy/internal names
-Some retained internal files still use `uwsgi` in the filename or symbol prefix. These are documented in `RETAINED_LEGACY_REFERENCES.md` and remain intentionally out of scope for the narrow public-facing rename sweep.
+Some retained internal files still use `upsgi` in the filename or symbol prefix. These are documented in `RETAINED_LEGACY_REFERENCES.md` and remain intentionally out of scope for the narrow public-facing rename sweep.
 
 ## Generated paths that are not part of the authoritative repo layout
 These may appear during local builds or test runs but should not be treated as source-of-truth tree content:
 - `upsgi`
-- `bin/uwsgi`
-- `uwsgibuild.*`
+- `bin/upsgi`
+- `upsgibuild.*`
 - `.local-lib/` local linker workarounds
 - `tests/fork/artifacts/*`
 - `dist/*`

@@ -15,13 +15,13 @@ my $assert_not = File::Spec->catfile(repo_root(), 'tests', 'fork', 'helpers', 'a
 sub run_case {
     my (%args) = @_;
     my $artifact_dir = build_artifact_dir($args{name});
-    my $config_ini = File::Spec->catfile($artifact_dir, $args{profile} . '.ini');
+    my $config_yaml = File::Spec->catfile($artifact_dir, $args{profile} . '.yaml');
     my $server_log = File::Spec->catfile($artifact_dir, 'server.log');
     my $port = $args{port};
 
     render_profile(
         profile => $args{profile},
-        output_ini => $config_ini,
+        output_yaml => $config_yaml,
         app => fixture_app('app_die.psgi'),
         static_root => fixture_static_root(),
         log_file => $server_log,
@@ -30,7 +30,7 @@ sub run_case {
 
     start_server(
         binary => $binary,
-        config_ini => $config_ini,
+        config_yaml => $config_yaml,
         artifact_dir => $artifact_dir,
     );
 
@@ -57,7 +57,7 @@ my ($debug_artifact, $debug_log) = run_case(
 ok(
     run_ok($assert_contains, $debug_log, 'Devel::StackTrace')
         || run_ok($assert_contains, $debug_log, 'Trace begun')
-        || run_ok($assert_contains, $debug_log, '[uwsgi-perl error] upsgi regression die marker'),
+        || run_ok($assert_contains, $debug_log, '[upsgi-perl error] upsgi regression die marker'),
     'debug exception profile emits exception-visibility logging signals',
 );
 stop_server($debug_artifact);

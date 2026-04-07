@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# uwsgi --plugin python,http --http 0.0.0.0:8000 -w app
+# upsgi --plugin python,http --http 0.0.0.0:8000 -w app
 
 from werkzeug.wrappers import Request, Response
 

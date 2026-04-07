@@ -1,6 +1,6 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 #define SNMP_SEQUENCE	0x30
 #define SNMP_INTEGER	0x02
@@ -13,12 +13,12 @@ extern struct uwsgi_server uwsgi;
 #define SNMP_WATERMARK (127-8)
 
 /* 1.3.6.1.4.1.35156.17.X.X */
-#define SNMP_UWSGI_BASE "\x2B\x06\x01\x04\x01\x82\x92\x54\x11"
+#define SNMP_UPSGI_BASE "\x2B\x06\x01\x04\x01\x82\x92\x54\x11"
 
 static int get_snmp_integer(uint8_t *, uint64_t *);
 
-static uint64_t get_uwsgi_snmp_value(uint64_t, uint8_t *);
-static uint64_t get_uwsgi_custom_snmp_value(uint64_t, uint8_t *);
+static uint64_t get_upsgi_snmp_value(uint64_t, uint8_t *);
+static uint64_t get_upsgi_custom_snmp_value(uint64_t, uint8_t *);
 
 static uint8_t snmp_int_to_snmp(uint64_t, uint8_t, uint8_t *);
 
@@ -54,8 +54,8 @@ void manage_snmp(int fd, uint8_t * buffer, int size, struct sockaddr_in *client_
 		return;
 	ptr++;
 
-#ifdef UWSGI_DEBUG
-	uwsgi_debug("SNMP packet size: %d\n", size);
+#ifdef UPSGI_DEBUG
+	upsgi_debug("SNMP packet size: %d\n", size);
 #endif
 
 	// check snmp version
@@ -68,11 +68,11 @@ void manage_snmp(int fd, uint8_t * buffer, int size, struct sockaddr_in *client_
 		return;
 	ptr += ptrdelta;
 
-#ifdef UWSGI_DEBUG
-	uwsgi_debug("SNMP version: %d\n", version);
+#ifdef UPSGI_DEBUG
+	upsgi_debug("SNMP version: %d\n", version);
 #endif
 
-	// check for community string (this must be set from the api using uwsgi.snmp_community or with --snmp-community arg)
+	// check for community string (this must be set from the api using upsgi.snmp_community or with --snmp-community arg)
 	if (*ptr != SNMP_STRING)
 		return;
 	ptr++;
@@ -84,13 +84,13 @@ void manage_snmp(int fd, uint8_t * buffer, int size, struct sockaddr_in *client_
 	ptr++;
 
 	// check for community string
-	if (strlen(uwsgi.shared->snmp_community) != community_len)
+	if (strlen(upsgi.shared->snmp_community) != community_len)
 		return;
-	if (memcmp(ptr, uwsgi.shared->snmp_community, community_len))
+	if (memcmp(ptr, upsgi.shared->snmp_community, community_len))
 		return;
 
-#ifdef UWSGI_DEBUG
-	uwsgi_debug("SNMP community: %.*s\n", community_len, ptr);
+#ifdef UPSGI_DEBUG
+	upsgi_debug("SNMP community: %.*s\n", community_len, ptr);
 #endif
 
 	ptr += community_len;
@@ -118,8 +118,8 @@ void manage_snmp(int fd, uint8_t * buffer, int size, struct sockaddr_in *client_
 	if (ptrdelta <= 0)
 		return;
 
-#ifdef UWSGI_DEBUG
-	uwsgi_debug("SNMP request id: %d %p\n", request_id, ptr);
+#ifdef UPSGI_DEBUG
+	upsgi_debug("SNMP request id: %d %p\n", request_id, ptr);
 #endif
 
 	// check here
@@ -160,8 +160,8 @@ void manage_snmp(int fd, uint8_t * buffer, int size, struct sockaddr_in *client_
 		return;
 	ptr += ptrdelta;
 
-#ifdef UWSGI_DEBUG
-	uwsgi_debug("SNMP int [1]: %d\n", snmp_int);
+#ifdef UPSGI_DEBUG
+	upsgi_debug("SNMP int [1]: %d\n", snmp_int);
 #endif
 
 	// check for sequence
@@ -180,15 +180,15 @@ void manage_snmp(int fd, uint8_t * buffer, int size, struct sockaddr_in *client_
 		return;
 	ptr++;
 
-	// check for normal OID uWSGI size: |1.3|.6|.1|.4|.1.|35156|.17|.1/2|.x| + OID_NULL
+	// check for normal OID upsgi size: |1.3|.6|.1|.4|.1.|35156|.17|.1/2|.x| + OID_NULL
 	asnlen = *ptr;
 	if (asnlen < 15)
 		return;
 	seq3 = ptr;
 	ptr++;
 
-#ifdef UWSGI_DEBUG
-	uwsgi_debug("SNMP ASN len: %d\n", asnlen);
+#ifdef UPSGI_DEBUG
+	upsgi_debug("SNMP ASN len: %d\n", asnlen);
 #endif
 
 	// is it an OID ?
@@ -202,7 +202,7 @@ void manage_snmp(int fd, uint8_t * buffer, int size, struct sockaddr_in *client_
 	ptr++;
 
 	// and now parse the OID !!!
-	if (memcmp(ptr, SNMP_UWSGI_BASE, 9))
+	if (memcmp(ptr, SNMP_UPSGI_BASE, 9))
 		return;
 
 	ptr += 9;
@@ -228,46 +228,46 @@ void manage_snmp(int fd, uint8_t * buffer, int size, struct sockaddr_in *client_
 	else {
 		size_t metric_asn_len = oidlen - 9;
 		char *metric_asn = (char *) ptr;
-		struct uwsgi_metric *um = uwsgi_metric_find_by_asn(metric_asn, metric_asn_len);
+		struct upsgi_metric *um = upsgi_metric_find_by_asn(metric_asn, metric_asn_len);
 		if (!um) return;
-		uwsgi_rlock(uwsgi.metrics_lock);
+		upsgi_rlock(upsgi.metrics_lock);
 		int64_t value = *um->value;
-		uwsgi_rwunlock(uwsgi.metrics_lock);
+		upsgi_rwunlock(upsgi.metrics_lock);
 		size = build_snmp_metric_response(value, um->type, buffer, size, seq1, seq2, seq3);
 	}
 
 
 	if (size > 0) {
 		if (sendto(fd, buffer, size, 0, (struct sockaddr *) client_addr, sizeof(struct sockaddr_in)) < 0) {
-			uwsgi_error("sendto()");
+			upsgi_error("sendto()");
 		}
 	}
 }
 
-static uint64_t get_uwsgi_snmp_value(uint64_t val, uint8_t * oid_t) {
+static uint64_t get_upsgi_snmp_value(uint64_t val, uint8_t * oid_t) {
 
 	val--;
 
-	if (uwsgi.shared->snmp_gvalue[val].type) {
-		*oid_t = uwsgi.shared->snmp_gvalue[val].type;
-		return *uwsgi.shared->snmp_gvalue[val].val;
+	if (upsgi.shared->snmp_gvalue[val].type) {
+		*oid_t = upsgi.shared->snmp_gvalue[val].type;
+		return *upsgi.shared->snmp_gvalue[val].val;
 	}
 
 	*oid_t = SNMP_NULL;
 	return 0;
 }
 
-static uint64_t get_uwsgi_custom_snmp_value(uint64_t val, uint8_t * oid_t) {
+static uint64_t get_upsgi_custom_snmp_value(uint64_t val, uint8_t * oid_t) {
 
 	val--;
-	uwsgi_wlock(uwsgi.snmp_lock);
-	if (uwsgi.shared->snmp_value[val].type) {
-		*oid_t = uwsgi.shared->snmp_value[val].type;
-		uwsgi_rwunlock(uwsgi.snmp_lock);
-		return uwsgi.shared->snmp_value[val].val;
+	upsgi_wlock(upsgi.snmp_lock);
+	if (upsgi.shared->snmp_value[val].type) {
+		*oid_t = upsgi.shared->snmp_value[val].type;
+		upsgi_rwunlock(upsgi.snmp_lock);
+		return upsgi.shared->snmp_value[val].val;
 	}
 
-	uwsgi_rwunlock(uwsgi.snmp_lock);
+	upsgi_rwunlock(upsgi.snmp_lock);
 	*oid_t = SNMP_NULL;
 	return 0;
 }
@@ -284,8 +284,8 @@ static int get_snmp_integer(uint8_t * ptr, uint64_t * val) {
 	if (tlen > 4)
 		return -1;
 
-#ifdef UWSGI_DEBUG
-	uwsgi_debug("SNMP get integer TLEN %d %p\n", tlen, ptr);
+#ifdef UPSGI_DEBUG
+	upsgi_debug("SNMP get integer TLEN %d %p\n", tlen, ptr);
 #endif
 
 	j = 0;
@@ -341,10 +341,10 @@ static ssize_t build_snmp_response(uint8_t oid1, uint8_t oid2, uint8_t * buffer,
 	uint8_t oid_type;
 
 	if (oid1 == 1) {
-		snmp_val = get_uwsgi_snmp_value(oid2, &oid_type);
+		snmp_val = get_upsgi_snmp_value(oid2, &oid_type);
 	}
 	else if (oid1 == 2) {
-		snmp_val = get_uwsgi_custom_snmp_value(oid2, &oid_type);
+		snmp_val = get_upsgi_custom_snmp_value(oid2, &oid_type);
 	}
 	else {
 		return -1;
@@ -370,7 +370,7 @@ static ssize_t build_snmp_response(uint8_t oid1, uint8_t oid2, uint8_t * buffer,
 static ssize_t build_snmp_metric_response(int64_t value, uint8_t type, uint8_t * buffer, int size, uint8_t * seq1, uint8_t * seq2, uint8_t * seq3) {
         uint8_t oid_sz;
 
-	if (type == UWSGI_METRIC_GAUGE) {
+	if (type == UPSGI_METRIC_GAUGE) {
         	buffer[size - 2] = SNMP_GAUGE;
         	oid_sz = snmp_int_to_snmp(value, SNMP_GAUGE, buffer + (size - 1));
 	}
@@ -393,54 +393,54 @@ static ssize_t build_snmp_metric_response(int64_t value, uint8_t type, uint8_t *
 
 }
 
-void uwsgi_opt_snmp(char *opt, char *value, void *foobar) {
-	uwsgi.snmp = 1;
+void upsgi_opt_snmp(char *opt, char *value, void *foobar) {
+	upsgi.snmp = 1;
 	if (value) {
-		uwsgi.snmp_addr = value;
-		uwsgi.master_process = 1;
+		upsgi.snmp_addr = value;
+		upsgi.master_process = 1;
 	}
 
 }
 
-void uwsgi_opt_snmp_community(char *opt, char *value, void *foobar) {
-	uwsgi.snmp = 1;
-	uwsgi.snmp_community = value;
+void upsgi_opt_snmp_community(char *opt, char *value, void *foobar) {
+	upsgi.snmp = 1;
+	upsgi.snmp_community = value;
 }
 
-int uwsgi_setup_snmp(void) {
+int upsgi_setup_snmp(void) {
 	int snmp_fd = -1;
 	int i;
-	if (uwsgi.snmp) {
-		if (uwsgi.snmp_community) {
-			if (strlen(uwsgi.snmp_community) > 72) {
-				uwsgi_log("*** warning the supplied SNMP community string will be truncated to 72 chars ***\n");
-				memcpy(uwsgi.shared->snmp_community, uwsgi.snmp_community, 72);
+	if (upsgi.snmp) {
+		if (upsgi.snmp_community) {
+			if (strlen(upsgi.snmp_community) > 72) {
+				upsgi_log("*** warning the supplied SNMP community string will be truncated to 72 chars ***\n");
+				memcpy(upsgi.shared->snmp_community, upsgi.snmp_community, 72);
 			}
 			else {
-				memcpy(uwsgi.shared->snmp_community, uwsgi.snmp_community, strlen(uwsgi.snmp_community) + 1);
+				memcpy(upsgi.shared->snmp_community, upsgi.snmp_community, strlen(upsgi.snmp_community) + 1);
 			}
 		}
 
-		uwsgi.shared->snmp_gvalue[0].type = SNMP_COUNTER64;
-		uwsgi.shared->snmp_gvalue[0].val = &uwsgi.workers[0].requests;
+		upsgi.shared->snmp_gvalue[0].type = SNMP_COUNTER64;
+		upsgi.shared->snmp_gvalue[0].val = &upsgi.workers[0].requests;
 
-		for (i = 0; i < uwsgi.numproc; i++) {
-			uwsgi.shared->snmp_gvalue[30 + i].type = SNMP_COUNTER64;
-			uwsgi.shared->snmp_gvalue[30 + i].val = &uwsgi.workers[i + 1].requests;
+		for (i = 0; i < upsgi.numproc; i++) {
+			upsgi.shared->snmp_gvalue[30 + i].type = SNMP_COUNTER64;
+			upsgi.shared->snmp_gvalue[30 + i].val = &upsgi.workers[i + 1].requests;
 		}
 
-		if (uwsgi.snmp_addr) {
-			snmp_fd = bind_to_udp(uwsgi.snmp_addr, 0, 0);
+		if (upsgi.snmp_addr) {
+			snmp_fd = bind_to_udp(upsgi.snmp_addr, 0, 0);
 			if (snmp_fd < 0) {
-				uwsgi_log("unable to bind to udp socket. SNMP service will be disabled.\n");
+				upsgi_log("unable to bind to udp socket. SNMP service will be disabled.\n");
 			}
 			else {
-				uwsgi_log("SNMP server enabled on %s\n", uwsgi.snmp_addr);
-				event_queue_add_fd_read(uwsgi.master_queue, snmp_fd);
+				upsgi_log("SNMP server enabled on %s\n", upsgi.snmp_addr);
+				event_queue_add_fd_read(upsgi.master_queue, snmp_fd);
 			}
 		}
 		else {
-			uwsgi_log("SNMP agent enabled.\n");
+			upsgi_log("SNMP agent enabled.\n");
 		}
 
 	}
@@ -448,16 +448,16 @@ int uwsgi_setup_snmp(void) {
 	return snmp_fd;
 }
 
-void uwsgi_master_manage_snmp(int snmp_fd) {
+void upsgi_master_manage_snmp(int snmp_fd) {
         struct sockaddr_in udp_client;
         socklen_t udp_len = sizeof(udp_client);
-        ssize_t rlen = recvfrom(snmp_fd, uwsgi.wsgi_req->buffer, uwsgi.buffer_size, 0, (struct sockaddr *) &udp_client, &udp_len);
+        ssize_t rlen = recvfrom(snmp_fd, upsgi.wsgi_req->buffer, upsgi.buffer_size, 0, (struct sockaddr *) &udp_client, &udp_len);
 
         if (rlen < 0) {
-                uwsgi_error("recvfrom()");
+                upsgi_error("recvfrom()");
         }
         else if (rlen > 0) {
-                manage_snmp(snmp_fd, (uint8_t *) uwsgi.wsgi_req->buffer, rlen, &udp_client);
+                manage_snmp(snmp_fd, (uint8_t *) upsgi.wsgi_req->buffer, rlen, &udp_client);
         }
 }
 

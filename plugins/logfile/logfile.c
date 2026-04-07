@@ -1,9 +1,9 @@
-#include <uwsgi.h>
+#include <upsgi.h>
 /*
  * Default file-based logging sink kept first-class in upsgi.
  * Registration only happens here; selection and routing stay in core/logging.c.
  */
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 struct logfile_data {
 	char *logfile;
@@ -11,7 +11,7 @@ struct logfile_data {
 	uint64_t maxsize;
 };
 
-static ssize_t uwsgi_file_logger(struct uwsgi_logger *ul, char *message, size_t len) {
+static ssize_t upsgi_file_logger(struct upsgi_logger *ul, char *message, size_t len) {
 
 	if (!ul->configured) {
 		if (ul->arg) {
@@ -21,21 +21,21 @@ static ssize_t uwsgi_file_logger(struct uwsgi_logger *ul, char *message, size_t 
 			char *logfile = NULL;
 
 			if (strchr(ul->arg, '=')) {
-				if (uwsgi_kvlist_parse(ul->arg, strlen(ul->arg), ',', '=',
+				if (upsgi_kvlist_parse(ul->arg, strlen(ul->arg), ',', '=',
 					"logfile", &logfile, "backupname", &backupname, "maxsize", &maxsize, NULL)) {
-					uwsgi_log("[uwsgi-logfile] invalid keyval syntax\n");
+					upsgi_log("[upsgi-logfile] invalid keyval syntax\n");
 					exit(1);
 				}
 				is_keyval = 1;
 			}
 			if (is_keyval) {
 				if (!logfile) {
-					uwsgi_log("[uwsgi-logfile] missing logfile key\n");
+					upsgi_log("[upsgi-logfile] missing logfile key\n");
 					return 0;
 				}
 
 				if (maxsize) {
-					struct logfile_data *data = uwsgi_malloc(sizeof(struct logfile_data));
+					struct logfile_data *data = upsgi_malloc(sizeof(struct logfile_data));
 					data->logfile = logfile;
 					data->backupname = backupname;
 					data->maxsize = (uint64_t)strtoull(maxsize, NULL, 10);
@@ -63,7 +63,7 @@ static ssize_t uwsgi_file_logger(struct uwsgi_logger *ul, char *message, size_t 
 			off_t logsize = lseek(ul->fd, 0, SEEK_CUR);
 
 			if (data->maxsize > 0 && (uint64_t) logsize > data->maxsize) {
-				uwsgi_log_do_rotate(data->logfile, data->backupname, logsize, ul->fd);
+				upsgi_log_do_rotate(data->logfile, data->backupname, logsize, ul->fd);
 			}
 		}
 
@@ -73,7 +73,7 @@ static ssize_t uwsgi_file_logger(struct uwsgi_logger *ul, char *message, size_t 
 	return 0;
 }
 
-static ssize_t uwsgi_fd_logger(struct uwsgi_logger *ul, char *message, size_t len) {
+static ssize_t upsgi_fd_logger(struct upsgi_logger *ul, char *message, size_t len) {
 
         if (!ul->configured) {
 		ul->fd = -1;
@@ -88,26 +88,26 @@ static ssize_t uwsgi_fd_logger(struct uwsgi_logger *ul, char *message, size_t le
 
 }
 
-static ssize_t uwsgi_stdio_logger(struct uwsgi_logger *ul, char *message, size_t len) {
+static ssize_t upsgi_stdio_logger(struct upsgi_logger *ul, char *message, size_t len) {
 
-        if (uwsgi.original_log_fd >= 0) {
-                return write(uwsgi.original_log_fd, message, len);
+        if (upsgi.original_log_fd >= 0) {
+                return write(upsgi.original_log_fd, message, len);
         }
         return 0;
 }
 
 
 /* Register the file-oriented sink family: file, fd, and stdio. */
-void uwsgi_file_logger_register() {
-	uwsgi_register_logger("file", uwsgi_file_logger);
-	uwsgi_register_logger("fd", uwsgi_fd_logger);
-	uwsgi_register_logger("stdio", uwsgi_stdio_logger);
+void upsgi_file_logger_register() {
+	upsgi_register_logger("file", upsgi_file_logger);
+	upsgi_register_logger("fd", upsgi_fd_logger);
+	upsgi_register_logger("stdio", upsgi_stdio_logger);
 }
 
-struct uwsgi_plugin logfile_plugin = {
+struct upsgi_plugin logfile_plugin = {
 
         .name = "logfile",
-        .on_load = uwsgi_file_logger_register,
+        .on_load = upsgi_file_logger_register,
 
 };
 

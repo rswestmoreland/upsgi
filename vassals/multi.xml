@@ -1,4 +1,4 @@
-<uwsgi>
+<upsgi>
 
 	<id>app001</id>
 
@@ -25,7 +25,7 @@
 	</app>
 
 	<app domain="sirius002:9090">
-		<script>uwsgicc</script>
+		<script>upsgicc</script>
 	</app>
 
-</uwsgi>
+</upsgi>

@@ -1,13 +1,13 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 /*
 
 	Exceptions management
 
 	generally exceptions are printed in the logs, but if you enable
-	an exception manager they will be stored in a (relatively big) uwsgi packet
+	an exception manager they will be stored in a (relatively big) upsgi packet
 	with the following structure.
 
 	"vars" -> keyval of request vars
@@ -23,16 +23,16 @@ extern struct uwsgi_server uwsgi;
 
 	Other vars can be added, but you cannot be sure they will be used by exceptions handler.
 
-	The exception-uwsgi packet is passed "as is" to the exception handler
+	The exception-upsgi packet is passed "as is" to the exception handler
 
 	Exceptions hooks:
 	
 		a request plugin can export that hooks:
 	
-		struct uwsgi_buffer *backtrace(struct wsgi_request *);
-		struct uwsgi_buffer *exception_class(struct wsgi_request *);
-		struct uwsgi_buffer *exception_msg(struct wsgi_request *);
-		struct uwsgi_buffer *exception_repr(struct wsgi_request *);
+		struct upsgi_buffer *backtrace(struct wsgi_request *);
+		struct upsgi_buffer *exception_class(struct wsgi_request *);
+		struct upsgi_buffer *exception_msg(struct wsgi_request *);
+		struct upsgi_buffer *exception_repr(struct wsgi_request *);
 		void exception_log(struct wsgi_request *);
 
 		Remember to reset the exception status (if possible) after each call
@@ -44,77 +44,77 @@ extern struct uwsgi_server uwsgi;
 
 */
 
-struct uwsgi_buffer *uwsgi_exception_handler_object(struct wsgi_request *wsgi_req) {
-	struct uwsgi_buffer *ub = uwsgi_buffer_new(4096);
-	if (uwsgi_buffer_append_keyval(ub, "vars", 4, wsgi_req->buffer, wsgi_req->len)) goto error;
-	if (uwsgi.p[wsgi_req->uh->modifier1]->backtrace) {
-                struct uwsgi_buffer *bt = uwsgi.p[wsgi_req->uh->modifier1]->backtrace(wsgi_req);
+struct upsgi_buffer *upsgi_exception_handler_object(struct wsgi_request *wsgi_req) {
+	struct upsgi_buffer *ub = upsgi_buffer_new(4096);
+	if (upsgi_buffer_append_keyval(ub, "vars", 4, wsgi_req->buffer, wsgi_req->len)) goto error;
+	if (upsgi.p[wsgi_req->uh->modifier1]->backtrace) {
+                struct upsgi_buffer *bt = upsgi.p[wsgi_req->uh->modifier1]->backtrace(wsgi_req);
 		if (bt) {
-			if (uwsgi_buffer_append_keyval(ub, "backtrace", 9, bt->buf, bt->pos)) {
-				uwsgi_buffer_destroy(bt);
+			if (upsgi_buffer_append_keyval(ub, "backtrace", 9, bt->buf, bt->pos)) {
+				upsgi_buffer_destroy(bt);
 				goto error;
 			} 
-			uwsgi_buffer_destroy(bt);
+			upsgi_buffer_destroy(bt);
 		}
 	}
 	
-	if (uwsgi.p[wsgi_req->uh->modifier1]->exception_class) {
-		struct uwsgi_buffer *ec = uwsgi.p[wsgi_req->uh->modifier1]->exception_class(wsgi_req);
+	if (upsgi.p[wsgi_req->uh->modifier1]->exception_class) {
+		struct upsgi_buffer *ec = upsgi.p[wsgi_req->uh->modifier1]->exception_class(wsgi_req);
 		if (ec) {
-			if (uwsgi_buffer_append_keyval(ub, "class", 5, ec->buf, ec->pos)) {
-				uwsgi_buffer_destroy(ec);
+			if (upsgi_buffer_append_keyval(ub, "class", 5, ec->buf, ec->pos)) {
+				upsgi_buffer_destroy(ec);
 				goto error;
 			}
-			uwsgi_buffer_destroy(ec);
+			upsgi_buffer_destroy(ec);
 		}
 	}
 
-	if (uwsgi.p[wsgi_req->uh->modifier1]->exception_msg) {
-                struct uwsgi_buffer *em = uwsgi.p[wsgi_req->uh->modifier1]->exception_msg(wsgi_req);
+	if (upsgi.p[wsgi_req->uh->modifier1]->exception_msg) {
+                struct upsgi_buffer *em = upsgi.p[wsgi_req->uh->modifier1]->exception_msg(wsgi_req);
                 if (em) {
-                        if (uwsgi_buffer_append_keyval(ub, "msg", 3, em->buf, em->pos)) {
-                                uwsgi_buffer_destroy(em);
+                        if (upsgi_buffer_append_keyval(ub, "msg", 3, em->buf, em->pos)) {
+                                upsgi_buffer_destroy(em);
                                 goto error;
                         }
-                        uwsgi_buffer_destroy(em);
+                        upsgi_buffer_destroy(em);
                 }
         }
 
-	if (uwsgi.p[wsgi_req->uh->modifier1]->exception_repr) {
-                struct uwsgi_buffer *er = uwsgi.p[wsgi_req->uh->modifier1]->exception_repr(wsgi_req);
+	if (upsgi.p[wsgi_req->uh->modifier1]->exception_repr) {
+                struct upsgi_buffer *er = upsgi.p[wsgi_req->uh->modifier1]->exception_repr(wsgi_req);
                 if (er) {
-                        if (uwsgi_buffer_append_keyval(ub, "repr", 4, er->buf, er->pos)) {
-                                uwsgi_buffer_destroy(er);
+                        if (upsgi_buffer_append_keyval(ub, "repr", 4, er->buf, er->pos)) {
+                                upsgi_buffer_destroy(er);
                                 goto error;
                         }
-                        uwsgi_buffer_destroy(er);
+                        upsgi_buffer_destroy(er);
                 }
         }
 
-	if (uwsgi_buffer_append_keynum(ub, "unix", 4, uwsgi_now())) goto error;
-	if (uwsgi_buffer_append_keynum(ub, "wid", 3, uwsgi.mywid)) goto error;
-	if (uwsgi_buffer_append_keynum(ub, "pid", 3, uwsgi.mypid)) goto error;
-	if (uwsgi_buffer_append_keynum(ub, "core", 4, wsgi_req->async_id)) goto error;
-	if (uwsgi_buffer_append_keyval(ub, "node", 4, uwsgi.hostname, uwsgi.hostname_len)) goto error;
+	if (upsgi_buffer_append_keynum(ub, "unix", 4, upsgi_now())) goto error;
+	if (upsgi_buffer_append_keynum(ub, "wid", 3, upsgi.mywid)) goto error;
+	if (upsgi_buffer_append_keynum(ub, "pid", 3, upsgi.mypid)) goto error;
+	if (upsgi_buffer_append_keynum(ub, "core", 4, wsgi_req->async_id)) goto error;
+	if (upsgi_buffer_append_keyval(ub, "node", 4, upsgi.hostname, upsgi.hostname_len)) goto error;
 
 	return ub;
 	
 error:
-	uwsgi_buffer_destroy(ub);
+	upsgi_buffer_destroy(ub);
 	return NULL;
 }
 
 static void append_vars_to_ubuf(char *key, uint16_t keylen, char *val, uint16_t vallen, void *data) {
-	struct uwsgi_buffer *ub = (struct uwsgi_buffer *) data;
+	struct upsgi_buffer *ub = (struct upsgi_buffer *) data;
 
-	if (uwsgi_buffer_append(ub, key, keylen)) return;
-	if (uwsgi_buffer_append(ub, " = ", 3)) return;
-	if (uwsgi_buffer_append(ub, val, vallen)) return;
-	if (uwsgi_buffer_append(ub, "\n", 1)) return;
+	if (upsgi_buffer_append(ub, key, keylen)) return;
+	if (upsgi_buffer_append(ub, " = ", 3)) return;
+	if (upsgi_buffer_append(ub, val, vallen)) return;
+	if (upsgi_buffer_append(ub, "\n", 1)) return;
 }
 
 static void append_backtrace_to_ubuf(uint16_t pos, char *value, uint16_t len, void *data) {
-        struct uwsgi_buffer *ub = (struct uwsgi_buffer *) data;
+        struct upsgi_buffer *ub = (struct upsgi_buffer *) data;
 
 	uint16_t item = 0;
 	if (pos > 0) {
@@ -124,38 +124,38 @@ static void append_backtrace_to_ubuf(uint16_t pos, char *value, uint16_t len, vo
 	switch(item) {
 		// filename
 		case 0:
-			if (uwsgi_buffer_append(ub, "filename: \"", 11)) return;
-			if (uwsgi_buffer_append(ub, value, len)) return;
-			if (uwsgi_buffer_append(ub, "\" ", 2)) return;
+			if (upsgi_buffer_append(ub, "filename: \"", 11)) return;
+			if (upsgi_buffer_append(ub, value, len)) return;
+			if (upsgi_buffer_append(ub, "\" ", 2)) return;
 			break;
 		// lineno
 		case 1:
-			if (uwsgi_buffer_append(ub, "line: ", 6)) return;
-			if (uwsgi_buffer_append(ub, value, len)) return;
-			if (uwsgi_buffer_append(ub, " ", 1)) return;
+			if (upsgi_buffer_append(ub, "line: ", 6)) return;
+			if (upsgi_buffer_append(ub, value, len)) return;
+			if (upsgi_buffer_append(ub, " ", 1)) return;
 			break;
 		// function
 		case 2:
-			if (uwsgi_buffer_append(ub, "function: \"", 11)) return;
-			if (uwsgi_buffer_append(ub, value, len)) return;
-			if (uwsgi_buffer_append(ub, "\" ", 2)) return;
+			if (upsgi_buffer_append(ub, "function: \"", 11)) return;
+			if (upsgi_buffer_append(ub, value, len)) return;
+			if (upsgi_buffer_append(ub, "\" ", 2)) return;
 			break;
 		// text
 		case 3:
 			if (len > 0) {
-				if (uwsgi_buffer_append(ub, "text/code: \"", 12)) return;
-				if (uwsgi_buffer_append(ub, value, len)) return;
-				if (uwsgi_buffer_append(ub, "\" ", 2)) return;
+				if (upsgi_buffer_append(ub, "text/code: \"", 12)) return;
+				if (upsgi_buffer_append(ub, value, len)) return;
+				if (upsgi_buffer_append(ub, "\" ", 2)) return;
 			}
 			break;
 		// custom
 		case 4:
 			if (len > 0) {
-				if (uwsgi_buffer_append(ub, "custom: \"", 9)) return;
-                        	if (uwsgi_buffer_append(ub, value, len)) return;
-                        	if (uwsgi_buffer_append(ub, "\" ", 2)) return;
+				if (upsgi_buffer_append(ub, "custom: \"", 9)) return;
+                        	if (upsgi_buffer_append(ub, value, len)) return;
+                        	if (upsgi_buffer_append(ub, "\" ", 2)) return;
 			}
-			if (uwsgi_buffer_append(ub, "\n", 1)) return;
+			if (upsgi_buffer_append(ub, "\n", 1)) return;
 			break;
 		default:
 			break;
@@ -164,37 +164,37 @@ static void append_backtrace_to_ubuf(uint16_t pos, char *value, uint16_t len, vo
 }
 
 
-int uwsgi_exceptions_catch(struct wsgi_request *wsgi_req) {
+int upsgi_exceptions_catch(struct wsgi_request *wsgi_req) {
 
-	if (uwsgi_response_prepare_headers(wsgi_req, "500 Internal Server Error", 25)) {
+	if (upsgi_response_prepare_headers(wsgi_req, "500 Internal Server Error", 25)) {
 		return -1;
 	}
 
-	if (uwsgi_response_add_content_type(wsgi_req, "text/plain", 10)) {
+	if (upsgi_response_add_content_type(wsgi_req, "text/plain", 10)) {
 		return -1;
 	}
 
-	struct uwsgi_buffer *ub = uwsgi_buffer_new(4096);
-	if (uwsgi_buffer_append(ub, "uWSGI exceptions catcher for \"", 30)) goto error;
-	if (uwsgi_buffer_append(ub, wsgi_req->method, wsgi_req->method_len)) goto error;
-	if (uwsgi_buffer_append(ub, " ", 1)) goto error;
-	if (uwsgi_buffer_append(ub, wsgi_req->uri, wsgi_req->uri_len)) goto error;
-	if (uwsgi_buffer_append(ub, "\" (request plugin: \"", 20)) goto error;
-	if (uwsgi_buffer_append(ub, (char *) uwsgi.p[wsgi_req->uh->modifier1]->name, strlen(uwsgi.p[wsgi_req->uh->modifier1]->name))) goto error;
-	if (uwsgi_buffer_append(ub, "\", modifier1: ", 14 )) goto error;
-	if (uwsgi_buffer_num64(ub, wsgi_req->uh->modifier1)) goto error;
-	if (uwsgi_buffer_append(ub, ")\n\n", 3)) goto error;
+	struct upsgi_buffer *ub = upsgi_buffer_new(4096);
+	if (upsgi_buffer_append(ub, "upsgi exceptions catcher for \"", 30)) goto error;
+	if (upsgi_buffer_append(ub, wsgi_req->method, wsgi_req->method_len)) goto error;
+	if (upsgi_buffer_append(ub, " ", 1)) goto error;
+	if (upsgi_buffer_append(ub, wsgi_req->uri, wsgi_req->uri_len)) goto error;
+	if (upsgi_buffer_append(ub, "\" (request plugin: \"", 20)) goto error;
+	if (upsgi_buffer_append(ub, (char *) upsgi.p[wsgi_req->uh->modifier1]->name, strlen(upsgi.p[wsgi_req->uh->modifier1]->name))) goto error;
+	if (upsgi_buffer_append(ub, "\", modifier1: ", 14 )) goto error;
+	if (upsgi_buffer_num64(ub, wsgi_req->uh->modifier1)) goto error;
+	if (upsgi_buffer_append(ub, ")\n\n", 3)) goto error;
 
-	if (uwsgi_buffer_append(ub, "Exception: ", 11)) goto error;
+	if (upsgi_buffer_append(ub, "Exception: ", 11)) goto error;
                 
-        if (uwsgi.p[wsgi_req->uh->modifier1]->exception_repr) {
-                struct uwsgi_buffer *ub_exc_repr = uwsgi.p[wsgi_req->uh->modifier1]->exception_repr(wsgi_req);
+        if (upsgi.p[wsgi_req->uh->modifier1]->exception_repr) {
+                struct upsgi_buffer *ub_exc_repr = upsgi.p[wsgi_req->uh->modifier1]->exception_repr(wsgi_req);
                 if (ub_exc_repr) {
-                        if (uwsgi_buffer_append(ub, ub_exc_repr->buf, ub_exc_repr->pos)) {
-                                uwsgi_buffer_destroy(ub_exc_repr);
+                        if (upsgi_buffer_append(ub, ub_exc_repr->buf, ub_exc_repr->pos)) {
+                                upsgi_buffer_destroy(ub_exc_repr);
                                 goto error;
                         }
-                        uwsgi_buffer_destroy(ub_exc_repr);
+                        upsgi_buffer_destroy(ub_exc_repr);
                 }
                 else {
                         goto notavail3;
@@ -202,21 +202,21 @@ int uwsgi_exceptions_catch(struct wsgi_request *wsgi_req) {
         }
         else {
 notavail3:
-                if (uwsgi_buffer_append(ub, "-Not available-", 15)) goto error;
+                if (upsgi_buffer_append(ub, "-Not available-", 15)) goto error;
         }
 
-        if (uwsgi_buffer_append(ub, "\n\n", 2)) goto error;
+        if (upsgi_buffer_append(ub, "\n\n", 2)) goto error;
 
-	if (uwsgi_buffer_append(ub, "Exception class: ", 17)) goto error;
+	if (upsgi_buffer_append(ub, "Exception class: ", 17)) goto error;
 
-	if (uwsgi.p[wsgi_req->uh->modifier1]->exception_class) {
-		struct uwsgi_buffer *ub_exc_class = uwsgi.p[wsgi_req->uh->modifier1]->exception_class(wsgi_req);
+	if (upsgi.p[wsgi_req->uh->modifier1]->exception_class) {
+		struct upsgi_buffer *ub_exc_class = upsgi.p[wsgi_req->uh->modifier1]->exception_class(wsgi_req);
 		if (ub_exc_class) {
-			if (uwsgi_buffer_append(ub, ub_exc_class->buf, ub_exc_class->pos)) {
-				uwsgi_buffer_destroy(ub_exc_class);
+			if (upsgi_buffer_append(ub, ub_exc_class->buf, ub_exc_class->pos)) {
+				upsgi_buffer_destroy(ub_exc_class);
 				goto error;
 			}
-			uwsgi_buffer_destroy(ub_exc_class);
+			upsgi_buffer_destroy(ub_exc_class);
 		}
 		else {
 			goto notavail;
@@ -224,21 +224,21 @@ notavail3:
 	}
 	else {
 notavail:
-		if (uwsgi_buffer_append(ub, "-Not available-", 15)) goto error;
+		if (upsgi_buffer_append(ub, "-Not available-", 15)) goto error;
 	}
 
-	if (uwsgi_buffer_append(ub, "\n\n", 2)) goto error;
+	if (upsgi_buffer_append(ub, "\n\n", 2)) goto error;
 
-	if (uwsgi_buffer_append(ub, "Exception message: ", 19)) goto error;
+	if (upsgi_buffer_append(ub, "Exception message: ", 19)) goto error;
 
-        if (uwsgi.p[wsgi_req->uh->modifier1]->exception_msg) {
-                struct uwsgi_buffer *ub_exc_msg = uwsgi.p[wsgi_req->uh->modifier1]->exception_msg(wsgi_req);
+        if (upsgi.p[wsgi_req->uh->modifier1]->exception_msg) {
+                struct upsgi_buffer *ub_exc_msg = upsgi.p[wsgi_req->uh->modifier1]->exception_msg(wsgi_req);
                 if (ub_exc_msg) {
-                        if (uwsgi_buffer_append(ub, ub_exc_msg->buf, ub_exc_msg->pos)) {
-                                uwsgi_buffer_destroy(ub_exc_msg);
+                        if (upsgi_buffer_append(ub, ub_exc_msg->buf, ub_exc_msg->pos)) {
+                                upsgi_buffer_destroy(ub_exc_msg);
                                 goto error;
                         }
-                        uwsgi_buffer_destroy(ub_exc_msg);
+                        upsgi_buffer_destroy(ub_exc_msg);
                 }
                 else {
                         goto notavail2;
@@ -246,28 +246,28 @@ notavail:
         }
         else {
 notavail2:
-                if (uwsgi_buffer_append(ub, "-Not available-", 15)) goto error;
+                if (upsgi_buffer_append(ub, "-Not available-", 15)) goto error;
         }
 
-	if (uwsgi_buffer_append(ub, "\n\n", 2)) goto error;
+	if (upsgi_buffer_append(ub, "\n\n", 2)) goto error;
 
-	if (uwsgi_buffer_append(ub, "Backtrace:\n", 11)) goto error;
+	if (upsgi_buffer_append(ub, "Backtrace:\n", 11)) goto error;
 
-        if (uwsgi.p[wsgi_req->uh->modifier1]->backtrace) {
-                struct uwsgi_buffer *ub_exc_bt = uwsgi.p[wsgi_req->uh->modifier1]->backtrace(wsgi_req);
+        if (upsgi.p[wsgi_req->uh->modifier1]->backtrace) {
+                struct upsgi_buffer *ub_exc_bt = upsgi.p[wsgi_req->uh->modifier1]->backtrace(wsgi_req);
                 if (ub_exc_bt) {
-			struct uwsgi_buffer *parsed_bt = uwsgi_buffer_new(4096);
-			if (uwsgi_hooked_parse_array(ub_exc_bt->buf, ub_exc_bt->pos, append_backtrace_to_ubuf, parsed_bt)) {
-				uwsgi_buffer_destroy(ub_exc_bt);
-				uwsgi_buffer_destroy(parsed_bt);
+			struct upsgi_buffer *parsed_bt = upsgi_buffer_new(4096);
+			if (upsgi_hooked_parse_array(ub_exc_bt->buf, ub_exc_bt->pos, append_backtrace_to_ubuf, parsed_bt)) {
+				upsgi_buffer_destroy(ub_exc_bt);
+				upsgi_buffer_destroy(parsed_bt);
                                 goto error;
 			}
-			uwsgi_buffer_destroy(ub_exc_bt);
-                        if (uwsgi_buffer_append(ub, parsed_bt->buf, parsed_bt->pos)) {
-                                uwsgi_buffer_destroy(parsed_bt);
+			upsgi_buffer_destroy(ub_exc_bt);
+                        if (upsgi_buffer_append(ub, parsed_bt->buf, parsed_bt->pos)) {
+                                upsgi_buffer_destroy(parsed_bt);
                                 goto error;
                         }
-                        uwsgi_buffer_destroy(parsed_bt);
+                        upsgi_buffer_destroy(parsed_bt);
                 }
                 else {
                         goto notavail4;
@@ -275,134 +275,134 @@ notavail2:
         }
         else {
 notavail4:
-                if (uwsgi_buffer_append(ub, "-Not available-", 15)) goto error;
+                if (upsgi_buffer_append(ub, "-Not available-", 15)) goto error;
         }
 
-        if (uwsgi_buffer_append(ub, "\n\n", 2)) goto error;
+        if (upsgi_buffer_append(ub, "\n\n", 2)) goto error;
 
-	if (uwsgi_hooked_parse(wsgi_req->buffer, wsgi_req->len, append_vars_to_ubuf, ub)) {
+	if (upsgi_hooked_parse(wsgi_req->buffer, wsgi_req->len, append_vars_to_ubuf, ub)) {
 		goto error;
 	}
 
-	if (uwsgi_response_write_body_do(wsgi_req, ub->buf, ub->pos)) {
+	if (upsgi_response_write_body_do(wsgi_req, ub->buf, ub->pos)) {
 		goto error;
 	}
 
-	uwsgi_buffer_destroy(ub);
+	upsgi_buffer_destroy(ub);
 	return 0;
 
 error:
-	uwsgi_buffer_destroy(ub);
+	upsgi_buffer_destroy(ub);
 	return -1;
 
 }
 
-static void uwsgi_exception_run_handlers(struct uwsgi_buffer *ub) {
-	struct uwsgi_string_list *usl = uwsgi.exception_handlers_instance;
+static void upsgi_exception_run_handlers(struct upsgi_buffer *ub) {
+	struct upsgi_string_list *usl = upsgi.exception_handlers_instance;
 	struct iovec iov[2];
         iov[1].iov_base = ub->buf;
         iov[1].iov_len = ub->pos;
 	while(usl) {
-		struct uwsgi_exception_handler_instance *uehi = (struct uwsgi_exception_handler_instance *) usl->custom_ptr;
+		struct upsgi_exception_handler_instance *uehi = (struct upsgi_exception_handler_instance *) usl->custom_ptr;
         	iov[0].iov_base = &uehi;
         	iov[0].iov_len = sizeof(long);
         	// now send the message to the exception handler thread
-        	if (writev(uwsgi.exception_handler_thread->pipe[0], iov, 2) != (ssize_t) (ub->pos+sizeof(long))) {
-                	uwsgi_error("[uwsgi-exception-handler-error] uwsgi_exception_run_handlers()/writev()");
+        	if (writev(upsgi.exception_handler_thread->pipe[0], iov, 2) != (ssize_t) (ub->pos+sizeof(long))) {
+                	upsgi_error("[upsgi-exception-handler-error] upsgi_exception_run_handlers()/writev()");
         	}
 		usl = usl->next;
 	}
 }
 
-void uwsgi_manage_exception(struct wsgi_request *wsgi_req,int catch) {
+void upsgi_manage_exception(struct wsgi_request *wsgi_req,int catch) {
 
-	int do_exit = uwsgi.reload_on_exception;
+	int do_exit = upsgi.reload_on_exception;
 
 	if (!wsgi_req) goto log2;
 
 	if (do_exit) goto check_catch;
 
-	if (uwsgi.exception_handlers_instance) {
-		struct uwsgi_buffer *ehi = uwsgi_exception_handler_object(wsgi_req);
+	if (upsgi.exception_handlers_instance) {
+		struct upsgi_buffer *ehi = upsgi_exception_handler_object(wsgi_req);
 		if (ehi) {
-			uwsgi_exception_run_handlers(ehi);
-			uwsgi_buffer_destroy(ehi);
+			upsgi_exception_run_handlers(ehi);
+			upsgi_buffer_destroy(ehi);
 		}
 	}
 
-	uwsgi.workers[uwsgi.mywid].cores[wsgi_req->async_id].exceptions++;
-	uwsgi_apps[wsgi_req->app_id].exceptions++;
+	upsgi.workers[upsgi.mywid].cores[wsgi_req->async_id].exceptions++;
+	upsgi_apps[wsgi_req->app_id].exceptions++;
 
-	if (uwsgi.reload_on_exception_type && uwsgi.p[wsgi_req->uh->modifier1]->exception_class) {
-		struct uwsgi_buffer *ub = uwsgi.p[wsgi_req->uh->modifier1]->exception_msg(wsgi_req);
+	if (upsgi.reload_on_exception_type && upsgi.p[wsgi_req->uh->modifier1]->exception_class) {
+		struct upsgi_buffer *ub = upsgi.p[wsgi_req->uh->modifier1]->exception_msg(wsgi_req);
 		if (ub) {
-			struct uwsgi_string_list *usl = uwsgi.reload_on_exception_type;
+			struct upsgi_string_list *usl = upsgi.reload_on_exception_type;
 			while (usl) {
-				if (!uwsgi_strncmp(usl->value, usl->len, ub->buf, ub->len)) {
+				if (!upsgi_strncmp(usl->value, usl->len, ub->buf, ub->len)) {
 					do_exit = 1;
-					uwsgi_buffer_destroy(ub);
+					upsgi_buffer_destroy(ub);
 					goto check_catch;
 				}
 				usl = usl->next;
 			}
-			uwsgi_buffer_destroy(ub);
+			upsgi_buffer_destroy(ub);
 		}
 	}
 
-	if (uwsgi.reload_on_exception_value && uwsgi.p[wsgi_req->uh->modifier1]->exception_msg) {
-                struct uwsgi_buffer *ub = uwsgi.p[wsgi_req->uh->modifier1]->exception_msg(wsgi_req);
+	if (upsgi.reload_on_exception_value && upsgi.p[wsgi_req->uh->modifier1]->exception_msg) {
+                struct upsgi_buffer *ub = upsgi.p[wsgi_req->uh->modifier1]->exception_msg(wsgi_req);
 		if (ub) {
-			struct uwsgi_string_list *usl = uwsgi.reload_on_exception_value;
+			struct upsgi_string_list *usl = upsgi.reload_on_exception_value;
                         while (usl) {
-                                if (!uwsgi_strncmp(usl->value, usl->len, ub->buf, ub->len)) {
+                                if (!upsgi_strncmp(usl->value, usl->len, ub->buf, ub->len)) {
                                         do_exit = 1;
-                                        uwsgi_buffer_destroy(ub);
+                                        upsgi_buffer_destroy(ub);
                                         goto check_catch;
                                 }
                                 usl = usl->next;
                         }
-			uwsgi_buffer_destroy(ub);
+			upsgi_buffer_destroy(ub);
 		}
         }
 
-        if (uwsgi.reload_on_exception_repr && uwsgi.p[wsgi_req->uh->modifier1]->exception_repr) {
-                struct uwsgi_buffer *ub = uwsgi.p[wsgi_req->uh->modifier1]->exception_msg(wsgi_req);
+        if (upsgi.reload_on_exception_repr && upsgi.p[wsgi_req->uh->modifier1]->exception_repr) {
+                struct upsgi_buffer *ub = upsgi.p[wsgi_req->uh->modifier1]->exception_msg(wsgi_req);
 		if (ub) {
-			struct uwsgi_string_list *usl = uwsgi.reload_on_exception_repr;
+			struct upsgi_string_list *usl = upsgi.reload_on_exception_repr;
                         while (usl) {
-                                if (!uwsgi_strncmp(usl->value, usl->len, ub->buf, ub->len)) {
+                                if (!upsgi_strncmp(usl->value, usl->len, ub->buf, ub->len)) {
                                         do_exit = 1;
-                                        uwsgi_buffer_destroy(ub);
+                                        upsgi_buffer_destroy(ub);
                                         goto check_catch;
                                 }
                                 usl = usl->next;
                         }
-			uwsgi_buffer_destroy(ub);
+			upsgi_buffer_destroy(ub);
 		}
         }
 
 check_catch:
 	if (catch && wsgi_req) {
-		if (uwsgi_exceptions_catch(wsgi_req)) {
+		if (upsgi_exceptions_catch(wsgi_req)) {
 			// for now, just goto, new features could be added
 			goto log;		
 		}
 	}
 
 log:
-	if (uwsgi.p[wsgi_req->uh->modifier1]->exception_log) {
-		uwsgi.p[wsgi_req->uh->modifier1]->exception_log(wsgi_req);
+	if (upsgi.p[wsgi_req->uh->modifier1]->exception_log) {
+		upsgi.p[wsgi_req->uh->modifier1]->exception_log(wsgi_req);
 	}
 	
 log2:
 	if (do_exit) {
-		exit(UWSGI_EXCEPTION_CODE);		
+		exit(UPSGI_EXCEPTION_CODE);		
 	}
 	
 }
 
-struct uwsgi_exception_handler *uwsgi_register_exception_handler(char *name, int (*func)(struct uwsgi_exception_handler_instance *, char *, size_t)) {
-	struct uwsgi_exception_handler *old_ueh = NULL, *ueh = uwsgi.exception_handlers;
+struct upsgi_exception_handler *upsgi_register_exception_handler(char *name, int (*func)(struct upsgi_exception_handler_instance *, char *, size_t)) {
+	struct upsgi_exception_handler *old_ueh = NULL, *ueh = upsgi.exception_handlers;
 	while(ueh) {
 		if (!strcmp(name, ueh->name)) {
 			return NULL;
@@ -411,7 +411,7 @@ struct uwsgi_exception_handler *uwsgi_register_exception_handler(char *name, int
 		ueh = ueh->next;
 	}
 
-	ueh = uwsgi_calloc(sizeof(struct uwsgi_exception_handler));
+	ueh = upsgi_calloc(sizeof(struct upsgi_exception_handler));
 	ueh->name = name;
 	ueh->func = func;
 
@@ -419,14 +419,14 @@ struct uwsgi_exception_handler *uwsgi_register_exception_handler(char *name, int
 		old_ueh->next = ueh;
 	}
 	else {
-		uwsgi.exception_handlers = ueh;
+		upsgi.exception_handlers = ueh;
 	}
 
 	return ueh;
 }
 
-struct uwsgi_exception_handler *uwsgi_exception_handler_by_name(char *name) {
-	struct uwsgi_exception_handler *ueh = uwsgi.exception_handlers;
+struct upsgi_exception_handler *upsgi_exception_handler_by_name(char *name) {
+	struct upsgi_exception_handler *ueh = upsgi.exception_handlers;
 	while(ueh) {
 		if (!strcmp(name, ueh->name)) {
 			return ueh;
@@ -436,23 +436,23 @@ struct uwsgi_exception_handler *uwsgi_exception_handler_by_name(char *name) {
 	return NULL;
 }
 
-static void uwsgi_exception_handler_thread_loop(struct uwsgi_thread *ut) {
-        char *buf = uwsgi_malloc(uwsgi.exception_handler_msg_size + sizeof(long));
+static void upsgi_exception_handler_thread_loop(struct upsgi_thread *ut) {
+        char *buf = upsgi_malloc(upsgi.exception_handler_msg_size + sizeof(long));
         for (;;) {
                 int interesting_fd = -1;
                 int ret = event_queue_wait(ut->queue, -1, &interesting_fd);
                 if (ret > 0) {
-                        ssize_t len = read(ut->pipe[1], buf, uwsgi.exception_handler_msg_size + sizeof(long));
+                        ssize_t len = read(ut->pipe[1], buf, upsgi.exception_handler_msg_size + sizeof(long));
                         if (len > (ssize_t)(sizeof(long) + 1)) {
                                 size_t msg_size = len - sizeof(long);
                                 char *msg = buf + sizeof(long);
                                 long ptr = 0;
                                 memcpy(&ptr, buf, sizeof(long));
-                                struct uwsgi_exception_handler_instance *uehi = (struct uwsgi_exception_handler_instance *) ptr;
+                                struct upsgi_exception_handler_instance *uehi = (struct upsgi_exception_handler_instance *) ptr;
                                 if (!uehi)
 					break;
 				if (uehi->handler->func(uehi, msg, msg_size)) {
-                        		uwsgi_log("[uwsgi-exception] error running the handler \"%s\" args: \"%s\"\n", uehi->handler->name, uehi->arg ? uehi->arg : "");
+                        		upsgi_log("[upsgi-exception] error running the handler \"%s\" args: \"%s\"\n", uehi->handler->name, uehi->arg ? uehi->arg : "");
                 		}
                         }
                 }
@@ -460,23 +460,23 @@ static void uwsgi_exception_handler_thread_loop(struct uwsgi_thread *ut) {
 	free(buf);
 }
 
-void uwsgi_exception_setup_handlers() {
+void upsgi_exception_setup_handlers() {
 
-	struct uwsgi_string_list *usl = uwsgi.exception_handlers_instance;
+	struct upsgi_string_list *usl = upsgi.exception_handlers_instance;
 	while(usl) {
 		// do not free handler !!!
-		char *handler = uwsgi_str(usl->value);
+		char *handler = upsgi_str(usl->value);
 		char *colon = strchr(handler, ':');
 		if (colon) {
 			*colon = 0;
 		}
-		struct uwsgi_exception_handler *ueh = uwsgi_exception_handler_by_name(handler);
+		struct upsgi_exception_handler *ueh = upsgi_exception_handler_by_name(handler);
 		if (!ueh) {
-			uwsgi_log("unable to find exception handler: %s\n", handler);
+			upsgi_log("unable to find exception handler: %s\n", handler);
 			exit(1);
 		}
 
-		struct uwsgi_exception_handler_instance *uehi = uwsgi_calloc(sizeof(struct uwsgi_exception_handler_instance));
+		struct upsgi_exception_handler_instance *uehi = upsgi_calloc(sizeof(struct upsgi_exception_handler_instance));
 		uehi->handler = ueh;
 		if (colon) {
 			uehi->arg = colon+1;
@@ -486,12 +486,12 @@ void uwsgi_exception_setup_handlers() {
 	}
 }
 
-void uwsgi_exceptions_handler_thread_start() {
-	if (!uwsgi.exception_handlers_instance) return;
+void upsgi_exceptions_handler_thread_start() {
+	if (!upsgi.exception_handlers_instance) return;
 	// start the exception_handler_thread
-        uwsgi.exception_handler_thread = uwsgi_thread_new(uwsgi_exception_handler_thread_loop);
-        if (!uwsgi.exception_handler_thread) {
-                uwsgi_log("unable to spawn exception handler thread\n");
+        upsgi.exception_handler_thread = upsgi_thread_new(upsgi_exception_handler_thread_loop);
+        if (!upsgi.exception_handler_thread) {
+                upsgi_log("unable to spawn exception handler thread\n");
                 exit(1);
         }
 

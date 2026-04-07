@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-#uwsgi --http-socket :9090 --route-run "send:\${PATH_INFO}"
+#upsgi --http-socket :9090 --route-run "send:\${PATH_INFO}"
 
 use IO::Socket::INET;
 

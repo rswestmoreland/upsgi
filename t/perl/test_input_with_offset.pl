@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-#uwsgi --http-socket :9090 --psgi apps/input_with_offset.pl
+#upsgi --http-socket :9090 --psgi apps/input_with_offset.pl
 
 use IO::Socket::INET;
 
@@ -24,7 +24,7 @@ push @tests, ['30', 'HELLO', "one_two_three_four\0\0\0\0\0\0\0\0\0\0\0\0HELLO"];
 
 foreach(@tests) {
         print "testing: offset(".$_->[0].") body(".$_->[1].")\n";
-        my $req = "POST /?".$base." HTTP/1.0\r\nContent-Length: ".length($_->[1])."\r\nuWSGI-Offset: ".$_->[0]."\r\n\r\n".$_->[1];
+        my $req = "POST /?".$base." HTTP/1.0\r\nContent-Length: ".length($_->[1])."\r\nupsgi-Offset: ".$_->[0]."\r\n\r\n".$_->[1];
 
         my $s = IO::Socket::INET->new(PeerAddr => $ARGV[0]) or die "PANIC: Unable to construct socket";
         $s->send($req);

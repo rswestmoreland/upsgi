@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-#uwsgi --http-socket :9090 --psgi t/core/apps/read_body_and_send.pl
+#upsgi --http-socket :9090 --psgi t/core/apps/read_body_and_send.pl
 
 use IO::Socket::INET;
 

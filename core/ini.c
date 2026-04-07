@@ -1,6 +1,6 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 /*
    ini file must be read ALL into memory.
@@ -76,7 +76,7 @@ static char *ini_get_line(char *ini, size_t size) {
 
 }
 
-void uwsgi_ini_config(char *file, char *magic_table[]) {
+void upsgi_ini_config(char *file, char *magic_table[]) {
 
 	size_t len = 0;
 	char *ini;
@@ -87,17 +87,17 @@ void uwsgi_ini_config(char *file, char *magic_table[]) {
 	char *key;
 	char *val;
 
-	char *section_asked = "uwsgi";
+	char *section_asked = "upsgi";
 	char *colon;
 	int got_section = 0;
 
 
-	if (uwsgi_check_scheme(file)) {
-		colon = uwsgi_get_last_char(file, '/');
-		colon = uwsgi_get_last_char(colon, ':');
+	if (upsgi_check_scheme(file)) {
+		colon = upsgi_get_last_char(file, '/');
+		colon = upsgi_get_last_char(colon, ':');
 	}
 	else {
-		colon = uwsgi_get_last_char(file, ':');
+		colon = upsgi_get_last_char(file, ':');
 	}
 
 	if (colon) {
@@ -112,15 +112,15 @@ void uwsgi_ini_config(char *file, char *magic_table[]) {
 	}
 
 	if (file[0] != 0 && file != last_file) {
-		uwsgi_log_initial("[uWSGI] getting INI configuration from %s\n", file);
+		upsgi_log_initial("[upsgi] getting INI configuration from %s\n", file);
 	}
 
-	ini = uwsgi_open_and_read(file, &len, 1, magic_table);
+	ini = upsgi_open_and_read(file, &len, 1, magic_table);
 	if (file != last_file) {
 		if (last_file) {
 			free(last_file);
 		}
-		last_file = uwsgi_str(file);
+		last_file = upsgi_str(file);
 	}
 
 	while (len) {
@@ -161,7 +161,7 @@ void uwsgi_ini_config(char *file, char *magic_table[]) {
 	}
 
 	if (!got_section) {
-		uwsgi_log("*** WARNING: Can't find section \"%s\" in INI configuration file %s ***\n", section_asked, file);
+		upsgi_log("*** WARNING: Can't find section \"%s\" in INI configuration file %s ***\n", section_asked, file);
 	}
 
 	if (colon) {
@@ -170,10 +170,10 @@ void uwsgi_ini_config(char *file, char *magic_table[]) {
 
 }
 
-void uwsgi_emperor_ini_attrs(char *filename, char *section_asked, struct uwsgi_dyn_dict **attrs) {
+void upsgi_emperor_ini_attrs(char *filename, char *section_asked, struct upsgi_dyn_dict **attrs) {
 	if (!section_asked) section_asked = "emperor";
 
-	char *ini = uwsgi_simple_file_read(filename);
+	char *ini = upsgi_simple_file_read(filename);
 	if (!ini) return;
 
 	char *orig_ini = ini;
@@ -204,12 +204,12 @@ void uwsgi_emperor_ini_attrs(char *filename, char *section_asked, struct uwsgi_d
 
                                 if (!strcmp(section, section_asked)) {
                                         ini_rstrip(key);
-					struct uwsgi_string_list *usl = uwsgi_string_list_has_item(uwsgi.emperor_collect_attributes, key, strlen(key));
+					struct upsgi_string_list *usl = upsgi_string_list_has_item(upsgi.emperor_collect_attributes, key, strlen(key));
 					if (usl) {
                                         	val = ini_lstrip(val);
                                         	ini_rstrip(val);
-						char *value = uwsgi_str(val);
-                                        	uwsgi_dyn_dict_new(attrs, usl->value, usl->len, value, strlen(value));
+						char *value = upsgi_str(val);
+                                        	upsgi_dyn_dict_new(attrs, usl->value, usl->len, value, strlen(value));
 					}
                                 }
                         }

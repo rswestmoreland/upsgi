@@ -1,14 +1,14 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
-struct uwsgi_gateway *register_gateway(char *name, void (*loop) (int, void *), void *data) {
+struct upsgi_gateway *register_gateway(char *name, void (*loop) (int, void *), void *data) {
 
-	struct uwsgi_gateway *ug;
+	struct upsgi_gateway *ug;
 	int num = 1, i;
 
 	if (ushared->gateways_cnt >= MAX_GATEWAYS) {
-		uwsgi_log("you can register max %d gateways\n", MAX_GATEWAYS);
+		upsgi_log("you can register max %d gateways\n", MAX_GATEWAYS);
 		return NULL;
 	}
 
@@ -18,8 +18,8 @@ struct uwsgi_gateway *register_gateway(char *name, void (*loop) (int, void *), v
 		}
 	}
 
-	char *str = uwsgi_num2str(num);
-	char *fullname = uwsgi_concat3(name, " ", str);
+	char *str = upsgi_num2str(num);
+	char *fullname = upsgi_concat3(name, " ", str);
 	free(str);
 
 	ug = &ushared->gateways[ushared->gateways_cnt];
@@ -37,13 +37,13 @@ struct uwsgi_gateway *register_gateway(char *name, void (*loop) (int, void *), v
 #else
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, ug->internal_subscription_pipe)) {
 #endif
-		uwsgi_error("socketpair()");
+		upsgi_error("socketpair()");
 	}
 
-	uwsgi_socket_nb(ug->internal_subscription_pipe[0]);
-	uwsgi_socket_nb(ug->internal_subscription_pipe[1]);
+	upsgi_socket_nb(ug->internal_subscription_pipe[0]);
+	upsgi_socket_nb(ug->internal_subscription_pipe[1]);
 
-	if (!uwsgi.master_process && !uwsgi.force_gateway)
+	if (!upsgi.master_process && !upsgi.force_gateway)
 		gateway_respawn(ushared->gateways_cnt);
 
 	ushared->gateways_cnt++;
@@ -53,34 +53,34 @@ struct uwsgi_gateway *register_gateway(char *name, void (*loop) (int, void *), v
 }
 
 static void gateway_brutal_end() {
-        _exit(UWSGI_END_CODE);
+        _exit(UPSGI_END_CODE);
 }
 
 void gateway_respawn(int id) {
 
 	pid_t gw_pid;
-	struct uwsgi_gateway *ug = &ushared->gateways[id];
+	struct upsgi_gateway *ug = &ushared->gateways[id];
 
-	if (uwsgi.master_process)
-		uwsgi.shared->gateways_harakiri[id] = 0;
+	if (upsgi.master_process)
+		upsgi.shared->gateways_harakiri[id] = 0;
 
-	gw_pid = uwsgi_fork(ug->fullname);
+	gw_pid = upsgi_fork(ug->fullname);
 	if (gw_pid < 0) {
-		uwsgi_error("fork()");
+		upsgi_error("fork()");
 		return;
 	}
 
 	if (gw_pid == 0) {
-		uwsgi_fixup_fds(0, 0, ug);
-		uwsgi_close_all_unshared_sockets();
-		if (uwsgi.master_as_root)
-			uwsgi_as_root();
+		upsgi_fixup_fds(0, 0, ug);
+		upsgi_close_all_unshared_sockets();
+		if (upsgi.master_as_root)
+			upsgi_as_root();
 #ifdef __linux__
 		if (prctl(PR_SET_PDEATHSIG, SIGKILL, 0, 0, 0)) {
-			uwsgi_error("prctl()");
+			upsgi_error("prctl()");
 		}
 #endif
-		uwsgi.mypid = getpid();
+		upsgi.mypid = getpid();
 		atexit(gateway_brutal_end);
 		signal(SIGALRM, SIG_IGN);
 		signal(SIGHUP, SIG_IGN);
@@ -92,20 +92,20 @@ void gateway_respawn(int id) {
 		signal(SIGSTOP, SIG_IGN);
 		signal(SIGTSTP, SIG_IGN);
 
-		uwsgi_hooks_run(uwsgi.hook_as_gateway, "as-gateway", 1);
+		upsgi_hooks_run(upsgi.hook_as_gateway, "as-gateway", 1);
 
 		if (ug->gid) {
-			uwsgi_log("%s %d setgid() to %d\n", ug->name, ug->num, (int) ug->gid);
+			upsgi_log("%s %d setgid() to %d\n", ug->name, ug->num, (int) ug->gid);
 			if (setgid(ug->gid)) {
-				uwsgi_error("gateway_respawn()/setgid()");
+				upsgi_error("gateway_respawn()/setgid()");
 				exit(1);
 			}
 		}
 
 		if (ug->uid) {
-			uwsgi_log("%s %d setuid() to %d\n", ug->name, ug->num, (int) ug->uid);
+			upsgi_log("%s %d setuid() to %d\n", ug->name, ug->num, (int) ug->uid);
 			if (setuid(ug->uid)) {
-				uwsgi_error("gateway_respawn()/setuid()");
+				upsgi_error("gateway_respawn()/setuid()");
 				exit(1);
 			}
 		}
@@ -118,74 +118,74 @@ void gateway_respawn(int id) {
 	ug->pid = gw_pid;
 	ug->respawns++;
 	if (ug->respawns == 1) {
-		uwsgi_log("spawned %s %d (pid: %d)\n", ug->name, ug->num, (int) gw_pid);
+		upsgi_log("spawned %s %d (pid: %d)\n", ug->name, ug->num, (int) gw_pid);
 	}
 	else {
-		uwsgi_log("respawned %s %d (pid: %d)\n", ug->name, ug->num, (int) gw_pid);
+		upsgi_log("respawned %s %d (pid: %d)\n", ug->name, ug->num, (int) gw_pid);
 	}
 
 }
 
-struct uwsgi_gateway_socket *uwsgi_new_gateway_socket(char *name, char *owner) {
+struct upsgi_gateway_socket *upsgi_new_gateway_socket(char *name, char *owner) {
 
-	struct uwsgi_gateway_socket *uwsgi_sock = uwsgi.gateway_sockets, *old_uwsgi_sock;
+	struct upsgi_gateway_socket *upsgi_sock = upsgi.gateway_sockets, *old_upsgi_sock;
 
-	if (!uwsgi_sock) {
-		uwsgi.gateway_sockets = uwsgi_malloc(sizeof(struct uwsgi_gateway_socket));
-		uwsgi_sock = uwsgi.gateway_sockets;
+	if (!upsgi_sock) {
+		upsgi.gateway_sockets = upsgi_malloc(sizeof(struct upsgi_gateway_socket));
+		upsgi_sock = upsgi.gateway_sockets;
 	}
 	else {
-		while (uwsgi_sock) {
-			old_uwsgi_sock = uwsgi_sock;
-			uwsgi_sock = uwsgi_sock->next;
+		while (upsgi_sock) {
+			old_upsgi_sock = upsgi_sock;
+			upsgi_sock = upsgi_sock->next;
 		}
 
-		uwsgi_sock = uwsgi_malloc(sizeof(struct uwsgi_gateway_socket));
-		old_uwsgi_sock->next = uwsgi_sock;
+		upsgi_sock = upsgi_malloc(sizeof(struct upsgi_gateway_socket));
+		old_upsgi_sock->next = upsgi_sock;
 	}
 
-	memset(uwsgi_sock, 0, sizeof(struct uwsgi_gateway_socket));
-	uwsgi_sock->fd = -1;
-	uwsgi_sock->shared = 0;
-	uwsgi_sock->name = name;
-	uwsgi_sock->name_len = strlen(name);
-	uwsgi_sock->owner = owner;
+	memset(upsgi_sock, 0, sizeof(struct upsgi_gateway_socket));
+	upsgi_sock->fd = -1;
+	upsgi_sock->shared = 0;
+	upsgi_sock->name = name;
+	upsgi_sock->name_len = strlen(name);
+	upsgi_sock->owner = owner;
 
-	return uwsgi_sock;
+	return upsgi_sock;
 }
 
-struct uwsgi_gateway_socket *uwsgi_new_gateway_socket_from_fd(int fd, char *owner) {
+struct upsgi_gateway_socket *upsgi_new_gateway_socket_from_fd(int fd, char *owner) {
 
-	struct uwsgi_gateway_socket *uwsgi_sock = uwsgi.gateway_sockets, *old_uwsgi_sock;
+	struct upsgi_gateway_socket *upsgi_sock = upsgi.gateway_sockets, *old_upsgi_sock;
 
-	if (!uwsgi_sock) {
-		uwsgi.gateway_sockets = uwsgi_malloc(sizeof(struct uwsgi_gateway_socket));
-		uwsgi_sock = uwsgi.gateway_sockets;
+	if (!upsgi_sock) {
+		upsgi.gateway_sockets = upsgi_malloc(sizeof(struct upsgi_gateway_socket));
+		upsgi_sock = upsgi.gateway_sockets;
 	}
 	else {
-		while (uwsgi_sock) {
-			old_uwsgi_sock = uwsgi_sock;
-			uwsgi_sock = uwsgi_sock->next;
+		while (upsgi_sock) {
+			old_upsgi_sock = upsgi_sock;
+			upsgi_sock = upsgi_sock->next;
 		}
 
-		uwsgi_sock = uwsgi_malloc(sizeof(struct uwsgi_gateway_socket));
-		old_uwsgi_sock->next = uwsgi_sock;
+		upsgi_sock = upsgi_malloc(sizeof(struct upsgi_gateway_socket));
+		old_upsgi_sock->next = upsgi_sock;
 	}
 
-	memset(uwsgi_sock, 0, sizeof(struct uwsgi_gateway_socket));
-	uwsgi_sock->fd = fd;
-	uwsgi_sock->name = uwsgi_getsockname(fd);
-	uwsgi_sock->name_len = strlen(uwsgi_sock->name);
-	uwsgi_sock->owner = owner;
+	memset(upsgi_sock, 0, sizeof(struct upsgi_gateway_socket));
+	upsgi_sock->fd = fd;
+	upsgi_sock->name = upsgi_getsockname(fd);
+	upsgi_sock->name_len = strlen(upsgi_sock->name);
+	upsgi_sock->owner = owner;
 
-	return uwsgi_sock;
+	return upsgi_sock;
 }
 
 
-void uwsgi_gateway_go_cheap(char *gw_id, int queue, int *i_am_cheap) {
+void upsgi_gateway_go_cheap(char *gw_id, int queue, int *i_am_cheap) {
 
-	uwsgi_log("[%s pid %d] no more nodes available. Going cheap...\n", gw_id, (int) uwsgi.mypid);
-	struct uwsgi_gateway_socket *ugs = uwsgi.gateway_sockets;
+	upsgi_log("[%s pid %d] no more nodes available. Going cheap...\n", gw_id, (int) upsgi.mypid);
+	struct upsgi_gateway_socket *ugs = upsgi.gateway_sockets;
 	while (ugs) {
 		if (!strcmp(ugs->owner, gw_id) && !ugs->subscription) {
 			event_queue_del_fd(queue, ugs->fd, event_queue_read());

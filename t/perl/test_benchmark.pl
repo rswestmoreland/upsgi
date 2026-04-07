@@ -13,13 +13,13 @@ for my $use_thunder_lock (0,1) {
         my $tl_cl = $use_thunder_lock ? "--thunder-lock --lock-engine ipcsem --ftok $psgi" : "";
 
         #say STDERR "Now testing $desc";
-        system q[for p in $(ps auxf|grep uwsgi.*--disable-logging|grep -v grep|awk '{print $2}'); do kill $p; done];
-        system qq[./uwsgi --http 127.0.0.1:8080 --processes $procs --psgi $psgi --disable-logging $tl_cl >/dev/null 2>&1 &];
+        system q[for p in $(ps auxf|grep upsgi.*--disable-logging|grep -v grep|awk '{print $2}'); do kill $p; done];
+        system qq[./upsgi --http 127.0.0.1:8080 --processes $procs --psgi $psgi --disable-logging $tl_cl >/dev/null 2>&1 &];
         sleep 0.5;
         chomp(my $ab = qx[http_proxy= ab -n 10000 -c 32 http://localhost:8080/ 2>&1]);
         my ($seconds) = $ab =~ m[Time taken for tests:\s+([0-9.]+) seconds];
         say STDERR "$seconds\t$desc";
-        system q[for p in $(ps auxf|grep uwsgi.*--disable-logging|grep -v grep|awk '{print $2}'); do kill $p; done];
+        system q[for p in $(ps auxf|grep upsgi.*--disable-logging|grep -v grep|awk '{print $2}'); do kill $p; done];
         sleep 0.5;
     }
 }

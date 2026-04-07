@@ -1,38 +1,97 @@
 # upsgi
 
-upsgi is a PSGI-first fork of the uWSGI codebase.
+upsgi is a PSGI-first fork of the original upstream codebase.
 
 Project 1 keeps the proven C prefork server model for Perl/PSGI hosting while
 reducing the default product surface to what matters for real PSGI deployment.
+The fork keeps compatibility where that materially helps adoption, but it now
+presents a narrower, clearer public operator surface.
 
 ## Baseline fork direction
+
 - PSGI-first
 - HTTP-socket-first
 - logging-enabled by default
 - static-map kept as a baseline feature
 - compatibility-minded for existing PSGI deployments
+- YAML-first runtime configuration for new deployments
+- TOML build profiles for the fork build system
 
 ## Default embedded plugins
+
 - `psgi`
 - `logfile`
 - `logsocket`
 - `rsyslog`
 
-## Authoritative docs
-- `docs/upsgi/INDEX.md`
-- `docs/upsgi/QUICKSTART.md`
-- `docs/upsgi/MIGRATION.md`
-- `docs/upsgi/OPTION_SURFACE.md`
-- `docs/upsgi/PACKAGING.md`
-- `docs/upsgi/REPO_LAYOUT.md`
+## Recommended quickstart path
 
-## Compatibility notes
-- `--http-modifier*` and related socket modifier flags remain accepted for migration compatibility only and have no runtime effect in the PSGI-only fork.
-- `--perl-no-die-catch` remains accepted for migration compatibility only.
-- `--log-exceptions` is the canonical flag for explicit PSGI exception logging during debugging.
+Build and verify:
 
-## Build
 ```sh
 make
 ./upsgi --version
 ```
+
+Start from the shipped YAML examples:
+
+```sh
+./upsgi --config examples/upsgi/baseline.yaml
+./upsgi --config examples/upsgi/debug_exceptions.yaml
+```
+
+For a fuller starting point, copy and edit the commented template:
+
+```sh
+cp examples/upsgi/upsgi.example.yaml /etc/upsgi/app.yaml
+./upsgi --config /etc/upsgi/app.yaml
+```
+
+## Supported argument families
+
+The supported public operator surface is documented in layers:
+
+- `docs/upsgi/SUPPORTED_ARGUMENTS.md` - fuller categorized argument reference
+- `docs/upsgi/OPTION_SURFACE.md` - high-level map of baseline, advanced,
+  compatibility-only, and deferred surface areas
+- `docs/upsgi/RUNTIME_CONFIG_POLICY.md` - YAML-first runtime config policy
+
+Major categories covered there include:
+
+- runtime config entry and app loading
+- listener and socket options
+- PSGI-specific options
+- logging options
+- worker and lifecycle options
+- memory, buffering, and reload controls
+- stats and observability options
+- compatibility-only parse/no-op options
+
+## Authoritative docs
+
+- `docs/upsgi/INDEX.md`
+- `docs/upsgi/QUICKSTART.md`
+- `docs/upsgi/MIGRATION.md`
+- `docs/upsgi/SUPPORTED_ARGUMENTS.md`
+- `docs/upsgi/OPTION_SURFACE.md`
+- `docs/upsgi/PACKAGING.md`
+- `docs/upsgi/SYSTEMD.md`
+- `docs/upsgi/REPO_LAYOUT.md`
+
+## Compatibility notes
+
+- `--http-modifier*` and related socket modifier flags remain accepted for
+  migration compatibility only and have no runtime effect in the PSGI-only fork.
+- `--perl-no-die-catch` remains accepted for migration compatibility only.
+- `--log-exceptions` is the canonical flag for explicit PSGI exception logging
+  during debugging.
+- New runtime examples should use `./upsgi --config path/to/file.yaml`.
+- Older INI, YAML, XML, and JSON runtime configs still load through the
+  inherited runtime config system.
+
+## Implementation breadth versus public surface
+
+The inherited parser surface is still much broader than the curated upsgi public
+operator model. The repo keeps indexed implementation inventory docs for that
+wider shared-core breadth, but the supported public operator surface is the one
+presented in `SUPPORTED_ARGUMENTS.md` and `OPTION_SURFACE.md`.

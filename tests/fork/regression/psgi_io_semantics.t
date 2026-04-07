@@ -11,7 +11,14 @@ use UpSGITest qw(build_artifact_dir default_binary fixture_app fixture_static_ro
 sub append_config_lines {
     my ($path, @lines) = @_;
     open my $fh, '>>', $path or die "unable to append to $path: $!\n";
-    print {$fh} "\n", @lines;
+    print {$fh} "\n";
+    for my $line (@lines) {
+        $line =~ s/^\s+//;
+        $line =~ s/\s+$//;
+        next unless length $line;
+        $line =~ s/\s*=\s*/: /;
+        print {$fh} "  $line\n";
+    }
     close $fh;
 }
 
@@ -20,13 +27,13 @@ my $app = fixture_app('app_psgi_io_semantics.psgi');
 my $static_root = fixture_static_root();
 
 my $artifact_dir_false = build_artifact_dir('psgi_io_false');
-my $config_false = File::Spec->catfile($artifact_dir_false, 'baseline.ini');
+my $config_false = File::Spec->catfile($artifact_dir_false, 'baseline.yaml');
 my $log_false = File::Spec->catfile($artifact_dir_false, 'server.log');
 my $port_false = pick_port(31);
 
 render_profile(
     profile => 'baseline',
-    output_ini => $config_false,
+    output_yaml => $config_false,
     app => $app,
     static_root => $static_root,
     log_file => $log_false,
@@ -35,7 +42,7 @@ render_profile(
 
 start_server(
     binary => $binary,
-    config_ini => $config_false,
+    config_yaml => $config_false,
     artifact_dir => $artifact_dir_false,
 );
 
@@ -49,13 +56,13 @@ stop_server($artifact_dir_false);
 $artifact_dir_false = undef;
 
 my $artifact_dir_true = build_artifact_dir('psgi_io_true');
-my $config_true = File::Spec->catfile($artifact_dir_true, 'baseline.ini');
+my $config_true = File::Spec->catfile($artifact_dir_true, 'baseline.yaml');
 my $log_true = File::Spec->catfile($artifact_dir_true, 'server.log');
 my $port_true = pick_port(32);
 
 render_profile(
     profile => 'baseline',
-    output_ini => $config_true,
+    output_yaml => $config_true,
     app => $app,
     static_root => $static_root,
     log_file => $log_true,
@@ -69,7 +76,7 @@ append_config_lines(
 
 start_server(
     binary => $binary,
-    config_ini => $config_true,
+    config_yaml => $config_true,
     artifact_dir => $artifact_dir_true,
 );
 
@@ -124,7 +131,7 @@ like($seek->{content}, qr/^r7=2 seven=abAB$/m, 'negative offset read can grow an
 
 my $log_text = slurp($log_true);
 like($log_text, qr/psgi\.errors smoke/, 'log captures psgi.errors output');
-like($log_text, qr/\[uwsgi-perl info\] psgix logger ok/, 'log captures valid psgix.logger output');
+like($log_text, qr/\[upsgi-perl info\] psgix logger ok/, 'log captures valid psgix.logger output');
 like($log_text, qr/psgix\.logger level must be one of debug, info, warn, error, fatal/, 'log records invalid psgix.logger level usage');
 
 done_testing();

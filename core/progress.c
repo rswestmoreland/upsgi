@@ -1,4 +1,4 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
 /*
 
@@ -6,9 +6,9 @@
 
 */
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
-char *uwsgi_upload_progress_create(struct wsgi_request *wsgi_req, int *fd) {
+char *upsgi_upload_progress_create(struct wsgi_request *wsgi_req, int *fd) {
 	const char *x_progress_id = "X-Progress-ID=";
 	char *xpi_ptr = (char *) x_progress_id;
 	uint16_t i;
@@ -37,7 +37,7 @@ char *uwsgi_upload_progress_create(struct wsgi_request *wsgi_req, int *fd) {
 	if (!upload_progress_filename)
 		return NULL;
 
-	uwsgi_log("upload progress uuid = %.*s\n", 36, upload_progress_filename);
+	upsgi_log("upload progress uuid = %.*s\n", 36, upload_progress_filename);
 	if (!check_hex(upload_progress_filename, 8))
 		return NULL;
 	if (upload_progress_filename[8] != '-')
@@ -61,11 +61,11 @@ char *uwsgi_upload_progress_create(struct wsgi_request *wsgi_req, int *fd) {
 	if (!check_hex(upload_progress_filename + 24, 12))
 		return NULL;
 
-	upload_progress_filename = uwsgi_concat4n(uwsgi.upload_progress, strlen(uwsgi.upload_progress), "/", 1, upload_progress_filename, 36, ".js", 3);
+	upload_progress_filename = upsgi_concat4n(upsgi.upload_progress, strlen(upsgi.upload_progress), "/", 1, upload_progress_filename, 36, ".js", 3);
 	// here we use O_EXCL to avoid eventual application bug in uuid generation/using
 	*fd = open(upload_progress_filename, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP);
 	if (*fd < 0) {
-		uwsgi_error_open(upload_progress_filename);
+		upsgi_error_open(upload_progress_filename);
 		free(upload_progress_filename);
 		return NULL;
 	}
@@ -73,7 +73,7 @@ char *uwsgi_upload_progress_create(struct wsgi_request *wsgi_req, int *fd) {
 	return upload_progress_filename;
 }
 
-int uwsgi_upload_progress_update(struct wsgi_request *wsgi_req, int fd, size_t remains) {
+int upsgi_upload_progress_update(struct wsgi_request *wsgi_req, int fd, size_t remains) {
 	char buf[4096];
 
 	int ret = snprintf(buf, 4096, "{ \"state\" : \"uploading\", \"received\" : %llu, \"size\" : %llu }\r\n", (unsigned long long) (wsgi_req->post_cl - remains), (unsigned long long) wsgi_req->post_cl);
@@ -82,26 +82,26 @@ int uwsgi_upload_progress_update(struct wsgi_request *wsgi_req, int fd, size_t r
 	}
 
 	if (lseek(fd, 0, SEEK_SET)) {
-		uwsgi_error("uwsgi_upload_progress_update()/lseek()");
+		upsgi_error("upsgi_upload_progress_update()/lseek()");
 		return -1;
 	}
 
 	if (write(fd, buf, ret) != ret) {
-		uwsgi_error("uwsgi_upload_progress_update()/write()");
+		upsgi_error("upsgi_upload_progress_update()/write()");
 		return -1;
 	}
 
 	if (fsync(fd)) {
-		uwsgi_error("uwsgi_upload_progress_update()/fsync()");
+		upsgi_error("upsgi_upload_progress_update()/fsync()");
 		return -1;
 	}
 	return 0;
 }
 
-void uwsgi_upload_progress_destroy(char *filename, int fd) {
+void upsgi_upload_progress_destroy(char *filename, int fd) {
 	close(fd);
 	if (unlink(filename)) {
-		uwsgi_error("uwsgi_upload_progress_destroy()/unlink()");
+		upsgi_error("upsgi_upload_progress_destroy()/unlink()");
 	}
 	free(filename);
 }

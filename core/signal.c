@@ -1,84 +1,84 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
-int uwsgi_signal_handler(struct wsgi_request *wsgi_req, uint8_t sig) {
+int upsgi_signal_handler(struct wsgi_request *wsgi_req, uint8_t sig) {
 
-	struct uwsgi_signal_entry *use = NULL;
+	struct upsgi_signal_entry *use = NULL;
 
-	int pos = (uwsgi.mywid * 256) + sig;
+	int pos = (upsgi.mywid * 256) + sig;
 
-	use = &uwsgi.shared->signal_table[pos];
+	use = &upsgi.shared->signal_table[pos];
 
 	if (!use->handler)
 		return -1;
 
-	if (!uwsgi.p[use->modifier1]->signal_handler) {
+	if (!upsgi.p[use->modifier1]->signal_handler) {
 		return -1;
 	}
 
 	// check for COW
-	if (uwsgi.master_process) {
-		if (use->wid != 0 && use->wid != uwsgi.mywid) {
-			uwsgi_log("[uwsgi-signal] you have registered this signal in worker %d memory area, only that process will be able to run it\n", use->wid);
+	if (upsgi.master_process) {
+		if (use->wid != 0 && use->wid != upsgi.mywid) {
+			upsgi_log("[upsgi-signal] you have registered this signal in worker %d memory area, only that process will be able to run it\n", use->wid);
 			return -1;
 		}
 	}
 	// in lazy mode (without a master), only the same worker will be able to run handlers
-	else if (uwsgi.lazy) {
-		if (use->wid != uwsgi.mywid) {
-			uwsgi_log("[uwsgi-signal] you have registered this signal in worker %d memory area, only that process will be able to run it\n", use->wid);
+	else if (upsgi.lazy) {
+		if (use->wid != upsgi.mywid) {
+			upsgi_log("[upsgi-signal] you have registered this signal in worker %d memory area, only that process will be able to run it\n", use->wid);
 			return -1;
 		}
 	}
 	else {
 		// when master is not active, worker1 is the COW-leader
-		if (use->wid != 1 && use->wid != uwsgi.mywid) {
-			uwsgi_log("[uwsgi-signal] you have registered this signal in worker %d memory area, only that process will be able to run it\n", use->wid);
+		if (use->wid != 1 && use->wid != upsgi.mywid) {
+			upsgi_log("[upsgi-signal] you have registered this signal in worker %d memory area, only that process will be able to run it\n", use->wid);
 			return -1;
 		}
 	}
 
 	// set harakiri here (if required and if i am a worker)
 
-	if (uwsgi.mywid > 0 && wsgi_req) {
-		uwsgi.workers[uwsgi.mywid].sig = 1;
-		uwsgi.workers[uwsgi.mywid].signum = sig;
-		uwsgi.workers[uwsgi.mywid].signals++;
-		if (uwsgi.harakiri_options.workers > 0) {
-			set_harakiri(wsgi_req, uwsgi.harakiri_options.workers);
+	if (upsgi.mywid > 0 && wsgi_req) {
+		upsgi.workers[upsgi.mywid].sig = 1;
+		upsgi.workers[upsgi.mywid].signum = sig;
+		upsgi.workers[upsgi.mywid].signals++;
+		if (upsgi.harakiri_options.workers > 0) {
+			set_harakiri(wsgi_req, upsgi.harakiri_options.workers);
 		}
 	}
-	else if (uwsgi.muleid > 0) {
-		uwsgi.mules[uwsgi.muleid - 1].sig = 1;
-		uwsgi.mules[uwsgi.muleid - 1].signum = sig;
-		uwsgi.mules[uwsgi.muleid - 1].signals++;
-		if (uwsgi.harakiri_options.mules > 0) {
-			set_mule_harakiri(uwsgi.harakiri_options.mules);
+	else if (upsgi.muleid > 0) {
+		upsgi.mules[upsgi.muleid - 1].sig = 1;
+		upsgi.mules[upsgi.muleid - 1].signum = sig;
+		upsgi.mules[upsgi.muleid - 1].signals++;
+		if (upsgi.harakiri_options.mules > 0) {
+			set_mule_harakiri(upsgi.harakiri_options.mules);
 		}
 	}
-	else if (uwsgi.i_am_a_spooler && (getpid() == uwsgi.i_am_a_spooler->pid)) {
-		if (uwsgi.harakiri_options.spoolers > 0) {
-			set_spooler_harakiri(uwsgi.harakiri_options.spoolers);
+	else if (upsgi.i_am_a_spooler && (getpid() == upsgi.i_am_a_spooler->pid)) {
+		if (upsgi.harakiri_options.spoolers > 0) {
+			set_spooler_harakiri(upsgi.harakiri_options.spoolers);
 		}
 	}
 
-	int ret = uwsgi.p[use->modifier1]->signal_handler(sig, use->handler);
+	int ret = upsgi.p[use->modifier1]->signal_handler(sig, use->handler);
 
-	if (uwsgi.mywid > 0 && wsgi_req) {
-		uwsgi.workers[uwsgi.mywid].sig = 0;
-		if (uwsgi.workers[uwsgi.mywid].cores[wsgi_req->async_id].harakiri > 0) {
+	if (upsgi.mywid > 0 && wsgi_req) {
+		upsgi.workers[upsgi.mywid].sig = 0;
+		if (upsgi.workers[upsgi.mywid].cores[wsgi_req->async_id].harakiri > 0) {
 			set_harakiri(wsgi_req, 0);
 		}
 	}
-	else if (uwsgi.muleid > 0) {
-		uwsgi.mules[uwsgi.muleid - 1].sig = 0;
-		if (uwsgi.mules[uwsgi.muleid - 1].harakiri > 0) {
+	else if (upsgi.muleid > 0) {
+		upsgi.mules[upsgi.muleid - 1].sig = 0;
+		if (upsgi.mules[upsgi.muleid - 1].harakiri > 0) {
 			set_mule_harakiri(0);
 		}
 	}
-	else if (uwsgi.i_am_a_spooler && (getpid() == uwsgi.i_am_a_spooler->pid)) {
-		if (uwsgi.harakiri_options.spoolers > 0) {
+	else if (upsgi.i_am_a_spooler && (getpid() == upsgi.i_am_a_spooler->pid)) {
+		if (upsgi.harakiri_options.spoolers > 0) {
 			set_spooler_harakiri(0);
 		}
 	}
@@ -86,27 +86,27 @@ int uwsgi_signal_handler(struct wsgi_request *wsgi_req, uint8_t sig) {
 	return ret;
 }
 
-int uwsgi_signal_registered(uint8_t sig) {
+int upsgi_signal_registered(uint8_t sig) {
 
-	int pos = (uwsgi.mywid * 256) + sig;
-	if (uwsgi.shared->signal_table[pos].handler != NULL)
+	int pos = (upsgi.mywid * 256) + sig;
+	if (upsgi.shared->signal_table[pos].handler != NULL)
 		return 1;
 
 	return 0;
 }
 
-int uwsgi_register_signal(uint8_t sig, char *receiver, void *handler, uint8_t modifier1) {
+int upsgi_register_signal(uint8_t sig, char *receiver, void *handler, uint8_t modifier1) {
 
-	struct uwsgi_signal_entry *use = NULL;
+	struct upsgi_signal_entry *use = NULL;
 	size_t receiver_len;
 
-	if (!uwsgi.master_process) {
-		uwsgi_log("you cannot register signals without a master\n");
+	if (!upsgi.master_process) {
+		upsgi_log("you cannot register signals without a master\n");
 		return -1;
 	}
 
-	if (uwsgi.mywid == 0 && uwsgi.workers[0].pid != uwsgi.mypid) {
-                uwsgi_log("only the master and the workers can register signal handlers\n");
+	if (upsgi.mywid == 0 && upsgi.workers[0].pid != upsgi.mypid) {
+                upsgi_log("only the master and the workers can register signal handlers\n");
                 return -1;
         }
 
@@ -114,52 +114,52 @@ int uwsgi_register_signal(uint8_t sig, char *receiver, void *handler, uint8_t mo
 	if (receiver_len > 63)
 		return -1;
 
-	uwsgi_lock(uwsgi.signal_table_lock);
+	upsgi_lock(upsgi.signal_table_lock);
 
-	int pos = (uwsgi.mywid * 256) + sig;
-	use = &uwsgi.shared->signal_table[pos];
+	int pos = (upsgi.mywid * 256) + sig;
+	use = &upsgi.shared->signal_table[pos];
 
-	if (use->handler && uwsgi.mywid == 0) {
-		uwsgi_log("[uwsgi-signal] you cannot re-register a signal as the master !!!\n");
-		uwsgi_unlock(uwsgi.signal_table_lock);
+	if (use->handler && upsgi.mywid == 0) {
+		upsgi_log("[upsgi-signal] you cannot re-register a signal as the master !!!\n");
+		upsgi_unlock(upsgi.signal_table_lock);
 		return -1;
 	}
 
 	strncpy(use->receiver, receiver, receiver_len + 1);
 	use->handler = handler;
 	use->modifier1 = modifier1;
-	use->wid = uwsgi.mywid;
+	use->wid = upsgi.mywid;
 
 	if (use->receiver[0] == 0) {
-		uwsgi_log("[uwsgi-signal] signum %d registered (wid: %d modifier1: %d target: default, any worker)\n", sig, uwsgi.mywid, modifier1);
+		upsgi_log("[upsgi-signal] signum %d registered (wid: %d modifier1: %d target: default, any worker)\n", sig, upsgi.mywid, modifier1);
 	}
 	else {
-		uwsgi_log("[uwsgi-signal] signum %d registered (wid: %d modifier1: %d target: %s)\n", sig, uwsgi.mywid, modifier1, receiver);
+		upsgi_log("[upsgi-signal] signum %d registered (wid: %d modifier1: %d target: %s)\n", sig, upsgi.mywid, modifier1, receiver);
 	}
 
 	// check for cow
-	if (uwsgi.mywid == 0) {
+	if (upsgi.mywid == 0) {
 		int i;
-                for(i=1;i<=uwsgi.numproc;i++) {
+                for(i=1;i<=upsgi.numproc;i++) {
                         int pos = (i * 256);
-                        memcpy(&uwsgi.shared->signal_table[pos], &uwsgi.shared->signal_table[0], sizeof(struct uwsgi_signal_entry) * 256);
+                        memcpy(&upsgi.shared->signal_table[pos], &upsgi.shared->signal_table[0], sizeof(struct upsgi_signal_entry) * 256);
                 }
 	}
 
-	uwsgi_unlock(uwsgi.signal_table_lock);
+	upsgi_unlock(upsgi.signal_table_lock);
 
 	return 0;
 }
 
 
-int uwsgi_add_file_monitor(uint8_t sig, char *filename) {
+int upsgi_add_file_monitor(uint8_t sig, char *filename) {
 
 	if (strlen(filename) > (0xff - 1)) {
-		uwsgi_log("uwsgi_add_file_monitor: invalid filename length\n");
+		upsgi_log("upsgi_add_file_monitor: invalid filename length\n");
 		return -1;
 	}
 
-	uwsgi_lock(uwsgi.fmon_table_lock);
+	upsgi_lock(upsgi.fmon_table_lock);
 
 	if (ushared->files_monitored_cnt < 64) {
 
@@ -171,22 +171,22 @@ int uwsgi_add_file_monitor(uint8_t sig, char *filename) {
 		ushared->files_monitored_cnt++;
 	}
 	else {
-		uwsgi_log("you can register max 64 file monitors !!!\n");
-		uwsgi_unlock(uwsgi.fmon_table_lock);
+		upsgi_log("you can register max 64 file monitors !!!\n");
+		upsgi_unlock(upsgi.fmon_table_lock);
 		return -1;
 	}
 
-	uwsgi_unlock(uwsgi.fmon_table_lock);
+	upsgi_unlock(upsgi.fmon_table_lock);
 
 	return 0;
 
 }
 
-int uwsgi_add_timer_hr(uint8_t sig, int secs, long nsecs) {
+int upsgi_add_timer_hr(uint8_t sig, int secs, long nsecs) {
 
-	if (!uwsgi.master_process) return -1;
+	if (!upsgi.master_process) return -1;
 
-	uwsgi_lock(uwsgi.timer_table_lock);
+	upsgi_lock(upsgi.timer_table_lock);
 
 	if (ushared->timers_cnt < 64) {
 
@@ -198,27 +198,27 @@ int uwsgi_add_timer_hr(uint8_t sig, int secs, long nsecs) {
 		ushared->timers_cnt++;
 	}
 	else {
-		uwsgi_log("you can register max 64 timers !!!\n");
-		uwsgi_unlock(uwsgi.timer_table_lock);
+		upsgi_log("you can register max 64 timers !!!\n");
+		upsgi_unlock(upsgi.timer_table_lock);
 		return -1;
 	}
 
-	uwsgi_unlock(uwsgi.timer_table_lock);
+	upsgi_unlock(upsgi.timer_table_lock);
 
 	return 0;
 
 }
 
-int uwsgi_add_timer(uint8_t sig, int secs) {
-	return uwsgi_add_timer_hr(sig, secs, 0);
+int upsgi_add_timer(uint8_t sig, int secs) {
+	return upsgi_add_timer_hr(sig, secs, 0);
 }
 
-int uwsgi_signal_add_rb_timer(uint8_t sig, int secs, int iterations) {
+int upsgi_signal_add_rb_timer(uint8_t sig, int secs, int iterations) {
 
-	if (!uwsgi.master_process)
+	if (!upsgi.master_process)
 		return -1;
 
-	uwsgi_lock(uwsgi.rb_timer_table_lock);
+	upsgi_lock(upsgi.rb_timer_table_lock);
 
 	if (ushared->rb_timers_cnt < 64) {
 
@@ -231,12 +231,12 @@ int uwsgi_signal_add_rb_timer(uint8_t sig, int secs, int iterations) {
 		ushared->rb_timers_cnt++;
 	}
 	else {
-		uwsgi_log("you can register max 64 rb_timers !!!\n");
-		uwsgi_unlock(uwsgi.rb_timer_table_lock);
+		upsgi_log("you can register max 64 rb_timers !!!\n");
+		upsgi_unlock(upsgi.rb_timer_table_lock);
 		return -1;
 	}
 
-	uwsgi_unlock(uwsgi.rb_timer_table_lock);
+	upsgi_unlock(upsgi.rb_timer_table_lock);
 
 	return 0;
 
@@ -245,46 +245,46 @@ int uwsgi_signal_add_rb_timer(uint8_t sig, int secs, int iterations) {
 void create_signal_pipe(int *sigpipe) {
 
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sigpipe)) {
-		uwsgi_error("socketpair()\n");
+		upsgi_error("socketpair()\n");
 		exit(1);
 	}
-	uwsgi_socket_nb(sigpipe[0]);
-	uwsgi_socket_nb(sigpipe[1]);
+	upsgi_socket_nb(sigpipe[0]);
+	upsgi_socket_nb(sigpipe[1]);
 
-	if (uwsgi.signal_bufsize) {
-		if (setsockopt(sigpipe[0], SOL_SOCKET, SO_SNDBUF, &uwsgi.signal_bufsize, sizeof(int))) {
-			uwsgi_error("setsockopt()");
+	if (upsgi.signal_bufsize) {
+		if (setsockopt(sigpipe[0], SOL_SOCKET, SO_SNDBUF, &upsgi.signal_bufsize, sizeof(int))) {
+			upsgi_error("setsockopt()");
 		}
-		if (setsockopt(sigpipe[0], SOL_SOCKET, SO_RCVBUF, &uwsgi.signal_bufsize, sizeof(int))) {
-			uwsgi_error("setsockopt()");
+		if (setsockopt(sigpipe[0], SOL_SOCKET, SO_RCVBUF, &upsgi.signal_bufsize, sizeof(int))) {
+			upsgi_error("setsockopt()");
 		}
 
-		if (setsockopt(sigpipe[1], SOL_SOCKET, SO_SNDBUF, &uwsgi.signal_bufsize, sizeof(int))) {
-			uwsgi_error("setsockopt()");
+		if (setsockopt(sigpipe[1], SOL_SOCKET, SO_SNDBUF, &upsgi.signal_bufsize, sizeof(int))) {
+			upsgi_error("setsockopt()");
 		}
-		if (setsockopt(sigpipe[1], SOL_SOCKET, SO_RCVBUF, &uwsgi.signal_bufsize, sizeof(int))) {
-			uwsgi_error("setsockopt()");
+		if (setsockopt(sigpipe[1], SOL_SOCKET, SO_RCVBUF, &upsgi.signal_bufsize, sizeof(int))) {
+			upsgi_error("setsockopt()");
 		}
 	}
 }
 
-int uwsgi_remote_signal_send(char *addr, uint8_t sig) {
+int upsgi_remote_signal_send(char *addr, uint8_t sig) {
 
-	struct uwsgi_header uh;
+	struct upsgi_header uh;
 
 	uh.modifier1 = 110;
 	uh._pktsize = 0;
 	uh.modifier2 = sig;
 
-        int fd = uwsgi_connect(addr, 0, 1);
+        int fd = upsgi_connect(addr, 0, 1);
         if (fd < 0) return -1;
 
         // wait for connection
-        if (uwsgi.wait_write_hook(fd, uwsgi.socket_timeout) <= 0) goto end;
+        if (upsgi.wait_write_hook(fd, upsgi.socket_timeout) <= 0) goto end;
 
-        if (uwsgi_write_true_nb(fd, (char *) &uh, 4, uwsgi.socket_timeout)) goto end;
+        if (upsgi_write_true_nb(fd, (char *) &uh, 4, upsgi.socket_timeout)) goto end;
 
-	if (uwsgi_read_whole_true_nb(fd, (char *) &uh, 4, uwsgi.socket_timeout)) goto end;
+	if (upsgi_read_whole_true_nb(fd, (char *) &uh, 4, upsgi.socket_timeout)) goto end;
 	close(fd);
 
 	return uh.modifier2;
@@ -295,7 +295,7 @@ end:
 
 }
 
-int uwsgi_signal_send(int fd, uint8_t sig) {
+int upsgi_signal_send(int fd, uint8_t sig) {
 
 	socklen_t so_bufsize_len = sizeof(int);
 	int so_bufsize = 0;
@@ -303,47 +303,47 @@ int uwsgi_signal_send(int fd, uint8_t sig) {
 	if (write(fd, &sig, 1) != 1) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
 			if (getsockopt(fd, SOL_SOCKET, SO_SNDBUF, &so_bufsize, &so_bufsize_len)) {
-				uwsgi_error("getsockopt()");
+				upsgi_error("getsockopt()");
 			}
-			uwsgi_log("*** SIGNAL QUEUE IS FULL: buffer size %d bytes (you can tune it with --signal-bufsize) ***\n", so_bufsize);
+			upsgi_log("*** SIGNAL QUEUE IS FULL: buffer size %d bytes (you can tune it with --signal-bufsize) ***\n", so_bufsize);
 		}
 		else {
-			uwsgi_error("uwsgi_signal_send()");
+			upsgi_error("upsgi_signal_send()");
 		}
-		uwsgi.shared->unrouted_signals++;
+		upsgi.shared->unrouted_signals++;
 		return -1;
 	}
-	uwsgi.shared->routed_signals++;
+	upsgi.shared->routed_signals++;
 	return 0;
 
 }
 
-void uwsgi_route_signal(uint8_t sig) {
+void upsgi_route_signal(uint8_t sig) {
 
-	int pos = (uwsgi.mywid * 256) + sig;
-	struct uwsgi_signal_entry *use = &ushared->signal_table[pos];
+	int pos = (upsgi.mywid * 256) + sig;
+	struct upsgi_signal_entry *use = &ushared->signal_table[pos];
 	int i;
 
 	// send to first available worker
 	if (use->receiver[0] == 0 || !strcmp(use->receiver, "worker") || !strcmp(use->receiver, "worker0")) {
-		if (uwsgi_signal_send(ushared->worker_signal_pipe[0], sig)) {
-			uwsgi_log("could not deliver signal %d to workers pool\n", sig);
+		if (upsgi_signal_send(ushared->worker_signal_pipe[0], sig)) {
+			upsgi_log("could not deliver signal %d to workers pool\n", sig);
 		}
 	}
 	// send to all workers
 	else if (!strcmp(use->receiver, "workers")) {
-		for (i = 1; i <= uwsgi.numproc; i++) {
-			if (uwsgi_signal_send(uwsgi.workers[i].signal_pipe[0], sig)) {
-				uwsgi_log("could not deliver signal %d to worker %d\n", sig, i);
+		for (i = 1; i <= upsgi.numproc; i++) {
+			if (upsgi_signal_send(upsgi.workers[i].signal_pipe[0], sig)) {
+				upsgi_log("could not deliver signal %d to worker %d\n", sig, i);
 			}
 		}
 	}
 	// send to all active workers
 	else if (!strcmp(use->receiver, "active-workers")) {
-                for (i = 1; i <= uwsgi.numproc; i++) {
-			if (uwsgi.workers[i].pid > 0 && !uwsgi.workers[i].cheaped && !uwsgi.workers[i].suspended) {
-                        	if (uwsgi_signal_send(uwsgi.workers[i].signal_pipe[0], sig)) {
-                                	uwsgi_log("could not deliver signal %d to worker %d\n", sig, i);
+                for (i = 1; i <= upsgi.numproc; i++) {
+			if (upsgi.workers[i].pid > 0 && !upsgi.workers[i].cheaped && !upsgi.workers[i].suspended) {
+                        	if (upsgi_signal_send(upsgi.workers[i].signal_pipe[0], sig)) {
+                                	upsgi_log("could not deliver signal %d to worker %d\n", sig, i);
                         	}
 			}
                 }
@@ -351,11 +351,11 @@ void uwsgi_route_signal(uint8_t sig) {
 	// route to specific worker
 	else if (!strncmp(use->receiver, "worker", 6)) {
 		i = atoi(use->receiver + 6);
-		if (i > uwsgi.numproc) {
-			uwsgi_log("invalid signal target: %s\n", use->receiver);
+		if (i > upsgi.numproc) {
+			upsgi_log("invalid signal target: %s\n", use->receiver);
 		}
-		if (uwsgi_signal_send(uwsgi.workers[i].signal_pipe[0], sig)) {
-			uwsgi_log("could not deliver signal %d to worker %d\n", sig, i);
+		if (upsgi_signal_send(upsgi.workers[i].signal_pipe[0], sig)) {
+			upsgi_log("could not deliver signal %d to worker %d\n", sig, i);
 		}
 	}
 	// route to subscribed
@@ -364,68 +364,68 @@ void uwsgi_route_signal(uint8_t sig) {
 	// route to spooler
 	else if (!strcmp(use->receiver, "spooler")) {
 		if (ushared->worker_signal_pipe[0] != -1) {
-			if (uwsgi_signal_send(ushared->spooler_signal_pipe[0], sig)) {
-				uwsgi_log("could not deliver signal %d to the spooler\n", sig);
+			if (upsgi_signal_send(ushared->spooler_signal_pipe[0], sig)) {
+				upsgi_log("could not deliver signal %d to the spooler\n", sig);
 			}
 		}
 	}
 	else if (!strcmp(use->receiver, "mules")) {
-		for (i = 0; i < uwsgi.mules_cnt; i++) {
-			if (uwsgi_signal_send(uwsgi.mules[i].signal_pipe[0], sig)) {
-				uwsgi_log("could not deliver signal %d to mule %d\n", sig, i + 1);
+		for (i = 0; i < upsgi.mules_cnt; i++) {
+			if (upsgi_signal_send(upsgi.mules[i].signal_pipe[0], sig)) {
+				upsgi_log("could not deliver signal %d to mule %d\n", sig, i + 1);
 			}
 		}
 	}
 	else if (!strncmp(use->receiver, "mule", 4)) {
 		i = atoi(use->receiver + 4);
-		if (i > uwsgi.mules_cnt) {
-			uwsgi_log("invalid signal target: %s\n", use->receiver);
+		if (i > upsgi.mules_cnt) {
+			upsgi_log("invalid signal target: %s\n", use->receiver);
 		}
 		else if (i == 0) {
-			if (uwsgi_signal_send(ushared->mule_signal_pipe[0], sig)) {
-				uwsgi_log("could not deliver signal %d to a mule\n", sig);
+			if (upsgi_signal_send(ushared->mule_signal_pipe[0], sig)) {
+				upsgi_log("could not deliver signal %d to a mule\n", sig);
 			}
 		}
 		else {
-			if (uwsgi_signal_send(uwsgi.mules[i - 1].signal_pipe[0], sig)) {
-				uwsgi_log("could not deliver signal %d to mule %d\n", sig, i);
+			if (upsgi_signal_send(upsgi.mules[i - 1].signal_pipe[0], sig)) {
+				upsgi_log("could not deliver signal %d to mule %d\n", sig, i);
 			}
 		}
 	}
 	else if (!strncmp(use->receiver, "farm_", 5)) {
 		char *name = use->receiver + 5;
-		struct uwsgi_farm *uf = get_farm_by_name(name);
+		struct upsgi_farm *uf = get_farm_by_name(name);
 		if (!uf) {
-			uwsgi_log("unknown farm: %s\n", name);
+			upsgi_log("unknown farm: %s\n", name);
 			return;
 		}
-		if (uwsgi_signal_send(uf->signal_pipe[0], sig)) {
-			uwsgi_log("could not deliver signal %d to farm %d (%s)\n", sig, uf->id, uf->name);
+		if (upsgi_signal_send(uf->signal_pipe[0], sig)) {
+			upsgi_log("could not deliver signal %d to farm %d (%s)\n", sig, uf->id, uf->name);
 		}
 	}
 	else if (!strncmp(use->receiver, "farm", 4)) {
 		i = atoi(use->receiver + 4);
-		if (i > uwsgi.farms_cnt || i <= 0) {
-			uwsgi_log("invalid signal target: %s\n", use->receiver);
+		if (i > upsgi.farms_cnt || i <= 0) {
+			upsgi_log("invalid signal target: %s\n", use->receiver);
 		}
 		else {
-			if (uwsgi_signal_send(uwsgi.farms[i - 1].signal_pipe[0], sig)) {
-				uwsgi_log("could not deliver signal %d to farm %d (%s)\n", sig, i, uwsgi.farms[i - 1].name);
+			if (upsgi_signal_send(upsgi.farms[i - 1].signal_pipe[0], sig)) {
+				upsgi_log("could not deliver signal %d to farm %d (%s)\n", sig, i, upsgi.farms[i - 1].name);
 			}
 		}
 	}
 
 	else {
 		// unregistered signal, sending it to all the workers
-		uwsgi_log("^^^ UNSUPPORTED SIGNAL TARGET: %s ^^^\n", use->receiver);
+		upsgi_log("^^^ UNSUPPORTED SIGNAL TARGET: %s ^^^\n", use->receiver);
 	}
 
 }
 
-int uwsgi_signal_wait(struct wsgi_request *wsgi_req, int signum) {
+int upsgi_signal_wait(struct wsgi_request *wsgi_req, int signum) {
 
 	int wait_for_specific_signal = 0;
-	uint8_t uwsgi_signal = 0;
+	uint8_t upsgi_signal = 0;
 	int received_signal = -1;
 	int ret;
 	struct pollfd pfd[2];
@@ -434,39 +434,39 @@ int uwsgi_signal_wait(struct wsgi_request *wsgi_req, int signum) {
 		wait_for_specific_signal = 1;
 	}
 
-	pfd[0].fd = uwsgi.signal_socket;
+	pfd[0].fd = upsgi.signal_socket;
 	pfd[0].events = POLLIN;
-	pfd[1].fd = uwsgi.my_signal_socket;
+	pfd[1].fd = upsgi.my_signal_socket;
 	pfd[1].events = POLLIN;
 
 cycle:
 	ret = poll(pfd, 2, -1);
 	if (ret > 0) {
 		if (pfd[0].revents == POLLIN) {
-			if (read(uwsgi.signal_socket, &uwsgi_signal, 1) != 1) {
-				uwsgi_error("read()");
+			if (read(upsgi.signal_socket, &upsgi_signal, 1) != 1) {
+				upsgi_error("read()");
 			}
 			else {
-				(void) uwsgi_signal_handler(wsgi_req, uwsgi_signal);
+				(void) upsgi_signal_handler(wsgi_req, upsgi_signal);
 				if (wait_for_specific_signal) {
-					if (signum != uwsgi_signal)
+					if (signum != upsgi_signal)
 						goto cycle;
 				}
-				received_signal = uwsgi_signal;
+				received_signal = upsgi_signal;
 			}
 		}
 		if (pfd[1].revents == POLLIN) {
-			if (read(uwsgi.my_signal_socket, &uwsgi_signal, 1) != 1) {
-				uwsgi_error("read()");
+			if (read(upsgi.my_signal_socket, &upsgi_signal, 1) != 1) {
+				upsgi_error("read()");
 			}
 			else {
-				(void) uwsgi_signal_handler(wsgi_req, uwsgi_signal);
+				(void) upsgi_signal_handler(wsgi_req, upsgi_signal);
 				if (wait_for_specific_signal) {
-					if (signum != uwsgi_signal)
+					if (signum != upsgi_signal)
 						goto cycle;
 				}
 			}
-			received_signal = uwsgi_signal;
+			received_signal = upsgi_signal;
 		}
 
 	}
@@ -474,24 +474,24 @@ cycle:
 	return received_signal;
 }
 
-int uwsgi_receive_signal(struct wsgi_request *wsgi_req, int fd, char *name, int id) {
-	uint8_t uwsgi_signal;
+int upsgi_receive_signal(struct wsgi_request *wsgi_req, int fd, char *name, int id) {
+	uint8_t upsgi_signal;
 
-	ssize_t ret = read(fd, &uwsgi_signal, 1);
+	ssize_t ret = read(fd, &upsgi_signal, 1);
 
 	if (ret == 0) {
 		goto destroy;
 	}
 	else if (ret < 0 && errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
-		uwsgi_error("[uwsgi-signal] read()");
+		upsgi_error("[upsgi-signal] read()");
 		goto destroy;
 	}
 	else if (ret > 0) {
-#ifdef UWSGI_DEBUG
-		uwsgi_log_verbose("master sent signal %d to %s %d\n", uwsgi_signal, name, id);
+#ifdef UPSGI_DEBUG
+		upsgi_log_verbose("master sent signal %d to %s %d\n", upsgi_signal, name, id);
 #endif
-		if (uwsgi_signal_handler(wsgi_req, uwsgi_signal)) {
-			uwsgi_log_verbose("error managing signal %d on %s %d\n", uwsgi_signal, name, id);
+		if (upsgi_signal_handler(wsgi_req, upsgi_signal)) {
+			upsgi_log_verbose("error managing signal %d on %s %d\n", upsgi_signal, name, id);
 		}
 		return 1;
 	}
@@ -500,7 +500,7 @@ int uwsgi_receive_signal(struct wsgi_request *wsgi_req, int fd, char *name, int 
 
 destroy:
 	// better to kill the whole worker...
-	uwsgi_log_verbose("uWSGI %s %d error: the master disconnected from this worker. Shutting down the worker.\n", name, id);
+	upsgi_log_verbose("upsgi %s %d error: the master disconnected from this worker. Shutting down the worker.\n", name, id);
 	end_me(0);
 	// never here
 	return 0;

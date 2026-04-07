@@ -8,7 +8,7 @@ for lib in LDFLAGS:
     if lib.startswith('-l'):
         LIBS.append(lib)
 
-GCC_LIST = ['uwsgi_plmodule', 'psgi_loader', 'psgi_response', 'psgi_plugin']
+GCC_LIST = ['upsgi_plmodule', 'psgi_loader', 'psgi_response', 'psgi_plugin']
 
 for item in LDFLAGS:
     if item.endswith('DynaLoader.a'):

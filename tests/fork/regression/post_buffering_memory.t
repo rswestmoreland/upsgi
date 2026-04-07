@@ -6,11 +6,11 @@ use FindBin;
 use Test::More;
 
 use lib File::Spec->catdir($FindBin::Bin, '..', 'lib');
-use UpSGITest qw(build_artifact_dir default_binary fixture_app fixture_static_root http_request pick_port render_profile slurp start_server stop_server wait_http);
+use UpSGITest qw(append_yaml_options build_artifact_dir default_binary fixture_app fixture_static_root http_request pick_port render_profile slurp start_server stop_server wait_http);
 
 my $binary = default_binary();
 my $artifact_dir = build_artifact_dir('post_buffering_memory');
-my $config_ini = File::Spec->catfile($artifact_dir, 'post_buffering.ini');
+my $config_yaml = File::Spec->catfile($artifact_dir, 'post_buffering.yaml');
 my $server_log = File::Spec->catfile($artifact_dir, 'server.log');
 my $port = pick_port(9);
 my $mem_payload = ('abcd' x 5000);   # 20 KB, larger than bufsize and smaller than threshold
@@ -18,21 +18,22 @@ my $disk_payload = ('wxyz' x 20000); # 80 KB, larger than threshold
 
 render_profile(
     profile => 'baseline',
-    output_ini => $config_ini,
+    output_yaml => $config_yaml,
     app => fixture_app('app_upload.psgi'),
     static_root => fixture_static_root(),
     log_file => $server_log,
     port => $port,
 );
 
-open my $fh, '>>', $config_ini or die "unable to append to $config_ini: $!\n";
-print {$fh} "post-buffering = 65536\n";
-print {$fh} "post-buffering-bufsize = 4096\n";
-close $fh;
+append_yaml_options(
+    $config_yaml,
+    "post-buffering = 65536\n",
+    "post-buffering-bufsize = 4096\n",
+);
 
 start_server(
     binary => $binary,
-    config_ini => $config_ini,
+    config_yaml => $config_yaml,
     artifact_dir => $artifact_dir,
 );
 

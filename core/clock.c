@@ -1,33 +1,33 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
-int uwsgi_simple_wait_milliseconds_hook(int timeout) {
+int upsgi_simple_wait_milliseconds_hook(int timeout) {
         return poll(NULL, 0, timeout);
 }
 
 
 // in the future we will need to use the best clock source for each os/system
-time_t uwsgi_now() {
-	return uwsgi.clock->seconds();
+time_t upsgi_now() {
+	return upsgi.clock->seconds();
 }
 
-uint64_t uwsgi_micros() {
-	return uwsgi.clock->microseconds();
+uint64_t upsgi_micros() {
+	return upsgi.clock->microseconds();
 }
 
-uint64_t uwsgi_millis() {
-	return uwsgi.clock->microseconds() / 1000;
+uint64_t upsgi_millis() {
+	return upsgi.clock->microseconds() / 1000;
 }
 
 
-void uwsgi_register_clock(struct uwsgi_clock *clock) {
-	struct uwsgi_clock *clocks = uwsgi.clocks;
+void upsgi_register_clock(struct upsgi_clock *clock) {
+	struct upsgi_clock *clocks = upsgi.clocks;
 
 	clock->next = NULL;
 
 	if (!clocks) {
-		uwsgi.clocks = clock;
+		upsgi.clocks = clock;
 		return;
 	}
 
@@ -40,16 +40,16 @@ void uwsgi_register_clock(struct uwsgi_clock *clock) {
 	}
 }
 
-void uwsgi_set_clock(char *name) {
-	struct uwsgi_clock *clocks = uwsgi.clocks;
+void upsgi_set_clock(char *name) {
+	struct upsgi_clock *clocks = upsgi.clocks;
 	while (clocks) {
 		if (!strcmp(name, clocks->name)) {
-			uwsgi.clock = clocks;
+			upsgi.clock = clocks;
 			return;
 		}
 		clocks = clocks->next;
 	}
 
-	uwsgi_log("unable to set \"%s\" clock\n", name);
+	upsgi_log("unable to set \"%s\" clock\n", name);
 	exit(1);
 }

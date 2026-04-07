@@ -90,7 +90,7 @@ The retained fork now rejects several ambiguous request shapes at the HTTP socke
 ## Current PSGI/XS hardening state
 The retained PSGI bridge now fails closed on several malformed app-controlled inputs that previously trusted value shape too early:
 - `psgix.logger` requires a real hashref with defined `level` and `message`
-- `uwsgi::stream` requires an arrayref responder payload
+- `upsgi::stream` requires an arrayref responder payload
 - malformed PSGI headers/body/path objects now hit a safe invalid-response path instead of being dereferenced blindly
 - `psgi.input->read()` now rejects negative or extreme read lengths/offsets
 

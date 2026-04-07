@@ -1,5 +1,5 @@
 #undef __USE_GNU
-#include <uwsgi.h>
+#include <upsgi.h>
 
 #ifdef __APPLE__
 #define HAS_BOOL 1
@@ -8,10 +8,10 @@
 #include <perl.h>
 #include "XSUB.h"
 
-#define uwsgi_pl_check_write_errors if (wsgi_req->write_errors > 0 && uwsgi.write_errors_exception_only) {\
+#define upsgi_pl_check_write_errors if (wsgi_req->write_errors > 0 && upsgi.write_errors_exception_only) {\
                         croak("error writing to client");\
                 }\
-                else if (wsgi_req->write_errors > uwsgi.write_errors_tolerance)\
+                else if (wsgi_req->write_errors > upsgi.write_errors_tolerance)\
 
 
 /*
@@ -19,9 +19,9 @@
  * - psgi_plugin.c: option parsing, compatibility shims, request dispatch
  * - psgi_response.c: PSGI response marshalling and body emission
  * - psgi_loader.c: Perl bridge helpers, XS setup, interpreter/app loading
- * - uwsgi_plmodule.c: retained Perl extras and supporting helpers
+ * - upsgi_plmodule.c: retained Perl extras and supporting helpers
  */
-struct uwsgi_perl {
+struct upsgi_perl {
 
 	// path of the statically loaded main app
         char *psgi;
@@ -36,7 +36,7 @@ struct uwsgi_perl {
 	int stacktrace_available;
 
 	char *argv_items;
-	struct uwsgi_string_list *argv_item;
+	struct upsgi_string_list *argv_item;
 
 	// this is a pointer to the main list of interpreters (required for signals, rpc....);
         PerlInterpreter **main;
@@ -59,12 +59,12 @@ struct uwsgi_perl {
 
 	int loaded;
 
-	struct uwsgi_string_list *exec;
-	struct uwsgi_string_list *exec_post_fork;
+	struct upsgi_string_list *exec;
+	struct upsgi_string_list *exec_post_fork;
 
 	int auto_reload;
 	time_t last_auto_reload;
-	struct uwsgi_string_list *auto_reload_ignore;
+	struct upsgi_string_list *auto_reload_ignore;
 	HV *auto_reload_hash;
 
 	int enable_psgix_io;
@@ -90,19 +90,19 @@ int psgi_response_stream_start(struct wsgi_request *, AV*);
 int psgi_informational_response(struct wsgi_request *, int, AV *);
 
 /* Perl bridge and app loading layer */
-void uwsgi_psgi_app(void);
-SV *uwsgi_perl_obj_call(SV *, char *);
-int uwsgi_perl_obj_can(SV *, char *, size_t);
+void upsgi_psgi_app(void);
+SV *upsgi_perl_obj_call(SV *, char *);
+int upsgi_perl_obj_can(SV *, char *, size_t);
 int init_psgi_app(struct wsgi_request *, char *, uint16_t, PerlInterpreter **);
-PerlInterpreter *uwsgi_perl_new_interpreter(void);
-int uwsgi_perl_mule(char *);
-void uwsgi_perl_run_hook(SV *);
-void uwsgi_perl_exec(char *);
-void uwsgi_perl_check_auto_reload(void);
-void uwsgi_psgi_preinit_apps(void);
-int uwsgi_perl_add_app(struct wsgi_request *, char *, PerlInterpreter **, SV **, time_t);
+PerlInterpreter *upsgi_perl_new_interpreter(void);
+int upsgi_perl_mule(char *);
+void upsgi_perl_run_hook(SV *);
+void upsgi_perl_exec(char *);
+void upsgi_perl_check_auto_reload(void);
+void upsgi_psgi_preinit_apps(void);
+int upsgi_perl_add_app(struct wsgi_request *, char *, PerlInterpreter **, SV **, time_t);
 
-#define psgi_xs(func) newXS("uwsgi::" #func, XS_##func, "uwsgi")
-#define psgi_check_args(x) if (items < x) Perl_croak(aTHX_ "Usage: uwsgi::%s takes %d arguments", __FUNCTION__ + 3, x)
+#define psgi_xs(func) newXS("upsgi::" #func, XS_##func, "upsgi")
+#define psgi_check_args(x) if (items < x) Perl_croak(aTHX_ "Usage: upsgi::%s takes %d arguments", __FUNCTION__ + 3, x)
 
-extern struct uwsgi_perl uperl;
+extern struct upsgi_perl uperl;

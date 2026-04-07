@@ -1,8 +1,8 @@
 /* async http protocol parser */
 
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 int http_status_code(char *buf, int len) {
 	char *p = buf;
@@ -95,7 +95,7 @@ static int http_header_value_has_token(char *value, size_t value_len, const char
 		while (i < value_len && value[i] != ',' && value[i] != ';') i++;
 		size_t end = i;
 		while (end > start && (value[end - 1] == ' ' || value[end - 1] == '\t')) end--;
-		if (end - start == token_len && !uwsgi_strnicmp(value + start, token_len, (char *) token, token_len)) {
+		if (end - start == token_len && !upsgi_strnicmp(value + start, token_len, (char *) token, token_len)) {
 			return 1;
 		}
 		while (i < value_len && value[i] != ',') i++;
@@ -107,14 +107,14 @@ static int http_header_value_has_chunked_token(char *value, size_t value_len) {
 	return http_header_value_has_token(value, value_len, "chunked", 7);
 }
 
-static int uwsgi_http11_request_wants_close(struct wsgi_request *wsgi_req) {
+static int upsgi_http11_request_wants_close(struct wsgi_request *wsgi_req) {
 	uint16_t connection_len = 0;
-	char *connection = uwsgi_get_var(wsgi_req, (char *) "HTTP_CONNECTION", 15, &connection_len);
+	char *connection = upsgi_get_var(wsgi_req, (char *) "HTTP_CONNECTION", 15, &connection_len);
 	if (!connection || connection_len == 0) return 0;
 	return http_header_value_has_token(connection, connection_len, "close", 5);
 }
 
-static int uwsgi_http_response_has_connection_header(struct wsgi_request *wsgi_req) {
+static int upsgi_http_response_has_connection_header(struct wsgi_request *wsgi_req) {
 	if (!wsgi_req->headers || wsgi_req->headers->pos == 0) return 0;
 	char *buf = wsgi_req->headers->buf;
 	size_t pos = 0;
@@ -127,7 +127,7 @@ static int uwsgi_http_response_has_connection_header(struct wsgi_request *wsgi_r
 		pos = (size_t) ((eol - buf) + 1);
 		if (line_len == 0) break;
 		if (memchr(line, ':', line_len) == NULL) continue;
-		if (line_len >= 11 && !uwsgi_strnicmp(line, 10, (char *) "Connection", 10) && line[10] == ':') {
+		if (line_len >= 11 && !upsgi_strnicmp(line, 10, (char *) "Connection", 10) && line[10] == ':') {
 			return 1;
 		}
 	}
@@ -153,26 +153,26 @@ static int http_path_needs_decode(char *path, uint16_t path_len) {
 
 static int http_add_path_info(struct wsgi_request *wsgi_req, char *path, uint16_t path_len) {
 	if (!http_path_needs_decode(path, path_len)) {
-		wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "PATH_INFO", 9, path, path_len);
+		wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "PATH_INFO", 9, path, path_len);
 		return 0;
 	}
-	char *decoded_path = uwsgi_malloc(path_len);
+	char *decoded_path = upsgi_malloc(path_len);
 	uint16_t decoded_path_len = path_len;
-	http_url_decode4(path, &decoded_path_len, decoded_path, uwsgi.http_path_info_no_decode_slashes);
-	wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "PATH_INFO", 9, decoded_path, decoded_path_len);
+	http_url_decode4(path, &decoded_path_len, decoded_path, upsgi.http_path_info_no_decode_slashes);
+	wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "PATH_INFO", 9, decoded_path, decoded_path_len);
 	free(decoded_path);
 	return 0;
 }
 
-static void uwsgi_http_setup_server_port_cache(struct uwsgi_socket *uwsgi_sock) {
+static void upsgi_http_setup_server_port_cache(struct upsgi_socket *upsgi_sock) {
 	char *server_port = NULL;
-	uwsgi_sock->server_port = NULL;
-	uwsgi_sock->server_port_len = 0;
-	if (!uwsgi_sock->name) return;
-	server_port = strrchr(uwsgi_sock->name, ':');
+	upsgi_sock->server_port = NULL;
+	upsgi_sock->server_port_len = 0;
+	if (!upsgi_sock->name) return;
+	server_port = strrchr(upsgi_sock->name, ':');
 	if (!server_port || !server_port[1]) return;
-	uwsgi_sock->server_port = server_port + 1;
-	uwsgi_sock->server_port_len = strlen(server_port + 1);
+	upsgi_sock->server_port = server_port + 1;
+	upsgi_sock->server_port_len = strlen(server_port + 1);
 }
 
 static char * http_header_to_cgi(char *hh, size_t hhlen, size_t *keylen, size_t *vallen, int *has_prefix) {
@@ -201,7 +201,7 @@ static char * http_header_to_cgi(char *hh, size_t hhlen, size_t *keylen, size_t 
 	if (!(*keylen) || !val)
 		return NULL;
 
-	if (uwsgi_strnicmp(hh, *keylen, (char *) "Content-Length", 14) && uwsgi_strnicmp(hh, *keylen, (char *) "Content-Type", 12)) {
+	if (upsgi_strnicmp(hh, *keylen, (char *) "Content-Length", 14) && upsgi_strnicmp(hh, *keylen, (char *) "Content-Type", 12)) {
 		*has_prefix = 0x02;
 	}
 
@@ -209,10 +209,10 @@ static char * http_header_to_cgi(char *hh, size_t hhlen, size_t *keylen, size_t 
 }
 
 
-static uint64_t http_add_uwsgi_header(struct wsgi_request *wsgi_req, char *hh, size_t hhlen, char *hv, size_t hvlen, int has_prefix) {
+static uint64_t http_add_upsgi_header(struct wsgi_request *wsgi_req, char *hh, size_t hhlen, char *hv, size_t hvlen, int has_prefix) {
 
 	char *buffer = wsgi_req->buffer + wsgi_req->len;
-	char *watermark = wsgi_req->buffer + uwsgi.buffer_size;
+	char *watermark = wsgi_req->buffer + upsgi.buffer_size;
 	char *ptr = buffer;
 	size_t keylen = hhlen;
 	size_t i;
@@ -222,14 +222,14 @@ static uint64_t http_add_uwsgi_header(struct wsgi_request *wsgi_req, char *hh, s
 	if (buffer + keylen + hvlen + 2 + 2 >= watermark) {
 		if (keylen <= 0xff && hvlen <= 0xff) {
 			if (has_prefix) {
-				uwsgi_log("[WARNING] unable to add HTTP_%.*s=%.*s to uwsgi packet, consider increasing buffer size\n", (int) hhlen, hh, (int) hvlen, hv);
+				upsgi_log("[WARNING] unable to add HTTP_%.*s=%.*s to upsgi packet, consider increasing buffer size\n", (int) hhlen, hh, (int) hvlen, hv);
 			}
 			else {
-				uwsgi_log("[WARNING] unable to add %.*s=%.*s to uwsgi packet, consider increasing buffer size\n", (int) hhlen, hh, (int) hvlen, hv);
+				upsgi_log("[WARNING] unable to add %.*s=%.*s to upsgi packet, consider increasing buffer size\n", (int) hhlen, hh, (int) hvlen, hv);
 			}
 		}
 		else {
-			uwsgi_log("[WARNING] unable to build uwsgi packet from http request, consider increasing buffer size\n");
+			upsgi_log("[WARNING] unable to build upsgi packet from http request, consider increasing buffer size\n");
 		}
 		return 0;
 	}
@@ -275,7 +275,7 @@ static int http_header_table_reserve(http_header_table *table) {
 	size_t new_size = table->size ? table->size * 2 : 16;
 	http_header_slot *new_slots = realloc(table->slots, sizeof(http_header_slot) * new_size);
 	if (!new_slots) {
-		uwsgi_error("realloc()");
+		upsgi_error("realloc()");
 		return -1;
 	}
 	table->slots = new_slots;
@@ -287,7 +287,7 @@ static http_header_slot *http_header_table_find(http_header_table *table, char *
 	size_t i;
 	for (i = 0; i < table->pos; i++) {
 		http_header_slot *slot = &table->slots[i];
-		if (slot->key_len == key_len && !uwsgi_strnicmp(slot->key, slot->key_len, key, key_len)) {
+		if (slot->key_len == key_len && !upsgi_strnicmp(slot->key, slot->key_len, key, key_len)) {
 			return slot;
 		}
 	}
@@ -415,7 +415,7 @@ static int http_parse(struct wsgi_request *wsgi_req, char *watermark) {
 	uint16_t proxy_src_port_len = 0;
 	uint16_t proxy_dst_port_len = 0;
 
-	if (uwsgi.enable_proxy_protocol) {
+	if (upsgi.enable_proxy_protocol) {
 		ptr = proxy1_parse(ptr, watermark, &proxy_src, &proxy_src_len, &proxy_dst, &proxy_dst_len, &proxy_src_port, &proxy_src_port_len, &proxy_dst_port, &proxy_dst_port_len);
 		base = ptr;
 	}
@@ -424,8 +424,8 @@ static int http_parse(struct wsgi_request *wsgi_req, char *watermark) {
 	while (ptr < watermark) {
 		if (*ptr == ' ') {
 			size_t method_len = ptr - base;
-			wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "REQUEST_METHOD", 14, base, method_len);
-			if (method_len == 4 && !uwsgi_strncmp("HEAD", 4, base, method_len)) {
+			wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "REQUEST_METHOD", 14, base, method_len);
+			if (method_len == 4 && !upsgi_strncmp("HEAD", 4, base, method_len)) {
 				wsgi_req->ignore_body = 1;
 			}
 			ptr++;
@@ -442,13 +442,13 @@ static int http_parse(struct wsgi_request *wsgi_req, char *watermark) {
 			query_string = ptr + 1;
 		}
 		else if (*ptr == ' ') {
-			wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "REQUEST_URI", 11, base, ptr - base);
+			wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "REQUEST_URI", 11, base, ptr - base);
 			if (!query_string) {
 				if (http_add_path_info(wsgi_req, base, ptr - base)) return -1;
-				wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "QUERY_STRING", 12, "", 0);
+				wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "QUERY_STRING", 12, "", 0);
 			}
 			else {
-				wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "QUERY_STRING", 12, query_string, ptr - query_string);
+				wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "QUERY_STRING", 12, query_string, ptr - query_string);
 			}
 			ptr++;
 			break;
@@ -464,7 +464,7 @@ static int http_parse(struct wsgi_request *wsgi_req, char *watermark) {
 			if (*(ptr + 1) != '\n')
 				return -1;
 			if (ptr - base > 0xffff) return -1;
-			wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "SERVER_PROTOCOL", 15, base, ptr - base);
+			wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "SERVER_PROTOCOL", 15, base, ptr - base);
 			ptr += 2;
 			break;
 		}
@@ -472,35 +472,35 @@ static int http_parse(struct wsgi_request *wsgi_req, char *watermark) {
 	}
 
 	// SCRIPT_NAME
-	if (!uwsgi.manage_script_name) {
-		wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "SCRIPT_NAME", 11, "", 0);
+	if (!upsgi.manage_script_name) {
+		wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "SCRIPT_NAME", 11, "", 0);
 	}
 	
 
 	// SERVER_NAME
-	wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "SERVER_NAME", 11, uwsgi.hostname, uwsgi.hostname_len);
+	wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "SERVER_NAME", 11, upsgi.hostname, upsgi.hostname_len);
 
 	// SERVER_PORT / SERVER_ADDR
 	if (proxy_dst) {
-		wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "SERVER_ADDR", 11, proxy_dst, proxy_dst_len);
+		wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "SERVER_ADDR", 11, proxy_dst, proxy_dst_len);
                 if (proxy_dst_port) {
-                        wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "SERVER_PORT", 11, proxy_dst_port, proxy_dst_port_len);
+                        wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "SERVER_PORT", 11, proxy_dst_port, proxy_dst_port_len);
                 }
 	}
 	else {
 		if (wsgi_req->socket->server_port && wsgi_req->socket->server_port_len > 0) {
-			wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "SERVER_PORT", 11, wsgi_req->socket->server_port, wsgi_req->socket->server_port_len);
+			wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "SERVER_PORT", 11, wsgi_req->socket->server_port, wsgi_req->socket->server_port_len);
 		}
 		else {
-			wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "SERVER_PORT", 11, "80", 2);
+			wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "SERVER_PORT", 11, "80", 2);
 		}
 	}
 
 	// REMOTE_ADDR
 	if (proxy_src) {
-		wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "REMOTE_ADDR", 11, proxy_src, proxy_src_len);
+		wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "REMOTE_ADDR", 11, proxy_src, proxy_src_len);
 		if (proxy_src_port) {
-			wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "REMOTE_PORT", 11, proxy_src_port, proxy_src_port_len);
+			wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "REMOTE_PORT", 11, proxy_src_port, proxy_src_port_len);
 		}
 	}
 	else {
@@ -527,16 +527,16 @@ static int http_parse(struct wsgi_request *wsgi_req, char *watermark) {
 				uint32_t in4_addr = addr_parts.s4;
 				memset(ip, 0, sizeof(ip));
 				if (inet_ntop(AF_INET, (void*)&in4_addr, ip, INET_ADDRSTRLEN)) {
-					wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "REMOTE_ADDR", 11, ip, strlen(ip));
+					wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "REMOTE_ADDR", 11, ip, strlen(ip));
 				} else {
-					uwsgi_error("inet_ntop()");
+					upsgi_error("inet_ntop()");
 					return -1;
 				}
 			} else {
 				if (inet_ntop(AF_INET6, (void *) &http_sin->sin6_addr, ip, INET6_ADDRSTRLEN)) {
-					wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "REMOTE_ADDR", 11, ip, strlen(ip));
+					wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "REMOTE_ADDR", 11, ip, strlen(ip));
 				} else {
-					uwsgi_error("inet_ntop()");
+					upsgi_error("inet_ntop()");
 					return -1;
 				}
 			}
@@ -547,10 +547,10 @@ static int http_parse(struct wsgi_request *wsgi_req, char *watermark) {
 			struct sockaddr_in* http_sin = (struct sockaddr_in*)http_sa;
 			memset(ip, 0, sizeof(ip));
 			if (inet_ntop(AF_INET, (void *) &http_sin->sin_addr, ip, INET_ADDRSTRLEN)) {
-				wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "REMOTE_ADDR", 11, ip, strlen(ip));
+				wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "REMOTE_ADDR", 11, ip, strlen(ip));
 			}
 			else {
-				uwsgi_error("inet_ntop()");
+				upsgi_error("inet_ntop()");
 				return -1;
 			}
 			}
@@ -559,7 +559,7 @@ static int http_parse(struct wsgi_request *wsgi_req, char *watermark) {
 	}
 
 	if (wsgi_req->https_len > 0) {
-		wsgi_req->len += proto_base_add_uwsgi_var(wsgi_req, "HTTPS", 5, wsgi_req->https, wsgi_req->https_len);
+		wsgi_req->len += proto_base_add_upsgi_var(wsgi_req, "HTTPS", 5, wsgi_req->https, wsgi_req->https_len);
 	}
 
 	//HEADERS
@@ -587,19 +587,19 @@ static int http_parse(struct wsgi_request *wsgi_req, char *watermark) {
 			if (ptr - base > 0xffff) return -1;
 			char *value = http_header_to_cgi(base, ptr - base, &key_len, &value_len, &has_prefix);
 			if (!value) {
-				uwsgi_log_verbose("invalid HTTP request\n");
+				upsgi_log_verbose("invalid HTTP request\n");
 				goto clear;
 			}
 			http_header_slot *slot = http_header_table_find(&headers, base, key_len);
 			if (slot && http_header_reject_duplicate(key_len, base)) {
 				char normalized_name[key_len + 1];
 				http_header_normalize_name(base, key_len, normalized_name);
-				uwsgi_log("invalid HTTP request: duplicate %s header\n", normalized_name);
+				upsgi_log("invalid HTTP request: duplicate %s header\n", normalized_name);
 				goto clear;
 			}
 			if (slot) {
 				char *old_value = slot->value;
-				slot->value = uwsgi_concat3n(old_value, slot->value_len, ", ", 2, value, value_len);
+				slot->value = upsgi_concat3n(old_value, slot->value_len, ", ", 2, value, value_len);
 				if (!slot->value) goto clear;
 				slot->value_len += 2 + value_len;
 				if (slot->owns_value) free(old_value);
@@ -628,23 +628,23 @@ static int http_parse(struct wsgi_request *wsgi_req, char *watermark) {
 	for (i = 0; i < headers.pos; i++) {
 		http_header_slot *slot = &headers.slots[i];
 		if (!broken) {
-			if (slot->key_len == 14 && !uwsgi_strnicmp(slot->key, slot->key_len, (char *) "Content-Length", 14)) {
+			if (slot->key_len == 14 && !upsgi_strnicmp(slot->key, slot->key_len, (char *) "Content-Length", 14)) {
 				if (saw_chunked_transfer_encoding) {
-					uwsgi_log("invalid HTTP request: chunked Transfer-Encoding with Content-Length\n");
+					upsgi_log("invalid HTTP request: chunked Transfer-Encoding with Content-Length\n");
 					broken = 1;
 				}
 				saw_content_length = 1;
 			}
-			else if (slot->key_len == 17 && !uwsgi_strnicmp(slot->key, slot->key_len, (char *) "Transfer-Encoding", 17) && http_header_value_has_chunked_token(slot->value, slot->value_len)) {
+			else if (slot->key_len == 17 && !upsgi_strnicmp(slot->key, slot->key_len, (char *) "Transfer-Encoding", 17) && http_header_value_has_chunked_token(slot->value, slot->value_len)) {
 				if (saw_content_length) {
-					uwsgi_log("invalid HTTP request: chunked Transfer-Encoding with Content-Length\n");
+					upsgi_log("invalid HTTP request: chunked Transfer-Encoding with Content-Length\n");
 					broken = 1;
 				}
 				saw_chunked_transfer_encoding = 1;
 			}
 			if (!broken) {
 				uint64_t old_len = wsgi_req->len;
-				wsgi_req->len += http_add_uwsgi_header(wsgi_req, slot->key, slot->key_len, slot->value, slot->value_len, slot->has_prefix & 0x02);
+				wsgi_req->len += http_add_upsgi_header(wsgi_req, slot->key, slot->key_len, slot->value, slot->value_len, slot->has_prefix & 0x02);
 				if (old_len == wsgi_req->len) {
 					broken = 1;
 				}
@@ -662,35 +662,35 @@ clear:
 
 
 
-static int uwsgi_proto_http_parser(struct wsgi_request *wsgi_req) {
+static int upsgi_proto_http_parser(struct wsgi_request *wsgi_req) {
 
 	ssize_t j;
 	char *ptr;
 
 	// first round ? (wsgi_req->proto_parser_buf is freed at the end of the request)
 	if (!wsgi_req->proto_parser_buf) {
-		wsgi_req->proto_parser_buf = uwsgi_malloc(uwsgi.buffer_size);
+		wsgi_req->proto_parser_buf = upsgi_malloc(upsgi.buffer_size);
 	}
 
-	if (uwsgi.buffer_size - wsgi_req->proto_parser_pos == 0) {
-		uwsgi_log("invalid HTTP request size (max %u)...skip\n", uwsgi.buffer_size);
+	if (upsgi.buffer_size - wsgi_req->proto_parser_pos == 0) {
+		upsgi_log("invalid HTTP request size (max %u)...skip\n", upsgi.buffer_size);
 		return -1;
 	}
 
-	ssize_t len = read(wsgi_req->fd, wsgi_req->proto_parser_buf + wsgi_req->proto_parser_pos, uwsgi.buffer_size - wsgi_req->proto_parser_pos);
+	ssize_t len = read(wsgi_req->fd, wsgi_req->proto_parser_buf + wsgi_req->proto_parser_pos, upsgi.buffer_size - wsgi_req->proto_parser_pos);
 	if (len > 0) {
 		goto parse;
 	}
 	if (len < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS) {
-                	return UWSGI_AGAIN;
+                	return UPSGI_AGAIN;
                 }
-		uwsgi_error("uwsgi_proto_http_parser()");
+		upsgi_error("upsgi_proto_http_parser()");
 		return -1;
 	}
 	// mute on 0 len...
 	if (wsgi_req->proto_parser_pos > 0) {
-		uwsgi_log("uwsgi_proto_http_parser() -> client closed connection\n");
+		upsgi_log("upsgi_proto_http_parser() -> client closed connection\n");
 	}
 	return -1;
 
@@ -715,9 +715,9 @@ parse:
 				wsgi_req->proto_parser_remains_buf = (wsgi_req->proto_parser_buf + wsgi_req->proto_parser_pos) - wsgi_req->proto_parser_remains;
 			}
 			if (http_parse(wsgi_req, ptr)) return -1;
-			wsgi_req->uh->modifier1 = uwsgi.http_modifier1;
-			wsgi_req->uh->modifier2 = uwsgi.http_modifier2;
-			return UWSGI_OK;
+			wsgi_req->uh->modifier1 = upsgi.http_modifier1;
+			wsgi_req->uh->modifier2 = upsgi.http_modifier2;
+			return UPSGI_OK;
 		}
 		else {
 			wsgi_req->proto_parser_status = 0;
@@ -725,10 +725,10 @@ parse:
 		ptr++;
 	}
 
-	return UWSGI_AGAIN;
+	return UPSGI_AGAIN;
 }
 
-static void uwsgi_httpize_var(char *buf, size_t len) {
+static void upsgi_httpize_var(char *buf, size_t len) {
 	size_t i;
 	int upper = 1;
 	for(i=0;i<len;i++) {
@@ -747,23 +747,23 @@ static void uwsgi_httpize_var(char *buf, size_t len) {
 	}
 }
 
-struct uwsgi_buffer *uwsgi_to_http_dumb(struct wsgi_request *wsgi_req, char *host, uint16_t host_len, char *uri, uint16_t uri_len) {
+struct upsgi_buffer *upsgi_to_http_dumb(struct wsgi_request *wsgi_req, char *host, uint16_t host_len, char *uri, uint16_t uri_len) {
 
-        struct uwsgi_buffer *ub = uwsgi_buffer_new(4096);
+        struct upsgi_buffer *ub = upsgi_buffer_new(4096);
 
-        if (uwsgi_buffer_append(ub, wsgi_req->method, wsgi_req->method_len)) goto clear;
-        if (uwsgi_buffer_append(ub, " ", 1)) goto clear;
+        if (upsgi_buffer_append(ub, wsgi_req->method, wsgi_req->method_len)) goto clear;
+        if (upsgi_buffer_append(ub, " ", 1)) goto clear;
 
         if (uri_len && uri) {
-                if (uwsgi_buffer_append(ub, uri, uri_len)) goto clear;
+                if (upsgi_buffer_append(ub, uri, uri_len)) goto clear;
         }
         else {
-                if (uwsgi_buffer_append(ub, wsgi_req->uri, wsgi_req->uri_len)) goto clear;
+                if (upsgi_buffer_append(ub, wsgi_req->uri, wsgi_req->uri_len)) goto clear;
         }
 
-        if (uwsgi_buffer_append(ub, " ", 1)) goto clear;
-        if (uwsgi_buffer_append(ub, wsgi_req->protocol, wsgi_req->protocol_len)) goto clear;
-        if (uwsgi_buffer_append(ub, "\r\n", 2)) goto clear;
+        if (upsgi_buffer_append(ub, " ", 1)) goto clear;
+        if (upsgi_buffer_append(ub, wsgi_req->protocol, wsgi_req->protocol_len)) goto clear;
+        if (upsgi_buffer_append(ub, "\r\n", 2)) goto clear;
 
         int i;
         char *x_forwarded_for = NULL;
@@ -771,27 +771,27 @@ struct uwsgi_buffer *uwsgi_to_http_dumb(struct wsgi_request *wsgi_req, char *hos
 
         // start adding headers
         for(i=0;i<wsgi_req->var_cnt;i++) {
-                if (!uwsgi_starts_with(wsgi_req->hvec[i].iov_base, wsgi_req->hvec[i].iov_len, "HTTP_", 5)) {
+                if (!upsgi_starts_with(wsgi_req->hvec[i].iov_base, wsgi_req->hvec[i].iov_len, "HTTP_", 5)) {
 
                         char *header = wsgi_req->hvec[i].iov_base+5;
                         size_t header_len = wsgi_req->hvec[i].iov_len-5;
 
-                        if (host && !uwsgi_strncmp(header, header_len, "HOST", 4)) goto next;
+                        if (host && !upsgi_strncmp(header, header_len, "HOST", 4)) goto next;
 
-                        if (!uwsgi_strncmp(header, header_len, "X_FORWARDED_FOR", 15)) {
+                        if (!upsgi_strncmp(header, header_len, "X_FORWARDED_FOR", 15)) {
                                 x_forwarded_for = wsgi_req->hvec[i+1].iov_base;
                                 x_forwarded_for_len = wsgi_req->hvec[i+1].iov_len;
                                 goto next;
                         }
 
-                        if (uwsgi_buffer_append(ub, header, header_len)) goto clear;
+                        if (upsgi_buffer_append(ub, header, header_len)) goto clear;
 
-                        // transofmr uwsgi var to http header
-                        uwsgi_httpize_var((ub->buf+ub->pos) - header_len, header_len);
+                        // transofmr upsgi var to http header
+                        upsgi_httpize_var((ub->buf+ub->pos) - header_len, header_len);
 
-                        if (uwsgi_buffer_append(ub, ": ", 2)) goto clear;
-                        if (uwsgi_buffer_append(ub, wsgi_req->hvec[i+1].iov_base, wsgi_req->hvec[i+1].iov_len)) goto clear;
-                        if (uwsgi_buffer_append(ub, "\r\n", 2)) goto clear;
+                        if (upsgi_buffer_append(ub, ": ", 2)) goto clear;
+                        if (upsgi_buffer_append(ub, wsgi_req->hvec[i+1].iov_base, wsgi_req->hvec[i+1].iov_len)) goto clear;
+                        if (upsgi_buffer_append(ub, "\r\n", 2)) goto clear;
 
                 }
 next:
@@ -801,58 +801,58 @@ next:
 
         // append custom Host (if needed)
         if (host) {
-                if (uwsgi_buffer_append(ub, "Host: ", 6)) goto clear;
-                if (uwsgi_buffer_append(ub, host, host_len)) goto clear;
-                if (uwsgi_buffer_append(ub, "\r\n", 2)) goto clear;
+                if (upsgi_buffer_append(ub, "Host: ", 6)) goto clear;
+                if (upsgi_buffer_append(ub, host, host_len)) goto clear;
+                if (upsgi_buffer_append(ub, "\r\n", 2)) goto clear;
         }
 
         if (wsgi_req->content_type_len > 0) {
-                if (uwsgi_buffer_append(ub, "Content-Type: ", 14)) goto clear;
-                if (uwsgi_buffer_append(ub, wsgi_req->content_type, wsgi_req->content_type_len)) goto clear;
-                if (uwsgi_buffer_append(ub, "\r\n", 2)) goto clear;
+                if (upsgi_buffer_append(ub, "Content-Type: ", 14)) goto clear;
+                if (upsgi_buffer_append(ub, wsgi_req->content_type, wsgi_req->content_type_len)) goto clear;
+                if (upsgi_buffer_append(ub, "\r\n", 2)) goto clear;
         }
 
         if (wsgi_req->post_cl > 0) {
-                if (uwsgi_buffer_append(ub, "Content-Length: ", 16)) goto clear;
-                if (uwsgi_buffer_num64(ub, (int64_t) wsgi_req->post_cl)) goto clear;
-                if (uwsgi_buffer_append(ub, "\r\n", 2)) goto clear;
+                if (upsgi_buffer_append(ub, "Content-Length: ", 16)) goto clear;
+                if (upsgi_buffer_num64(ub, (int64_t) wsgi_req->post_cl)) goto clear;
+                if (upsgi_buffer_append(ub, "\r\n", 2)) goto clear;
         }
 
         // append required headers
-        if (uwsgi_buffer_append(ub, "X-Forwarded-For: ", 17)) goto clear;
+        if (upsgi_buffer_append(ub, "X-Forwarded-For: ", 17)) goto clear;
 
         if (x_forwarded_for_len > 0) {
-                if (uwsgi_buffer_append(ub, x_forwarded_for, x_forwarded_for_len)) goto clear;
-                if (uwsgi_buffer_append(ub, ", ", 2)) goto clear;
+                if (upsgi_buffer_append(ub, x_forwarded_for, x_forwarded_for_len)) goto clear;
+                if (upsgi_buffer_append(ub, ", ", 2)) goto clear;
         }
 
-        if (uwsgi_buffer_append(ub, wsgi_req->remote_addr, wsgi_req->remote_addr_len)) goto clear;
+        if (upsgi_buffer_append(ub, wsgi_req->remote_addr, wsgi_req->remote_addr_len)) goto clear;
 
-        if (uwsgi_buffer_append(ub, "\r\n\r\n", 4)) goto clear;
+        if (upsgi_buffer_append(ub, "\r\n\r\n", 4)) goto clear;
 
         return ub;
 clear:
-        uwsgi_buffer_destroy(ub);
+        upsgi_buffer_destroy(ub);
         return NULL;
 }
 
 
-struct uwsgi_buffer *uwsgi_to_http(struct wsgi_request *wsgi_req, char *host, uint16_t host_len, char *uri, uint16_t uri_len) {
+struct upsgi_buffer *upsgi_to_http(struct wsgi_request *wsgi_req, char *host, uint16_t host_len, char *uri, uint16_t uri_len) {
 
-        struct uwsgi_buffer *ub = uwsgi_buffer_new(4096);
+        struct upsgi_buffer *ub = upsgi_buffer_new(4096);
 
-        if (uwsgi_buffer_append(ub, wsgi_req->method, wsgi_req->method_len)) goto clear;
-        if (uwsgi_buffer_append(ub, " ", 1)) goto clear;
+        if (upsgi_buffer_append(ub, wsgi_req->method, wsgi_req->method_len)) goto clear;
+        if (upsgi_buffer_append(ub, " ", 1)) goto clear;
 
 	if (uri_len && uri) {
-        	if (uwsgi_buffer_append(ub, uri, uri_len)) goto clear;
+        	if (upsgi_buffer_append(ub, uri, uri_len)) goto clear;
 	}
 	else {
-        	if (uwsgi_buffer_append(ub, wsgi_req->uri, wsgi_req->uri_len)) goto clear;
+        	if (upsgi_buffer_append(ub, wsgi_req->uri, wsgi_req->uri_len)) goto clear;
 	}
 
 	// force HTTP/1.0
-        if (uwsgi_buffer_append(ub, " HTTP/1.0\r\n", 11)) goto clear;
+        if (upsgi_buffer_append(ub, " HTTP/1.0\r\n", 11)) goto clear;
 
         int i;
 	char *x_forwarded_for = NULL;
@@ -860,32 +860,32 @@ struct uwsgi_buffer *uwsgi_to_http(struct wsgi_request *wsgi_req, char *host, ui
 
         // start adding headers
         for(i=0;i<wsgi_req->var_cnt;i++) {
-		if (!uwsgi_starts_with(wsgi_req->hvec[i].iov_base, wsgi_req->hvec[i].iov_len, "HTTP_", 5)) {
+		if (!upsgi_starts_with(wsgi_req->hvec[i].iov_base, wsgi_req->hvec[i].iov_len, "HTTP_", 5)) {
 
 			char *header = wsgi_req->hvec[i].iov_base+5;
 			size_t header_len = wsgi_req->hvec[i].iov_len-5;
 
-			if (host && !uwsgi_strncmp(header, header_len, "HOST", 4)) goto next;
+			if (host && !upsgi_strncmp(header, header_len, "HOST", 4)) goto next;
 
 			// remove dangerous headers
-			if (!uwsgi_strncmp(header, header_len, "CONNECTION", 10)) goto next;
-			if (!uwsgi_strncmp(header, header_len, "KEEP_ALIVE", 10)) goto next;
-			if (!uwsgi_strncmp(header, header_len, "TE", 2)) goto next;
-			if (!uwsgi_strncmp(header, header_len, "TRAILER", 7)) goto next;
-			if (!uwsgi_strncmp(header, header_len, "X_FORWARDED_FOR", 15)) {
+			if (!upsgi_strncmp(header, header_len, "CONNECTION", 10)) goto next;
+			if (!upsgi_strncmp(header, header_len, "KEEP_ALIVE", 10)) goto next;
+			if (!upsgi_strncmp(header, header_len, "TE", 2)) goto next;
+			if (!upsgi_strncmp(header, header_len, "TRAILER", 7)) goto next;
+			if (!upsgi_strncmp(header, header_len, "X_FORWARDED_FOR", 15)) {
 				x_forwarded_for = wsgi_req->hvec[i+1].iov_base;
 				x_forwarded_for_len = wsgi_req->hvec[i+1].iov_len;
 				goto next;
 			}
 
-			if (uwsgi_buffer_append(ub, header, header_len)) goto clear;
+			if (upsgi_buffer_append(ub, header, header_len)) goto clear;
 
-			// transofmr uwsgi var to http header
-			uwsgi_httpize_var((ub->buf+ub->pos) - header_len, header_len);
+			// transofmr upsgi var to http header
+			upsgi_httpize_var((ub->buf+ub->pos) - header_len, header_len);
 
-			if (uwsgi_buffer_append(ub, ": ", 2)) goto clear;
-			if (uwsgi_buffer_append(ub, wsgi_req->hvec[i+1].iov_base, wsgi_req->hvec[i+1].iov_len)) goto clear;
-			if (uwsgi_buffer_append(ub, "\r\n", 2)) goto clear;
+			if (upsgi_buffer_append(ub, ": ", 2)) goto clear;
+			if (upsgi_buffer_append(ub, wsgi_req->hvec[i+1].iov_base, wsgi_req->hvec[i+1].iov_len)) goto clear;
+			if (upsgi_buffer_append(ub, "\r\n", 2)) goto clear;
 
 		}
 next:
@@ -895,43 +895,43 @@ next:
 
 	// append custom Host (if needed)
 	if (host) {
-		if (uwsgi_buffer_append(ub, "Host: ", 6)) goto clear;
-		if (uwsgi_buffer_append(ub, host, host_len)) goto clear;
-		if (uwsgi_buffer_append(ub, "\r\n", 2)) goto clear;
+		if (upsgi_buffer_append(ub, "Host: ", 6)) goto clear;
+		if (upsgi_buffer_append(ub, host, host_len)) goto clear;
+		if (upsgi_buffer_append(ub, "\r\n", 2)) goto clear;
 	}
 
 	if (wsgi_req->content_type_len > 0) {
-		if (uwsgi_buffer_append(ub, "Content-Type: ", 14)) goto clear;
-		if (uwsgi_buffer_append(ub, wsgi_req->content_type, wsgi_req->content_type_len)) goto clear;
-		if (uwsgi_buffer_append(ub, "\r\n", 2)) goto clear;
+		if (upsgi_buffer_append(ub, "Content-Type: ", 14)) goto clear;
+		if (upsgi_buffer_append(ub, wsgi_req->content_type, wsgi_req->content_type_len)) goto clear;
+		if (upsgi_buffer_append(ub, "\r\n", 2)) goto clear;
 	}
 
 	if (wsgi_req->post_cl > 0) {
-		if (uwsgi_buffer_append(ub, "Content-Length: ", 16)) goto clear;
-		if (uwsgi_buffer_num64(ub, (int64_t) wsgi_req->post_cl)) goto clear;
-		if (uwsgi_buffer_append(ub, "\r\n", 2)) goto clear;
+		if (upsgi_buffer_append(ub, "Content-Length: ", 16)) goto clear;
+		if (upsgi_buffer_num64(ub, (int64_t) wsgi_req->post_cl)) goto clear;
+		if (upsgi_buffer_append(ub, "\r\n", 2)) goto clear;
 	}
 
 	// append required headers
-	if (uwsgi_buffer_append(ub, "Connection: close\r\n", 19)) goto clear;
-	if (uwsgi_buffer_append(ub, "X-Forwarded-For: ", 17)) goto clear;
+	if (upsgi_buffer_append(ub, "Connection: close\r\n", 19)) goto clear;
+	if (upsgi_buffer_append(ub, "X-Forwarded-For: ", 17)) goto clear;
 
 	if (x_forwarded_for_len > 0) {
-		if (uwsgi_buffer_append(ub, x_forwarded_for, x_forwarded_for_len)) goto clear;
-		if (uwsgi_buffer_append(ub, ", ", 2)) goto clear;
+		if (upsgi_buffer_append(ub, x_forwarded_for, x_forwarded_for_len)) goto clear;
+		if (upsgi_buffer_append(ub, ", ", 2)) goto clear;
 	}
 
-	if (uwsgi_buffer_append(ub, wsgi_req->remote_addr, wsgi_req->remote_addr_len)) goto clear;
+	if (upsgi_buffer_append(ub, wsgi_req->remote_addr, wsgi_req->remote_addr_len)) goto clear;
 
-	if (uwsgi_buffer_append(ub, "\r\n\r\n", 4)) goto clear;
+	if (upsgi_buffer_append(ub, "\r\n\r\n", 4)) goto clear;
 
 	return ub;
 clear:
-        uwsgi_buffer_destroy(ub);
+        upsgi_buffer_destroy(ub);
         return NULL;
 }
 
-int uwsgi_is_full_http(struct uwsgi_buffer *ub) {
+int upsgi_is_full_http(struct upsgi_buffer *ub) {
 	size_t i;
 	int status = 0;
 	for(i=0;i<ub->pos;i++) {
@@ -973,21 +973,21 @@ int uwsgi_is_full_http(struct uwsgi_buffer *ub) {
 	return 0;
 }
 
-void uwsgi_proto_http_setup(struct uwsgi_socket *uwsgi_sock) {
-	uwsgi_http_setup_server_port_cache(uwsgi_sock);
-	uwsgi_sock->proto = uwsgi_proto_http_parser;
-                        uwsgi_sock->proto_accept = uwsgi_proto_base_accept;
-                        uwsgi_sock->proto_prepare_headers = uwsgi_proto_base_prepare_headers;
-                        uwsgi_sock->proto_add_header = uwsgi_proto_base_add_header;
-                        uwsgi_sock->proto_fix_headers = uwsgi_proto_base_fix_headers;
-                        uwsgi_sock->proto_read_body = uwsgi_proto_base_read_body;
-                        uwsgi_sock->proto_write = uwsgi_proto_base_write;
-                        uwsgi_sock->proto_writev = uwsgi_proto_base_writev;
-                        uwsgi_sock->proto_write_headers = uwsgi_proto_base_write;
-                        uwsgi_sock->proto_sendfile = uwsgi_proto_base_sendfile;
-                        uwsgi_sock->proto_close = uwsgi_proto_base_close;
-                        if (uwsgi.offload_threads > 0)
-                                uwsgi_sock->can_offload = 1;
+void upsgi_proto_http_setup(struct upsgi_socket *upsgi_sock) {
+	upsgi_http_setup_server_port_cache(upsgi_sock);
+	upsgi_sock->proto = upsgi_proto_http_parser;
+                        upsgi_sock->proto_accept = upsgi_proto_base_accept;
+                        upsgi_sock->proto_prepare_headers = upsgi_proto_base_prepare_headers;
+                        upsgi_sock->proto_add_header = upsgi_proto_base_add_header;
+                        upsgi_sock->proto_fix_headers = upsgi_proto_base_fix_headers;
+                        upsgi_sock->proto_read_body = upsgi_proto_base_read_body;
+                        upsgi_sock->proto_write = upsgi_proto_base_write;
+                        upsgi_sock->proto_writev = upsgi_proto_base_writev;
+                        upsgi_sock->proto_write_headers = upsgi_proto_base_write;
+                        upsgi_sock->proto_sendfile = upsgi_proto_base_sendfile;
+                        upsgi_sock->proto_close = upsgi_proto_base_close;
+                        if (upsgi.offload_threads > 0)
+                                upsgi_sock->can_offload = 1;
 
 }
 
@@ -995,12 +995,12 @@ void uwsgi_proto_http_setup(struct uwsgi_socket *uwsgi_sock) {
 close the connection on errors, incomplete parsing, HTTP/1.0, explicit Connection: close,
 pipelined or offloaded requests
 */
-void uwsgi_proto_http11_close(struct wsgi_request *wsgi_req) {
+void upsgi_proto_http11_close(struct wsgi_request *wsgi_req) {
 	int must_close = 0;
 	if (wsgi_req->write_errors || wsgi_req->proto_parser_status != 3 || wsgi_req->proto_parser_remains > 0
-		|| wsgi_req->post_pos < wsgi_req->post_cl || wsgi_req->via == UWSGI_VIA_OFFLOAD
-		|| !uwsgi_strncmp("HTTP/1.0", 8, wsgi_req->protocol, wsgi_req->protocol_len)
-		|| uwsgi_http11_request_wants_close(wsgi_req)) {
+		|| wsgi_req->post_pos < wsgi_req->post_cl || wsgi_req->via == UPSGI_VIA_OFFLOAD
+		|| !upsgi_strncmp("HTTP/1.0", 8, wsgi_req->protocol, wsgi_req->protocol_len)
+		|| upsgi_http11_request_wants_close(wsgi_req)) {
 		must_close = 1;
 	}
 	if (must_close) {
@@ -1014,30 +1014,30 @@ void uwsgi_proto_http11_close(struct wsgi_request *wsgi_req) {
 	}
 }
 
-static int uwsgi_proto_http11_fix_headers(struct wsgi_request *wsgi_req) {
-	if ((uwsgi_http11_request_wants_close(wsgi_req)
-		|| !uwsgi_strncmp("HTTP/1.0", 8, wsgi_req->protocol, wsgi_req->protocol_len))
-		&& !uwsgi_http_response_has_connection_header(wsgi_req)) {
-		if (uwsgi_buffer_append(wsgi_req->headers, "Connection: close\r\n", 19)) {
+static int upsgi_proto_http11_fix_headers(struct wsgi_request *wsgi_req) {
+	if ((upsgi_http11_request_wants_close(wsgi_req)
+		|| !upsgi_strncmp("HTTP/1.0", 8, wsgi_req->protocol, wsgi_req->protocol_len))
+		&& !upsgi_http_response_has_connection_header(wsgi_req)) {
+		if (upsgi_buffer_append(wsgi_req->headers, "Connection: close\r\n", 19)) {
 			return -1;
 		}
 	}
-	return uwsgi_proto_base_fix_headers(wsgi_req);
+	return upsgi_proto_base_fix_headers(wsgi_req);
 }
 
-int uwsgi_proto_http11_accept(struct wsgi_request *wsgi_req, int fd) {
+int upsgi_proto_http11_accept(struct wsgi_request *wsgi_req, int fd) {
 	if (wsgi_req->socket->retry[wsgi_req->async_id]) {
 		wsgi_req->fd = wsgi_req->socket->fd_threads[wsgi_req->async_id];
 		wsgi_req->c_len = sizeof(struct sockaddr_un);
 		int ret = getsockname(wsgi_req->fd, (struct sockaddr *) &wsgi_req->client_addr, (socklen_t *) &wsgi_req->c_len);
 		if (ret < 0)
 			goto error;
-		ret = uwsgi_wait_read_req(wsgi_req);
+		ret = upsgi_wait_read_req(wsgi_req);
 		if (ret <= 0)
 			goto error;
 		return wsgi_req->socket->fd_threads[wsgi_req->async_id];
 	}
-	return uwsgi_proto_base_accept(wsgi_req, fd);
+	return upsgi_proto_base_accept(wsgi_req, fd);
 
 error:
 	close(wsgi_req->fd);
@@ -1046,29 +1046,29 @@ error:
 	return -1;
 }
 
-void uwsgi_proto_http11_setup(struct uwsgi_socket *uwsgi_sock) {
-        uwsgi_http_setup_server_port_cache(uwsgi_sock);
-        uwsgi_sock->proto = uwsgi_proto_http_parser;
-        uwsgi_sock->proto_accept = uwsgi_proto_http11_accept;
-        uwsgi_sock->proto_prepare_headers = uwsgi_proto_base_prepare_headers;
-        uwsgi_sock->proto_add_header = uwsgi_proto_base_add_header;
-        uwsgi_sock->proto_fix_headers = uwsgi_proto_http11_fix_headers;
-        uwsgi_sock->proto_read_body = uwsgi_proto_base_read_body;
-        uwsgi_sock->proto_write = uwsgi_proto_base_write;
-        uwsgi_sock->proto_writev = uwsgi_proto_base_writev;
-        uwsgi_sock->proto_write_headers = uwsgi_proto_base_write;
-        uwsgi_sock->proto_sendfile = uwsgi_proto_base_sendfile;
-        uwsgi_sock->proto_close = uwsgi_proto_http11_close;
-        if (uwsgi.offload_threads > 0)
-        	uwsgi_sock->can_offload = 1;
-	uwsgi_sock->fd_threads = uwsgi_malloc(sizeof(int) * uwsgi.cores);
-        memset(uwsgi_sock->fd_threads, -1, sizeof(int) * uwsgi.cores);
-        uwsgi_sock->retry = uwsgi_calloc(sizeof(int) * uwsgi.cores);
-        uwsgi.is_et = 1;
+void upsgi_proto_http11_setup(struct upsgi_socket *upsgi_sock) {
+        upsgi_http_setup_server_port_cache(upsgi_sock);
+        upsgi_sock->proto = upsgi_proto_http_parser;
+        upsgi_sock->proto_accept = upsgi_proto_http11_accept;
+        upsgi_sock->proto_prepare_headers = upsgi_proto_base_prepare_headers;
+        upsgi_sock->proto_add_header = upsgi_proto_base_add_header;
+        upsgi_sock->proto_fix_headers = upsgi_proto_http11_fix_headers;
+        upsgi_sock->proto_read_body = upsgi_proto_base_read_body;
+        upsgi_sock->proto_write = upsgi_proto_base_write;
+        upsgi_sock->proto_writev = upsgi_proto_base_writev;
+        upsgi_sock->proto_write_headers = upsgi_proto_base_write;
+        upsgi_sock->proto_sendfile = upsgi_proto_base_sendfile;
+        upsgi_sock->proto_close = upsgi_proto_http11_close;
+        if (upsgi.offload_threads > 0)
+        	upsgi_sock->can_offload = 1;
+	upsgi_sock->fd_threads = upsgi_malloc(sizeof(int) * upsgi.cores);
+        memset(upsgi_sock->fd_threads, -1, sizeof(int) * upsgi.cores);
+        upsgi_sock->retry = upsgi_calloc(sizeof(int) * upsgi.cores);
+        upsgi.is_et = 1;
 }
 
-#ifdef UWSGI_SSL
-static int uwsgi_proto_https_parser(struct wsgi_request *wsgi_req) {
+#ifdef UPSGI_SSL
+static int upsgi_proto_https_parser(struct wsgi_request *wsgi_req) {
 
         ssize_t j;
         char *ptr;
@@ -1076,16 +1076,16 @@ static int uwsgi_proto_https_parser(struct wsgi_request *wsgi_req) {
 
         // first round ? (wsgi_req->proto_parser_buf is freed at the end of the request)
         if (!wsgi_req->proto_parser_buf) {
-                wsgi_req->proto_parser_buf = uwsgi_malloc(uwsgi.buffer_size);
+                wsgi_req->proto_parser_buf = upsgi_malloc(upsgi.buffer_size);
         }
 
-        if (uwsgi.buffer_size - wsgi_req->proto_parser_pos == 0) {
-                uwsgi_log("invalid HTTPS request size (max %u)...skip\n", uwsgi.buffer_size);
+        if (upsgi.buffer_size - wsgi_req->proto_parser_pos == 0) {
+                upsgi_log("invalid HTTPS request size (max %u)...skip\n", upsgi.buffer_size);
                 return -1;
         }
 
 retry:
-        len = SSL_read(wsgi_req->ssl, wsgi_req->proto_parser_buf + wsgi_req->proto_parser_pos, uwsgi.buffer_size - wsgi_req->proto_parser_pos);
+        len = SSL_read(wsgi_req->ssl, wsgi_req->proto_parser_buf + wsgi_req->proto_parser_pos, upsgi.buffer_size - wsgi_req->proto_parser_pos);
         if (len > 0) {
                 goto parse;
         }
@@ -1094,24 +1094,24 @@ retry:
         int err = SSL_get_error(wsgi_req->ssl, len);
 
         if (err == SSL_ERROR_WANT_READ) {
-                return UWSGI_AGAIN;
+                return UPSGI_AGAIN;
         }
 
         else if (err == SSL_ERROR_WANT_WRITE) {
-                int ret = uwsgi_wait_write_req(wsgi_req);
+                int ret = upsgi_wait_write_req(wsgi_req);
                 if (ret <= 0) return -1;
                 goto retry;
         }
 
         else if (err == SSL_ERROR_SYSCALL) {
 		if (errno != 0)
-                	uwsgi_error("uwsgi_proto_https_parser()/SSL_read()");
+                	upsgi_error("upsgi_proto_https_parser()/SSL_read()");
         }
 	return -1;
 empty:
         // mute on 0 len...
         if (wsgi_req->proto_parser_pos > 0) {
-                uwsgi_log("uwsgi_proto_https_parser() -> client closed connection");
+                upsgi_log("upsgi_proto_https_parser() -> client closed connection");
         }
         return -1;
 
@@ -1138,9 +1138,9 @@ parse:
 			wsgi_req->https = "on";
 			wsgi_req->https_len = 2;
                         if (http_parse(wsgi_req, ptr)) return -1;
-                        wsgi_req->uh->modifier1 = uwsgi.https_modifier1;
-                        wsgi_req->uh->modifier2 = uwsgi.https_modifier2;
-                        return UWSGI_OK;
+                        wsgi_req->uh->modifier1 = upsgi.https_modifier1;
+                        wsgi_req->uh->modifier2 = upsgi.https_modifier2;
+                        return UPSGI_OK;
                 }
                 else {
                         wsgi_req->proto_parser_status = 0;
@@ -1148,21 +1148,21 @@ parse:
                 ptr++;
         }
 
-        return UWSGI_AGAIN;
+        return UPSGI_AGAIN;
 }
 
-void uwsgi_proto_https_setup(struct uwsgi_socket *uwsgi_sock) {
-        uwsgi_http_setup_server_port_cache(uwsgi_sock);
-        uwsgi_sock->proto = uwsgi_proto_https_parser;
-                        uwsgi_sock->proto_accept = uwsgi_proto_ssl_accept;
-                        uwsgi_sock->proto_prepare_headers = uwsgi_proto_base_prepare_headers;
-                        uwsgi_sock->proto_add_header = uwsgi_proto_base_add_header;
-                        uwsgi_sock->proto_fix_headers = uwsgi_proto_base_fix_headers;
-                        uwsgi_sock->proto_read_body = uwsgi_proto_ssl_read_body;
-                        uwsgi_sock->proto_write = uwsgi_proto_ssl_write;
-                        uwsgi_sock->proto_write_headers = uwsgi_proto_ssl_write;
-                        uwsgi_sock->proto_sendfile = uwsgi_proto_ssl_sendfile;
-                        uwsgi_sock->proto_close = uwsgi_proto_ssl_close;
+void upsgi_proto_https_setup(struct upsgi_socket *upsgi_sock) {
+        upsgi_http_setup_server_port_cache(upsgi_sock);
+        upsgi_sock->proto = upsgi_proto_https_parser;
+                        upsgi_sock->proto_accept = upsgi_proto_ssl_accept;
+                        upsgi_sock->proto_prepare_headers = upsgi_proto_base_prepare_headers;
+                        upsgi_sock->proto_add_header = upsgi_proto_base_add_header;
+                        upsgi_sock->proto_fix_headers = upsgi_proto_base_fix_headers;
+                        upsgi_sock->proto_read_body = upsgi_proto_ssl_read_body;
+                        upsgi_sock->proto_write = upsgi_proto_ssl_write;
+                        upsgi_sock->proto_write_headers = upsgi_proto_ssl_write;
+                        upsgi_sock->proto_sendfile = upsgi_proto_ssl_sendfile;
+                        upsgi_sock->proto_close = upsgi_proto_ssl_close;
 
 }
 #endif

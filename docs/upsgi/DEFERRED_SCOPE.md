@@ -19,7 +19,7 @@ full upstream parity.
   - `logfile`
   - `logsocket`
   - `rsyslog`
-- broader operator-facing stats and metrics surface pending fuller review
+- broader operator-facing stats and metrics surface beyond the documented sampler design remains deferred
 - `router_static` as a required dependency for baseline static-map
 
 ## Retained but not centered in the release story

@@ -15,6 +15,13 @@ Typical shape:
 - reverse proxy on the public edge
 - `http-socket` or `http11-socket` bound on loopback, private network, or service mesh address
 - `static-map` only for baseline local assets that truly belong in the app server path
+- runtime config launched with `./upsgi --config /etc/upsgi/app.yaml`
+
+## Runtime config guidance
+
+For new deployments, prefer YAML runtime configs loaded through `--config`.
+Examples in this repo are YAML-first, while legacy INI, XML, and JSON configs
+remain supported through the inherited multi-format runtime path.
 
 ## Current keepalive story
 
@@ -27,41 +34,36 @@ upsgi now has a clearer practical HTTP/1.1 story:
 Important scope note:
 - `--so-keepalive` is TCP keepalive, not an HTTP keepalive policy knob
 - the narrowed fork does not add a Starman-style family of dedicated HTTP keepalive timeout controls in this milestone
-- native HTTP/2 and HTTP/3 remain out of scope for the current C fork
+- native HTTP/2 and edge-grade TLS policy belong at the trusted front end, not inside the default app-server story
 
-## PSGI informational responses
+## Logging posture
 
-The fork now exposes `psgix.informational` for HTTP/1.1 requests.
+The default fork story keeps logging first-class:
+- logfile sink retained
+- logsocket sink retained
+- rsyslog sink retained
+- forwarded-for logging supported
+- explicit PSGI exception visibility only when `log-exceptions` is turned on
 
-This callback accepts:
-- informational status code
-- arrayref of headers
+## Static content guidance
 
-Current intended use:
-- `103 Early Hints` for preload/preconnect style hints before the final response
+`--static-map` remains a baseline feature, but use it deliberately:
+- small app-owned static assets are fine
+- edge caches or the front-end web server should still own larger static delivery in most production layouts
+- `router_static` is not required solely for the baseline `static-map` path
 
-Current constraints:
-- available only on HTTP/1.1 request paths
-- must be called before the final response headers are sent
-- intended for ordinary HTTP informational responses, not protocol switching
+## Suggested production baseline
 
-## Preload and graceful reload guidance
+- `master: true`
+- `workers: N` sized to the workload and memory budget
+- `need-app: true`
+- `strict: true`
+- `vacuum: true`
+- `die-on-term: true`
+- `http-socket` or `http11-socket` bound behind a trusted front end
+- `log-x-forwarded-for: true` only when the trusted front-end chain is controlled
+- `log-exceptions: true` only for targeted debugging windows
 
-For PSGI apps that preload cleanly:
-- preload in master when practical
-- prefer chain reload to broad worker reload
-- use `--chain-reload-delay` on smaller hosts if worker warm-up causes RSS spikes
+## Service management
 
-This keeps the deployment story closer to the fork's goals:
-- lean memory usage
-- predictable worker turnover
-- minimal operational surprises
-
-## Scope discipline
-
-upsgi intentionally does not try to become a CLI clone of Gazelle or Starman.
-
-What it borrows instead:
-- useful handler behavior such as `psgix.informational`
-- clearer operational guidance around keepalive and graceful restart behavior
-- stronger documentation around reverse-proxy-first deployment
+Systemd is now the primary documented Linux service model for upsgi. See `docs/upsgi/SYSTEMD.md` and the shipped examples in `examples/systemd/`.

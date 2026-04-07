@@ -1,0 +1,11 @@
+upsgi:
+  master: true
+  workers: 1
+  need-app: true
+  strict: true
+  vacuum: true
+  die-on-term: true
+  http-socket: :9090
+  psgi: examples/upsgi/app.psgi
+  logto: ./upsgi.log
+  log-exceptions: true

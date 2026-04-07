@@ -50,10 +50,10 @@ Each test creates its own artifact directory and preserves it on failure. The ex
 
 ## Profile source of truth
 The regression harness reuses the fork-owned profile templates in `tests/fork/configs/`:
-- `baseline.ini.in`
-- `baseline_no_affinity.ini.in`
-- `debug_exceptions.ini.in`
-- `legacy_compatible.ini.in`
+- `baseline.yaml.in`
+- `baseline_no_affinity.yaml.in`
+- `debug_exceptions.yaml.in`
+- `legacy_compatible.yaml.in`
 
 ## Current soak scripts
 - `soak/request_burst_smoke.sh`

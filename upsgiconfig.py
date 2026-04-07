@@ -1,14 +1,14 @@
 # upsgi build system
 
-uwsgi_version = '0.1.2'
+upsgi_version = '0.1.2'
 
 import os
 import re
 import time
-uwsgi_os = os.environ.get('UWSGI_FORCE_OS', os.uname()[0])
-uwsgi_os_k = re.split('[-+_]', os.uname()[2])[0]
-uwsgi_os_v = os.uname()[3]
-uwsgi_cpu = os.uname()[4]
+upsgi_os = os.environ.get('UPSGI_FORCE_OS', os.uname()[0])
+upsgi_os_k = re.split('[-+_]', os.uname()[2])[0]
+upsgi_os_v = os.uname()[3]
+upsgi_cpu = os.uname()[4]
 
 import sys
 import subprocess
@@ -37,7 +37,7 @@ except ImportError:
 
 PY3 = sys.version_info[0] == 3
 
-if uwsgi_os == 'Darwin':
+if upsgi_os == 'Darwin':
     GCC = os.environ.get('CC', 'clang')
 else:
     GCC = os.environ.get('CC', sysconfig.get_config_var('CC'))
@@ -70,7 +70,7 @@ if CPUCOUNT < 1:
 
 
 # force single cpu in cygwin mode
-if uwsgi_os.startswith('CYGWIN'):
+if upsgi_os.startswith('CYGWIN'):
     CPUCOUNT = 1
 
 binary_list = []
@@ -143,7 +143,7 @@ def strip_prefix(prefix, string):
 
 
 def spcall(cmd):
-    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=open('uwsgibuild.log', 'w'))
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=open('upsgibuild.log', 'w'))
 
     if p.wait() == 0:
         if sys.version_info[0] > 2:
@@ -165,9 +165,9 @@ def uniq_warnings(elements):
 
     return new_elements
 
-if uwsgi_version.endswith('-dev') and os.path.exists('%s/.git' % os.path.dirname(os.path.abspath(__file__))):
+if upsgi_version.endswith('-dev') and os.path.exists('%s/.git' % os.path.dirname(os.path.abspath(__file__))):
     try:
-        uwsgi_version += '+%s' % spcall('git rev-parse --short HEAD')
+        upsgi_version += '+%s' % spcall('git rev-parse --short HEAD')
     except Exception:
         pass
 
@@ -203,13 +203,13 @@ def test_snippet(snippet, CFLAGS=[], LDFLAGS=[], LIBS=[]):
 
 
 def has_usable_ucontext():
-    if uwsgi_os in ('OpenBSD', 'Haiku'):
+    if upsgi_os in ('OpenBSD', 'Haiku'):
         return False
-    if uwsgi_os.startswith('CYGWIN'):
+    if upsgi_os.startswith('CYGWIN'):
         return False
-    if uwsgi_os == 'Darwin' and uwsgi_os_k.startswith('8'):
+    if upsgi_os == 'Darwin' and upsgi_os_k.startswith('8'):
         return False
-    if uwsgi_cpu[0:3] == 'arm':
+    if upsgi_cpu[0:3] == 'arm':
         return False
     # check for ucontext.h functions definitions, musl has only declarations
     return test_snippet("""#include <ucontext.h>
@@ -234,7 +234,7 @@ def spcall3(cmd):
 
 
 def add_o(x):
-    if x == 'uwsgi':
+    if x == 'upsgi':
         x = 'main'
     elif x.endswith('.a') or x.endswith('.o') or x.startswith('-'):
         return x
@@ -259,11 +259,11 @@ def push_command(objfile, cmdline):
         compile_queue.put((objfile, cmdline))
 
 
-def uwsgi_compile(cflags, last_cflags_ts, objfile, srcfile):
+def upsgi_compile(cflags, last_cflags_ts, objfile, srcfile):
     source_stat = os.stat(srcfile)
-    header_stat = os.stat('uwsgi.h')
+    header_stat = os.stat('upsgi.h')
     try:
-        if os.environ.get('UWSGI_FORCE_REBUILD', None):
+        if os.environ.get('UPSGI_FORCE_REBUILD', None):
             raise
         if source_stat[8] >= last_cflags_ts:
             raise
@@ -286,7 +286,7 @@ def uwsgi_compile(cflags, last_cflags_ts, objfile, srcfile):
     push_command(objfile, cmdline)
 
 
-def build_uwsgi(uc, print_only=False, gcll=None):
+def build_upsgi(uc, print_only=False, gcll=None):
 
     global print_lock, compile_queue, thread_compilers
 
@@ -304,17 +304,17 @@ def build_uwsgi(uc, print_only=False, gcll=None):
     else:
         gcc_list, cflags, ldflags, libs = gcll
 
-    if 'UWSGI_EMBED_PLUGINS' in os.environ:
+    if 'UPSGI_EMBED_PLUGINS' in os.environ:
         ep = uc.get('embedded_plugins')
         if ep:
-            uc.set('embedded_plugins', ep + ',' + os.environ['UWSGI_EMBED_PLUGINS'])
+            uc.set('embedded_plugins', ep + ',' + os.environ['UPSGI_EMBED_PLUGINS'])
         else:
-            uc.set('embedded_plugins', os.environ['UWSGI_EMBED_PLUGINS'])
+            uc.set('embedded_plugins', os.environ['UPSGI_EMBED_PLUGINS'])
 
     if uc.get('embedded_plugins'):
         ep = uc.get('embedded_plugins').split(',')
-        epc = "-DUWSGI_DECLARE_EMBEDDED_PLUGINS=\""
-        eplc = "-DUWSGI_LOAD_EMBEDDED_PLUGINS=\""
+        epc = "-DUPSGI_DECLARE_EMBEDDED_PLUGINS=\""
+        eplc = "-DUPSGI_LOAD_EMBEDDED_PLUGINS=\""
         for item in ep:
             # allow name=path syntax
             kv = item.split('=')
@@ -345,63 +345,63 @@ def build_uwsgi(uc, print_only=False, gcll=None):
 
     if sys.version_info[0] >= 3:
         import binascii
-        uwsgi_cflags = binascii.b2a_hex(' '.join(cflags).encode('ascii')).decode('ascii')
+        upsgi_cflags = binascii.b2a_hex(' '.join(cflags).encode('ascii')).decode('ascii')
     else:
-        uwsgi_cflags = ' '.join(cflags).encode('hex')
+        upsgi_cflags = ' '.join(cflags).encode('hex')
 
     last_cflags_ts = 0
 
-    if os.path.exists('uwsgibuild.lastcflags'):
-        ulc = open('uwsgibuild.lastcflags')
+    if os.path.exists('upsgibuild.lastcflags'):
+        ulc = open('upsgibuild.lastcflags')
         last_cflags = ulc.read()
         ulc.close()
-        if uwsgi_cflags != last_cflags:
-            os.environ['UWSGI_FORCE_REBUILD'] = '1'
+        if upsgi_cflags != last_cflags:
+            os.environ['UPSGI_FORCE_REBUILD'] = '1'
         else:
-            last_cflags_ts = os.stat('uwsgibuild.lastcflags')[8]
+            last_cflags_ts = os.stat('upsgibuild.lastcflags')[8]
 
-    ulc = open('uwsgibuild.lastcflags', 'w')
-    ulc.write(uwsgi_cflags)
+    ulc = open('upsgibuild.lastcflags', 'w')
+    ulc.write(upsgi_cflags)
     ulc.close()
 
-    # embed uwsgi.h in the server binary. It increases the binary size, but will be very useful
+    # embed upsgi.h in the server binary. It increases the binary size, but will be very useful
     # for various tricks (like cffi integration)
     # if possible, the blob is compressed
     if sys.version_info[0] >= 3:
-        uwsgi_dot_h_content = open('uwsgi.h', 'rb').read()
+        upsgi_dot_h_content = open('upsgi.h', 'rb').read()
     else:
-        uwsgi_dot_h_content = open('uwsgi.h').read()
+        upsgi_dot_h_content = open('upsgi.h').read()
     if report['zlib']:
         import zlib
         # maximum level of compression
-        uwsgi_dot_h_content = zlib.compress(uwsgi_dot_h_content, 9)
+        upsgi_dot_h_content = zlib.compress(upsgi_dot_h_content, 9)
     if sys.version_info[0] >= 3:
         import binascii
-        uwsgi_dot_h = binascii.b2a_hex(uwsgi_dot_h_content).decode('ascii')
+        upsgi_dot_h = binascii.b2a_hex(upsgi_dot_h_content).decode('ascii')
     else:
-        uwsgi_dot_h = uwsgi_dot_h_content.encode('hex')
-    open('core/dot_h.c', 'w').write('char *uwsgi_dot_h = "%s";\n' % uwsgi_dot_h)
+        upsgi_dot_h = upsgi_dot_h_content.encode('hex')
+    open('core/dot_h.c', 'w').write('char *upsgi_dot_h = "%s";\n' % upsgi_dot_h)
     gcc_list.append('core/dot_h')
 
     # embed upsgiconfig.py in the server binary. It increases the binary size, but will be very useful
     # if possible, the blob is compressed
     if sys.version_info[0] >= 3:
-        uwsgi_config_py_content = open('upsgiconfig.py', 'rb').read()
+        upsgi_config_py_content = open('upsgiconfig.py', 'rb').read()
     else:
-        uwsgi_config_py_content = open('upsgiconfig.py').read()
+        upsgi_config_py_content = open('upsgiconfig.py').read()
     if report['zlib']:
         import zlib
         # maximum level of compression
-        uwsgi_config_py_content = zlib.compress(uwsgi_config_py_content, 9)
+        upsgi_config_py_content = zlib.compress(upsgi_config_py_content, 9)
     if sys.version_info[0] >= 3:
         import binascii
-        uwsgi_config_py = binascii.b2a_hex(uwsgi_config_py_content).decode('ascii')
+        upsgi_config_py = binascii.b2a_hex(upsgi_config_py_content).decode('ascii')
     else:
-        uwsgi_config_py = uwsgi_config_py_content.encode('hex')
-    open('core/config_py.c', 'w').write('char *uwsgi_config_py = "%s";\n' % uwsgi_config_py)
+        upsgi_config_py = upsgi_config_py_content.encode('hex')
+    open('core/config_py.c', 'w').write('char *upsgi_config_py = "%s";\n' % upsgi_config_py)
     gcc_list.append('core/config_py')
 
-    additional_sources = os.environ.get('UWSGI_ADDITIONAL_SOURCES')
+    additional_sources = os.environ.get('UPSGI_ADDITIONAL_SOURCES')
     if not additional_sources:
         additional_sources = uc.get('additional_sources')
     if additional_sources:
@@ -409,30 +409,30 @@ def build_uwsgi(uc, print_only=False, gcll=None):
             gcc_list.append(item)
 
     if uc.filename.endswith('coverity.ini'):
-        cflags.append('-DUWSGI_CFLAGS=\\"\\"')
+        cflags.append('-DUPSGI_CFLAGS=\\"\\"')
     else:
-        cflags.append('-DUWSGI_CFLAGS=\\"%s\\"' % uwsgi_cflags)
+        cflags.append('-DUPSGI_CFLAGS=\\"%s\\"' % upsgi_cflags)
     build_date = int(os.environ.get('SOURCE_DATE_EPOCH', time.time()))
-    cflags.append('-DUWSGI_BUILD_DATE="\\"%s\\""' % time.strftime("%d %B %Y %H:%M:%S", time.gmtime(build_date)))
+    cflags.append('-DUPSGI_BUILD_DATE="\\"%s\\""' % time.strftime("%d %B %Y %H:%M:%S", time.gmtime(build_date)))
 
     post_build = []
 
-    push_print("*** uWSGI compiling server core ***")
+    push_print("*** upsgi compiling server core ***")
     for file in gcc_list:
         objfile = file
-        if objfile == 'uwsgi':
+        if objfile == 'upsgi':
             objfile = 'main'
         if not objfile.endswith('.a') and not objfile.endswith('.o'):
             if objfile.endswith('.c') or objfile.endswith('.cc') or objfile.endswith('.m') or objfile.endswith('.go'):
                 if objfile.endswith('.go'):
                     cflags.append('-Wno-error')
-                uwsgi_compile(' '.join(cflags), last_cflags_ts, objfile + '.o', file)
+                upsgi_compile(' '.join(cflags), last_cflags_ts, objfile + '.o', file)
                 if objfile.endswith('.go'):
                     cflags.pop()
             else:
                 if objfile == 'core/dot_h':
                     cflags.append('-g')
-                uwsgi_compile(' '.join(cflags), last_cflags_ts, objfile + '.o', file + '.c')
+                upsgi_compile(' '.join(cflags), last_cflags_ts, objfile + '.o', file + '.c')
                 if objfile == 'core/dot_h':
                     cflags.pop()
 
@@ -440,7 +440,7 @@ def build_uwsgi(uc, print_only=False, gcll=None):
         ep = uc.get('embedded_plugins').split(',')
 
         if len(ep) > 0:
-            push_print("*** uWSGI compiling embedded plugins ***")
+            push_print("*** upsgi compiling embedded plugins ***")
             for item in ep:
                 # allows name=path syntax
                 kv = item.split('=')
@@ -468,7 +468,7 @@ def build_uwsgi(uc, print_only=False, gcll=None):
                 p_cflags = cflags[:]
                 p_cflags += up['CFLAGS']
 
-                if uwsgi_os.startswith('CYGWIN'):
+                if upsgi_os.startswith('CYGWIN'):
                     try:
                         p_cflags.remove('-fstack-protector')
                     except ValueError:
@@ -505,13 +505,13 @@ def build_uwsgi(uc, print_only=False, gcll=None):
                     elif cfile.endswith('.o'):
                         gcc_list.append('%s/%s' % (path, cfile))
                     elif not cfile.endswith('.c') and not cfile.endswith('.cc') and not cfile.endswith('.go') and not cfile.endswith('.m'):
-                        uwsgi_compile(' '.join(uniq_warnings(p_cflags)), last_cflags_ts,
+                        upsgi_compile(' '.join(uniq_warnings(p_cflags)), last_cflags_ts,
                                 path + '/' + cfile + '.o', path + '/' + cfile + '.c')
                         gcc_list.append('%s/%s' % (path, cfile))
                     else:
                         if cfile.endswith('.go'):
                             p_cflags.append('-Wno-error')
-                        uwsgi_compile(' '.join(uniq_warnings(p_cflags)), last_cflags_ts,
+                        upsgi_compile(' '.join(uniq_warnings(p_cflags)), last_cflags_ts,
                                 path + '/' + cfile + '.o', path + '/' + cfile)
                         gcc_list.append('%s/%s' % (path, cfile))
                 for bfile in up.get('BINARY_LIST', []):
@@ -527,12 +527,12 @@ def build_uwsgi(uc, print_only=False, gcll=None):
                                 raise Exception('unable to link binary file')
                         gcc_list.append('%s/%s.o' % (path, bfile[1]))
                     except Exception:
-                        if uwsgi_os == 'Darwin':
-                            gcc_list.append('-sectcreate __DATA %s %s/%s' % (strip_prefix('_uwsgi_', bfile[0]), path, bfile[1]))
+                        if upsgi_os == 'Darwin':
+                            gcc_list.append('-sectcreate __DATA %s %s/%s' % (strip_prefix('_upsgi_', bfile[0]), path, bfile[1]))
 
                 libs += up['LIBS']
 
-                if uwsgi_os == 'Darwin':
+                if upsgi_os == 'Darwin':
                     found_arch = False
                     sanitized_ldflags = []
                     for flag in up['LDFLAGS']:
@@ -551,14 +551,14 @@ def build_uwsgi(uc, print_only=False, gcll=None):
 
         plugins = uc.get('plugins').split(',')
         if len(plugins) > 0:
-            push_print("*** uWSGI building plugins ***")
+            push_print("*** upsgi building plugins ***")
 
             for p in plugins:
                 p = p.strip()
                 push_print("*** building plugin: %s ***" % p)
                 build_plugin("plugins/%s" % p, uc, cflags, ldflags, libs)
 
-    bin_name = os.environ.get('UWSGI_BIN_NAME', uc.get('bin_name'))
+    bin_name = os.environ.get('UPSGI_BIN_NAME', uc.get('bin_name'))
 
     if uc.embed_config:
         gcc_list.append("%s.o" % binarize(uc.embed_config))
@@ -571,7 +571,7 @@ def build_uwsgi(uc, print_only=False, gcll=None):
         for t in thread_compilers:
             t.join()
 
-    print("*** uWSGI linking ***")
+    print("*** upsgi linking ***")
     if '--static' in ldflags:
         ldline = 'ar cru %s %s' % (
             quote(bin_name),
@@ -588,24 +588,24 @@ def build_uwsgi(uc, print_only=False, gcll=None):
     print(ldline)
     ret = subprocess.call(ldline, shell=True)
     if ret != 0:
-        print("*** error linking uWSGI ***")
+        print("*** error linking upsgi ***")
         sys.exit(1)
 
-    print("################# uWSGI configuration #################")
+    print("################# upsgi configuration #################")
     print("")
     for report_key in report:
         print("%s = %s" % (report_key, report[report_key]))
     print("")
-    print("############## end of uWSGI configuration #############")
+    print("############## end of upsgi configuration #############")
 
     print("total build time: %d seconds" % (time.time() - started_at))
 
     if bin_name.find("/") < 0:
         bin_name = './' + bin_name
     if uc.get('as_shared_library'):
-        print("*** uWSGI shared library (%s) is ready, move it to a library directory ***" % bin_name)
+        print("*** upsgi shared library (%s) is ready, move it to a library directory ***" % bin_name)
     else:
-        print("*** uWSGI is ready, launch it with %s ***" % bin_name)
+        print("*** upsgi is ready, launch it with %s ***" % bin_name)
 
     for pb in post_build:
         pb(uc)
@@ -631,8 +631,8 @@ class ProfileConfig(object):
 
     def __init__(self, sections=None):
         self.sections = sections or {}
-        if 'uwsgi' not in self.sections:
-            self.sections['uwsgi'] = {}
+        if 'upsgi' not in self.sections:
+            self.sections['upsgi'] = {}
 
     def options(self, section):
         return list(self.sections.get(section, {}).keys())
@@ -693,7 +693,7 @@ def load_toml_profile(filename, seen=None):
     if not isinstance(data, dict):
         raise Exception('invalid TOML profile: %s' % filename)
 
-    sections = {'uwsgi': {}}
+    sections = {'upsgi': {}}
     top_build = data.get('build', {})
     if top_build and not isinstance(top_build, dict):
         raise Exception('invalid [build] table in %s' % filename)
@@ -716,7 +716,7 @@ def load_toml_profile(filename, seen=None):
             string_value = stringify_profile_value(key, value)
             sections[section_name][key] = string_value
             if section_name in ('build', 'flags', 'features'):
-                sections['uwsgi'][key] = string_value
+                sections['upsgi'][key] = string_value
 
     return sections
 
@@ -731,14 +731,14 @@ class uConf(object):
         if not mute:
             print("using profile: %s" % filename)
 
-        if os.path.exists('uwsgibuild.lastprofile'):
-            ulp = open('uwsgibuild.lastprofile')
+        if os.path.exists('upsgibuild.lastprofile'):
+            ulp = open('upsgibuild.lastprofile')
             last_profile = ulp.read()
             ulp.close()
             if last_profile != filename:
-                os.environ['UWSGI_FORCE_REBUILD'] = '1'
+                os.environ['UPSGI_FORCE_REBUILD'] = '1'
 
-        ulp = open('uwsgibuild.lastprofile', 'w')
+        ulp = open('upsgibuild.lastprofile', 'w')
         ulp.write(filename)
         ulp.close()
 
@@ -770,8 +770,8 @@ class uConf(object):
         self.gcc_list.append('proto/perl_upsgi')
         self.include_path = []
 
-        if 'UWSGI_INCLUDES' in os.environ:
-            self.include_path += os.environ['UWSGI_INCLUDES'].split(',')
+        if 'UPSGI_INCLUDES' in os.environ:
+            self.include_path += os.environ['UPSGI_INCLUDES'].split(',')
 
         cflags = [
             '-O2',
@@ -790,25 +790,25 @@ class uConf(object):
         if os.path.isdir(python_venv_include):
             self.cflags += ['-I' + python_venv_include]
 
-        report['kernel'] = uwsgi_os
+        report['kernel'] = upsgi_os
 
-        if uwsgi_os == 'Linux':
-            if uwsgi_cpu != 'ia64':
+        if upsgi_os == 'Linux':
+            if upsgi_cpu != 'ia64':
                 self.gcc_list.append('lib/linux_ns')
             try:
-                lk_ver = uwsgi_os_k.split('.')
+                lk_ver = upsgi_os_k.split('.')
                 if int(lk_ver[0]) <= 2 and int(lk_ver[1]) <= 6 and int(lk_ver[2]) <= 9:
                     self.cflags.append('-DOBSOLETE_LINUX_KERNEL')
                     report['kernel'] = 'Old Linux'
             except Exception:
                 pass
 
-        if uwsgi_os == 'GNU':
+        if upsgi_os == 'GNU':
             self.cflags.append('-D__HURD__')
 
         gcc_version = spcall("%s -dumpfullversion -dumpversion" % GCC)
         if not gcc_version and GCC.startswith('gcc'):
-            if uwsgi_os == 'Darwin':
+            if upsgi_os == 'Darwin':
                 GCC = 'llvm-' + GCC
             else:
                 GCC = 'gcc'
@@ -835,8 +835,8 @@ class uConf(object):
             for ipath in additional_include_paths.split():
                 self.include_path.append(ipath)
 
-        if 'UWSGI_REMOVE_INCLUDES' in os.environ:
-            for inc in os.environ['UWSGI_REMOVE_INCLUDES'].split(','):
+        if 'UPSGI_REMOVE_INCLUDES' in os.environ:
+            for inc in os.environ['UPSGI_REMOVE_INCLUDES'].split(','):
                 try:
                     self.include_path.remove(inc)
                 except ValueError:
@@ -854,7 +854,7 @@ class uConf(object):
                 # gcc 5.0 is represented as simply "5"
                 gcc_minor = 0
         except Exception:
-            raise Exception("you need a C compiler to build uWSGI")
+            raise Exception("you need a C compiler to build upsgi")
         # add -fno-strict-aliasing only on python2 and gcc < 4.3
         if (sys.version_info[0] == 2) or (gcc_major < 4) or (gcc_major == 4 and gcc_minor < 3):
             self.cflags += ['-fno-strict-aliasing']
@@ -867,18 +867,18 @@ class uConf(object):
 
         self.ldflags = os.environ.get("LDFLAGS", "").split()
         self.libs = ['-lpthread', '-lm', '-rdynamic']
-        if uwsgi_os in ('Linux', 'GNU', 'GNU/kFreeBSD'):
+        if upsgi_os in ('Linux', 'GNU', 'GNU/kFreeBSD'):
             self.libs.append('-ldl')
-        if uwsgi_os == 'GNU/kFreeBSD':
+        if upsgi_os == 'GNU/kFreeBSD':
             self.cflags.append('-D__GNU_kFreeBSD__')
             self.libs.append('-lbsd')
 
     def set(self, key, value):
-        self.config.set('uwsgi', key, value)
+        self.config.set('upsgi', key, value)
 
     def get(self, key, default=None):
         try:
-            value = self.config.get('uwsgi', key)
+            value = self.config.get('upsgi', key)
             if value is None or value == "" or value == "false":
                 return default
             return value
@@ -901,86 +901,86 @@ class uConf(object):
 
     def get_gcll(self):
 
-        global uwsgi_version
+        global upsgi_version
 
         kvm_list = ['FreeBSD', 'OpenBSD', 'NetBSD', 'DragonFly']
 
-        if 'UWSGI_PROFILE_OVERRIDE' in os.environ:
-            for item in os.environ['UWSGI_PROFILE_OVERRIDE'].split(';'):
+        if 'UPSGI_PROFILE_OVERRIDE' in os.environ:
+            for item in os.environ['UPSGI_PROFILE_OVERRIDE'].split(';'):
                 k, v = item.split('=', 1)
                 self.set(k, v)
 
-        if 'UWSGI_AS_LIB' in os.environ:
+        if 'UPSGI_AS_LIB' in os.environ:
             self.set('as_shared_library', 'true')
-            self.set('bin_name', os.environ['UWSGI_AS_LIB'])
+            self.set('bin_name', os.environ['UPSGI_AS_LIB'])
 
         if self.has_include('ifaddrs.h'):
-            self.cflags.append('-DUWSGI_HAS_IFADDRS')
+            self.cflags.append('-DUPSGI_HAS_IFADDRS')
             report['ifaddrs'] = True
 
-        if uwsgi_os in ('FreeBSD', 'DragonFly', 'OpenBSD'):
+        if upsgi_os in ('FreeBSD', 'DragonFly', 'OpenBSD'):
             if self.has_include('execinfo.h') or os.path.exists('/usr/local/include/execinfo.h'):
                 if os.path.exists('/usr/local/include/execinfo.h'):
                     self.cflags.append('-I/usr/local/include')
                     self.ldflags.append('-L/usr/local/lib')
-                self.cflags.append('-DUWSGI_HAS_EXECINFO')
+                self.cflags.append('-DUPSGI_HAS_EXECINFO')
                 self.libs.append('-lexecinfo')
                 report['execinfo'] = True
 
-        if uwsgi_os == 'GNU/kFreeBSD':
+        if upsgi_os == 'GNU/kFreeBSD':
             if self.has_include('execinfo.h'):
-                self.cflags.append('-DUWSGI_HAS_EXECINFO')
+                self.cflags.append('-DUPSGI_HAS_EXECINFO')
                 report['execinfo'] = True
 
         if self.has_include('zlib.h'):
-            self.cflags.append('-DUWSGI_ZLIB')
+            self.cflags.append('-DUPSGI_ZLIB')
             self.libs.append('-lz')
             self.gcc_list.append('core/zlib')
             report['zlib'] = True
 
-        if uwsgi_os == 'OpenBSD':
+        if upsgi_os == 'OpenBSD':
             try:
-                obsd_major = uwsgi_os_k.split('.')[0]
-                obsd_minor = uwsgi_os_k.split('.')[1]
+                obsd_major = upsgi_os_k.split('.')[0]
+                obsd_minor = upsgi_os_k.split('.')[1]
                 obsd_ver = int(obsd_major + obsd_minor)
                 if obsd_ver > 50:
-                    self.cflags.append('-DUWSGI_NEW_OPENBSD')
+                    self.cflags.append('-DUPSGI_NEW_OPENBSD')
                     report['kernel'] = 'New OpenBSD'
             except Exception:
                 pass
 
-        if uwsgi_os == 'SunOS':
+        if upsgi_os == 'SunOS':
             self.libs.append('-lsendfile')
             self.libs.append('-lrt')
             self.gcc_list.append('lib/sun_fixes')
-            sunos_major = int(uwsgi_os_k.split('.')[0])
-            sunos_minor = int(uwsgi_os_k.split('.')[1])
+            sunos_major = int(upsgi_os_k.split('.')[0])
+            sunos_minor = int(upsgi_os_k.split('.')[1])
             # solaris < 11 does not have sethostname declared in unistd
             if not (sunos_major == 5 and sunos_minor > 10):
-                self.cflags.append('-DUWSGI_SUNOS_EXTERN_SETHOSTNAME')
+                self.cflags.append('-DUPSGI_SUNOS_EXTERN_SETHOSTNAME')
                 self.ldflags.append('-L/lib')
-            if not uwsgi_os_v.startswith('Nexenta'):
+            if not upsgi_os_v.startswith('Nexenta'):
                 self.libs.remove('-rdynamic')
 
-        if uwsgi_os == 'GNU/kFreeBSD':
+        if upsgi_os == 'GNU/kFreeBSD':
             if self.has_include('kvm.h'):
                 kvm_list.append('GNU/kFreeBSD')
 
-        if uwsgi_os in kvm_list:
+        if upsgi_os in kvm_list:
             self.libs.append('-lkvm')
 
-        if uwsgi_os == 'Haiku':
+        if upsgi_os == 'Haiku':
             self.libs.remove('-rdynamic')
             self.libs.remove('-lpthread')
             self.libs.append('-lroot')
 
-        if uwsgi_os == 'Darwin':
-            if uwsgi_os_k.startswith('8'):
+        if upsgi_os == 'Darwin':
+            if upsgi_os_k.startswith('8'):
                 self.cflags.append('-DUNSETENV_VOID')
                 self.cflags.append('-DNO_SENDFILE')
                 self.cflags.append('-DNO_EXECINFO')
                 self.cflags.append('-DOLD_REALPATH')
-            darwin_major = int(uwsgi_os_k.split('.')[0])
+            darwin_major = int(upsgi_os_k.split('.')[0])
             # MacOS High Sierra and above: since XCode 10 there's no libgcc_s.10.5
             if darwin_major >= 17:
                 self.cflags.append('-mmacosx-version-min=10.9')
@@ -989,7 +989,7 @@ class uConf(object):
             if GCC in ('clang',):
                 self.libs.remove('-rdynamic')
 
-        if uwsgi_os.startswith('CYGWIN'):
+        if upsgi_os.startswith('CYGWIN'):
             self.libs.remove('-rdynamic')
 
         # compile extras
@@ -1005,35 +1005,35 @@ class uConf(object):
         locking_mode = self.get('locking', 'auto')
 
         if locking_mode == 'auto':
-            if uwsgi_os == 'Linux' or uwsgi_os == 'SunOS':
+            if upsgi_os == 'Linux' or upsgi_os == 'SunOS':
                 locking_mode = 'pthread_mutex'
             # FreeBSD umtx is still not ready for process shared locking
             # starting from FreeBSD 9 posix semaphores can be shared between processes
-            elif uwsgi_os in ('FreeBSD', 'GNU/kFreeBSD'):
+            elif upsgi_os in ('FreeBSD', 'GNU/kFreeBSD'):
                 try:
-                    fbsd_major = int(uwsgi_os_k.split('.')[0])
+                    fbsd_major = int(upsgi_os_k.split('.')[0])
                     if fbsd_major >= 9:
                         locking_mode = 'posix_sem'
                 except Exception:
                     pass
-            elif uwsgi_os == 'GNU':
+            elif upsgi_os == 'GNU':
                 locking_mode = 'posix_sem'
-            elif uwsgi_os == 'Darwin':
+            elif upsgi_os == 'Darwin':
                 locking_mode = 'osx_spinlock'
-            elif uwsgi_os.startswith('CYGWIN'):
+            elif upsgi_os.startswith('CYGWIN'):
                 locking_mode = 'windows_mutex'
 
         if locking_mode == 'pthread_mutex':
-            self.cflags.append('-DUWSGI_LOCK_USE_MUTEX')
+            self.cflags.append('-DUPSGI_LOCK_USE_MUTEX')
         # FreeBSD umtx is still not ready for process shared locking
         elif locking_mode == 'posix_sem':
-            self.cflags.append('-DUWSGI_LOCK_USE_POSIX_SEM')
+            self.cflags.append('-DUPSGI_LOCK_USE_POSIX_SEM')
         elif locking_mode == 'osx_spinlock':
-            self.cflags.append('-DUWSGI_LOCK_USE_OSX_SPINLOCK')
+            self.cflags.append('-DUPSGI_LOCK_USE_OSX_SPINLOCK')
         elif locking_mode == 'windows_mutex':
-            self.cflags.append('-DUWSGI_LOCK_USE_WINDOWS_MUTEX')
+            self.cflags.append('-DUPSGI_LOCK_USE_WINDOWS_MUTEX')
         else:
-            self.cflags.append('-DUWSGI_IPCSEM_ATEXIT')
+            self.cflags.append('-DUPSGI_IPCSEM_ATEXIT')
 
         if locking_mode == 'auto':
             report['locking'] = 'sysv semaphores'
@@ -1044,29 +1044,29 @@ class uConf(object):
         event_mode = self.get('event', 'auto')
 
         if event_mode == 'auto':
-            if uwsgi_os == 'Linux':
+            if upsgi_os == 'Linux':
                 event_mode = 'epoll'
-            if uwsgi_os == 'SunOS':
+            if upsgi_os == 'SunOS':
                 event_mode = 'devpoll'
-                sun_major, sun_minor = uwsgi_os_k.split('.')
+                sun_major, sun_minor = upsgi_os_k.split('.')
                 if int(sun_major) >= 5:
                     if int(sun_minor) >= 10:
                         event_mode = 'port'
-            elif uwsgi_os in ('Darwin', 'FreeBSD', 'GNU/kFreeBSD', 'OpenBSD', 'NetBSD', 'DragonFly'):
+            elif upsgi_os in ('Darwin', 'FreeBSD', 'GNU/kFreeBSD', 'OpenBSD', 'NetBSD', 'DragonFly'):
                 event_mode = 'kqueue'
-            elif uwsgi_os.startswith('CYGWIN') or uwsgi_os == 'GNU':
+            elif upsgi_os.startswith('CYGWIN') or upsgi_os == 'GNU':
                 event_mode = 'poll'
 
         if event_mode == 'epoll':
-            self.cflags.append('-DUWSGI_EVENT_USE_EPOLL')
+            self.cflags.append('-DUPSGI_EVENT_USE_EPOLL')
         elif event_mode == 'kqueue':
-            self.cflags.append('-DUWSGI_EVENT_USE_KQUEUE')
+            self.cflags.append('-DUPSGI_EVENT_USE_KQUEUE')
         elif event_mode == 'devpoll':
-            self.cflags.append('-DUWSGI_EVENT_USE_DEVPOLL')
+            self.cflags.append('-DUPSGI_EVENT_USE_DEVPOLL')
         elif event_mode == 'port':
-            self.cflags.append('-DUWSGI_EVENT_USE_PORT')
+            self.cflags.append('-DUPSGI_EVENT_USE_PORT')
         elif event_mode == 'poll':
-            self.cflags.append('-DUWSGI_EVENT_USE_POLL')
+            self.cflags.append('-DUPSGI_EVENT_USE_POLL')
 
         report['event'] = event_mode
 
@@ -1074,8 +1074,8 @@ class uConf(object):
         timer_mode = self.get('timer', 'auto')
 
         if timer_mode == 'auto':
-            if uwsgi_os == 'Linux':
-                k_all = uwsgi_os_k.split('.')
+            if upsgi_os == 'Linux':
+                k_all = upsgi_os_k.split('.')
                 k_base = k_all[0]
                 # k_major = k_all[1]
                 if len(k_all) > 2:
@@ -1089,25 +1089,25 @@ class uConf(object):
                 else:
                     timer_mode = 'none'
 
-            elif uwsgi_os == 'SunOS':
-                sun_major, sun_minor = uwsgi_os_k.split('.')
+            elif upsgi_os == 'SunOS':
+                sun_major, sun_minor = upsgi_os_k.split('.')
                 if int(sun_major) >= 5:
                     if int(sun_minor) >= 10:
                         timer_mode = 'port'
 
-            elif uwsgi_os in ('Darwin', 'FreeBSD', 'GNU/kFreeBSD', 'OpenBSD', 'NetBSD', 'DragonFly'):
+            elif upsgi_os in ('Darwin', 'FreeBSD', 'GNU/kFreeBSD', 'OpenBSD', 'NetBSD', 'DragonFly'):
                 timer_mode = 'kqueue'
 
         if timer_mode == 'timerfd':
-            self.cflags.append('-DUWSGI_EVENT_TIMER_USE_TIMERFD')
+            self.cflags.append('-DUPSGI_EVENT_TIMER_USE_TIMERFD')
             if not self.has_include('sys/timerfd.h'):
-                self.cflags.append('-DUWSGI_EVENT_TIMER_USE_TIMERFD_NOINC')
+                self.cflags.append('-DUPSGI_EVENT_TIMER_USE_TIMERFD_NOINC')
         elif timer_mode == 'kqueue':
-            self.cflags.append('-DUWSGI_EVENT_TIMER_USE_KQUEUE')
+            self.cflags.append('-DUPSGI_EVENT_TIMER_USE_KQUEUE')
         elif timer_mode == 'port':
-            self.cflags.append('-DUWSGI_EVENT_TIMER_USE_PORT')
+            self.cflags.append('-DUPSGI_EVENT_TIMER_USE_PORT')
         else:
-            self.cflags.append('-DUWSGI_EVENT_TIMER_USE_NONE')
+            self.cflags.append('-DUPSGI_EVENT_TIMER_USE_NONE')
 
         report['timer'] = timer_mode
 
@@ -1115,24 +1115,24 @@ class uConf(object):
         filemonitor_mode = self.get('filemonitor', 'auto')
 
         if filemonitor_mode == 'auto':
-            if uwsgi_os == 'Linux':
+            if upsgi_os == 'Linux':
                 filemonitor_mode = 'inotify'
-            elif uwsgi_os == 'SunOS':
-                sun_major, sun_minor = uwsgi_os_k.split('.')
+            elif upsgi_os == 'SunOS':
+                sun_major, sun_minor = upsgi_os_k.split('.')
                 if int(sun_major) >= 5:
                     if int(sun_minor) >= 10:
                         filemonitor_mode = 'port'
-            elif uwsgi_os in ('Darwin', 'FreeBSD', 'GNU/kFreeBSD', 'OpenBSD', 'NetBSD', 'DragonFly'):
+            elif upsgi_os in ('Darwin', 'FreeBSD', 'GNU/kFreeBSD', 'OpenBSD', 'NetBSD', 'DragonFly'):
                 filemonitor_mode = 'kqueue'
 
         if filemonitor_mode == 'inotify':
-            self.cflags.append('-DUWSGI_EVENT_FILEMONITOR_USE_INOTIFY')
+            self.cflags.append('-DUPSGI_EVENT_FILEMONITOR_USE_INOTIFY')
         elif filemonitor_mode == 'kqueue':
-            self.cflags.append('-DUWSGI_EVENT_FILEMONITOR_USE_KQUEUE')
+            self.cflags.append('-DUPSGI_EVENT_FILEMONITOR_USE_KQUEUE')
         elif filemonitor_mode == 'port':
-            self.cflags.append('-DUWSGI_EVENT_FILEMONITOR_USE_PORT')
+            self.cflags.append('-DUPSGI_EVENT_FILEMONITOR_USE_PORT')
         else:
-            self.cflags.append('-DUWSGI_EVENT_FILEMONITOR_USE_NONE')
+            self.cflags.append('-DUPSGI_EVENT_FILEMONITOR_USE_NONE')
 
         report['filemonitor'] = filemonitor_mode
 
@@ -1150,19 +1150,19 @@ class uConf(object):
             else:
                 self.ldflags.append('-shared')
             # on cygwin we do not need PIC (it is implicit)
-            if not uwsgi_os.startswith('CYGWIN'):
+            if not upsgi_os.startswith('CYGWIN'):
                 self.ldflags.append('-fPIC')
                 self.cflags.append('-fPIC')
-            self.cflags.append('-DUWSGI_AS_SHARED_LIBRARY')
-            if uwsgi_os == 'Darwin':
+            self.cflags.append('-DUPSGI_AS_SHARED_LIBRARY')
+            if upsgi_os == 'Darwin':
                 self.ldflags.append('-dynamiclib')
                 self.ldflags.append('-undefined dynamic_lookup')
 
         if self.get('blacklist'):
-            self.cflags.append('-DUWSGI_BLACKLIST="\\"%s\\""' % self.get('blacklist'))
+            self.cflags.append('-DUPSGI_BLACKLIST="\\"%s\\""' % self.get('blacklist'))
 
         if self.get('whitelist'):
-            self.cflags.append('-DUWSGI_WHITELIST="\\"%s\\""' % self.get('whitelist'))
+            self.cflags.append('-DUPSGI_WHITELIST="\\"%s\\""' % self.get('whitelist'))
 
         has_pcre = False
 
@@ -1171,17 +1171,17 @@ class uConf(object):
             pcre_libs = spcall('pcre2-config --libs8')
             if pcre_libs:
                 pcre_cflags = spcall("pcre2-config --cflags")
-                pcre_define = "-DUWSGI_PCRE2"
+                pcre_define = "-DUPSGI_PCRE2"
             else:
                 pcre_libs = spcall('pcre-config --libs')
                 pcre_cflags = spcall("pcre-config --cflags")
-                pcre_define = "-DUWSGI_PCRE"
+                pcre_define = "-DUPSGI_PCRE"
         else:
             pcre_libs = None
 
         if required_pcre:
             if required_pcre != 'auto' and pcre_libs is None:
-                print("*** libpcre headers unavailable. uWSGI build is interrupted. You have to install pcre development package or disable pcre")
+                print("*** libpcre headers unavailable. upsgi build is interrupted. You have to install pcre development package or disable pcre")
                 sys.exit(1)
 
             if pcre_libs:
@@ -1198,45 +1198,45 @@ class uConf(object):
             if self.get('routing') == 'auto':
                 if has_pcre:
                     self.gcc_list.append('core/routing')
-                    self.cflags.append("-DUWSGI_ROUTING")
+                    self.cflags.append("-DUPSGI_ROUTING")
                     report['routing'] = True
             else:
                 self.gcc_list.append('core/routing')
-                self.cflags.append("-DUWSGI_ROUTING")
+                self.cflags.append("-DUPSGI_ROUTING")
                 report['routing'] = True
 
-        if self.has_include('sys/capability.h') and uwsgi_os == 'Linux':
-            self.cflags.append("-DUWSGI_CAP")
+        if self.has_include('sys/capability.h') and upsgi_os == 'Linux':
+            self.cflags.append("-DUPSGI_CAP")
             self.libs.append('-lcap')
             report['capabilities'] = True
 
         if self.has_include('uuid/uuid.h') and not self.get('check'):
-            self.cflags.append("-DUWSGI_UUID")
-            if uwsgi_os in ('Linux', 'GNU', 'GNU/kFreeBSD') or uwsgi_os.startswith('CYGWIN') or os.path.exists('/usr/lib/libuuid.so') or os.path.exists('/usr/local/lib/libuuid.so') or os.path.exists('/usr/lib64/libuuid.so') or os.path.exists('/usr/local/lib64/libuuid.so'):
+            self.cflags.append("-DUPSGI_UUID")
+            if upsgi_os in ('Linux', 'GNU', 'GNU/kFreeBSD') or upsgi_os.startswith('CYGWIN') or os.path.exists('/usr/lib/libuuid.so') or os.path.exists('/usr/local/lib/libuuid.so') or os.path.exists('/usr/lib64/libuuid.so') or os.path.exists('/usr/local/lib64/libuuid.so'):
                 self.libs.append('-luuid')
 
         if self.get('append_version'):
             if not self.get('append_version').startswith('-'):
-                uwsgi_version += '-'
-            uwsgi_version += self.get('append_version')
+                upsgi_version += '-'
+            upsgi_version += self.get('append_version')
 
-        if uwsgi_os in ('FreeBSD', 'GNU/kFreeBSD') and self.has_include('jail.h'):
-            self.cflags.append('-DUWSGI_HAS_FREEBSD_LIBJAIL')
+        if upsgi_os in ('FreeBSD', 'GNU/kFreeBSD') and self.has_include('jail.h'):
+            self.cflags.append('-DUPSGI_HAS_FREEBSD_LIBJAIL')
             self.libs.append('-ljail')
 
         self.embed_config = None
 
-        if uwsgi_os not in ('Darwin',):
-            self.embed_config = os.environ.get('UWSGI_EMBED_CONFIG')
+        if upsgi_os not in ('Darwin',):
+            self.embed_config = os.environ.get('UPSGI_EMBED_CONFIG')
             if not self.embed_config:
                 self.embed_config = self.get('embed_config')
             if self.embed_config:
                 binary_link_cmd = "ld -z noexecstack -r -b binary -o %s.o %s" % (binarize(self.embed_config), self.embed_config)
                 print(binary_link_cmd)
                 subprocess.call(binary_link_cmd, shell=True)
-                self.cflags.append("-DUWSGI_EMBED_CONFIG=_binary_%s_start" % binarize(self.embed_config))
-                self.cflags.append("-DUWSGI_EMBED_CONFIG_END=_binary_%s_end" % binarize(self.embed_config))
-            embed_files = os.environ.get('UWSGI_EMBED_FILES')
+                self.cflags.append("-DUPSGI_EMBED_CONFIG=_binary_%s_start" % binarize(self.embed_config))
+                self.cflags.append("-DUPSGI_EMBED_CONFIG_END=_binary_%s_end" % binarize(self.embed_config))
+            embed_files = os.environ.get('UPSGI_EMBED_FILES')
             if not embed_files:
                 embed_files = self.get('embed_files')
             if embed_files:
@@ -1270,9 +1270,9 @@ class uConf(object):
                                 print(objcopy_cmd)
                                 subprocess.call(objcopy_cmd, shell=True)
 
-        self.cflags.append('-DUWSGI_VERSION="\\"' + uwsgi_version + '\\""')
+        self.cflags.append('-DUPSGI_VERSION="\\"' + upsgi_version + '\\""')
 
-        uver_whole = uwsgi_version.split('-', 1)
+        uver_whole = upsgi_version.split('-', 1)
         if len(uver_whole) == 1:
             uver_custom = ''
         else:
@@ -1291,18 +1291,18 @@ class uConf(object):
         if len(uver_dots) > 3:
             uver_rev = uver_dots[3]
 
-        self.cflags.append('-DUWSGI_VERSION_BASE="' + uver_base + '"')
-        self.cflags.append('-DUWSGI_VERSION_MAJOR="' + uver_maj + '"')
-        self.cflags.append('-DUWSGI_VERSION_MINOR="' + uver_min + '"')
-        self.cflags.append('-DUWSGI_VERSION_REVISION="' + uver_rev + '"')
-        self.cflags.append('-DUWSGI_VERSION_CUSTOM="\\"' + uver_custom + '\\""')
+        self.cflags.append('-DUPSGI_VERSION_BASE="' + uver_base + '"')
+        self.cflags.append('-DUPSGI_VERSION_MAJOR="' + uver_maj + '"')
+        self.cflags.append('-DUPSGI_VERSION_MINOR="' + uver_min + '"')
+        self.cflags.append('-DUPSGI_VERSION_REVISION="' + uver_rev + '"')
+        self.cflags.append('-DUPSGI_VERSION_CUSTOM="\\"' + uver_custom + '\\""')
 
         if self.get('yaml'):
-            self.cflags.append("-DUWSGI_YAML")
+            self.cflags.append("-DUPSGI_YAML")
             self.gcc_list.append('core/yaml')
             report['yaml'] = 'embedded'
             if self.get('yaml') == 'libyaml':
-                self.cflags.append("-DUWSGI_LIBYAML")
+                self.cflags.append("-DUPSGI_LIBYAML")
                 self.libs.append('-lyaml')
                 report['yaml'] = 'libyaml'
 
@@ -1311,12 +1311,12 @@ class uConf(object):
                 jsonconf = spcall("pkg-config --cflags jansson")
                 if jsonconf:
                     self.cflags.append(jsonconf)
-                    self.cflags.append("-DUWSGI_JSON")
+                    self.cflags.append("-DUPSGI_JSON")
                     self.gcc_list.append('core/json')
                     self.libs.append(spcall("pkg-config --libs jansson"))
                     report['json'] = 'jansson'
                 elif self.has_include('jansson.h'):
-                    self.cflags.append("-DUWSGI_JSON")
+                    self.cflags.append("-DUPSGI_JSON")
                     self.gcc_list.append('core/json')
                     self.libs.append('-ljansson')
                     report['json'] = 'jansson'
@@ -1326,66 +1326,66 @@ class uConf(object):
                         if jsonconf.endswith('include/yajl'):
                             jsonconf = jsonconf.rstrip('yajl')
                         self.cflags.append(jsonconf)
-                        self.cflags.append("-DUWSGI_JSON")
+                        self.cflags.append("-DUPSGI_JSON")
                         self.gcc_list.append('core/json')
                         self.libs.append(spcall("pkg-config --libs yajl"))
-                        self.cflags.append("-DUWSGI_JSON_YAJL")
+                        self.cflags.append("-DUPSGI_JSON_YAJL")
                         report['json'] = 'yajl'
                     elif self.get('json') == 'true':
-                        print("*** jansson and yajl headers unavailable. uWSGI build is interrupted. You have to install jansson or yajl development headers or disable JSON")
+                        print("*** jansson and yajl headers unavailable. upsgi build is interrupted. You have to install jansson or yajl development headers or disable JSON")
                         sys.exit(1)
             elif self.get('json') == 'jansson':
                 jsonconf = spcall("pkg-config --cflags jansson")
                 if jsonconf:
                     self.cflags.append(jsonconf)
-                    self.cflags.append("-DUWSGI_JSON")
+                    self.cflags.append("-DUPSGI_JSON")
                     self.gcc_list.append('core/json')
                     self.libs.append(spcall("pkg-config --libs jansson"))
                     report['json'] = 'jansson'
                 elif self.has_include('jansson.h'):
-                    self.cflags.append("-DUWSGI_JSON")
+                    self.cflags.append("-DUPSGI_JSON")
                     self.gcc_list.append('core/json')
                     self.libs.append('-ljansson')
                     report['json'] = 'jansson'
                 else:
-                    print("*** jansson headers unavailable. uWSGI build is interrupted. You have to install jansson development package or use yajl or disable JSON")
+                    print("*** jansson headers unavailable. upsgi build is interrupted. You have to install jansson development package or use yajl or disable JSON")
                     sys.exit(1)
             elif self.get('json') == 'yajl':
                 jsonconf = spcall("pkg-config --cflags yajl")
                 if jsonconf:
                     self.cflags.append(jsonconf)
-                    self.cflags.append("-DUWSGI_JSON")
+                    self.cflags.append("-DUPSGI_JSON")
                     self.gcc_list.append('core/json')
                     self.libs.append(spcall("pkg-config --libs yajl"))
-                    self.cflags.append("-DUWSGI_JSON_YAJL")
+                    self.cflags.append("-DUPSGI_JSON_YAJL")
                     report['json'] = 'yajl'
                 elif self.has_include('yajl/yajl_tree.h'):
-                    self.cflags.append("-DUWSGI_JSON")
+                    self.cflags.append("-DUPSGI_JSON")
                     self.gcc_list.append('core/json')
                     self.libs.append('-lyajl')
-                    self.cflags.append("-DUWSGI_JSON_YAJL")
+                    self.cflags.append("-DUPSGI_JSON_YAJL")
                     report['json'] = 'yajl'
                 elif self.has_include('yajl/yajl_parse.h'):
-                    self.cflags.append("-DUWSGI_JSON")
+                    self.cflags.append("-DUPSGI_JSON")
                     self.gcc_list.append('core/json')
                     self.libs.append('-lyajl')
-                    self.cflags.append("-DUWSGI_JSON_YAJL_OLD")
+                    self.cflags.append("-DUPSGI_JSON_YAJL_OLD")
                     report['json'] = 'yajl_old'
                 else:
-                    print("*** yajl headers unavailable. uWSGI build is interrupted. You have to install yajl development package or use jansson or disable JSON")
+                    print("*** yajl headers unavailable. upsgi build is interrupted. You have to install yajl development package or use jansson or disable JSON")
                     sys.exit(1)
 
         if self.get('ssl'):
             if self.get('ssl') == 'auto':
                 if self.has_include('openssl/ssl.h'):
-                    self.cflags.append("-DUWSGI_SSL")
+                    self.cflags.append("-DUPSGI_SSL")
                     self.libs.append('-lssl')
                     self.libs.append('-lcrypto')
                     self.gcc_list.append('core/ssl')
                     self.gcc_list.append('core/legion')
                     report['ssl'] = True
             else:
-                self.cflags.append("-DUWSGI_SSL")
+                self.cflags.append("-DUPSGI_SSL")
                 self.libs.append('-lssl')
                 self.libs.append('-lcrypto')
                 self.gcc_list.append('core/ssl')
@@ -1395,46 +1395,46 @@ class uConf(object):
         if self.get('xml'):
             if self.get('xml') == 'auto':
                 xmlconf = spcall('pkg-config --libs libxml-2.0')
-                if xmlconf and uwsgi_os != 'Darwin':
+                if xmlconf and upsgi_os != 'Darwin':
                     self.libs.append(xmlconf)
                     xmlconf = spcall("pkg-config --cflags libxml-2.0")
                     self.cflags.append(xmlconf)
-                    self.cflags.append("-DUWSGI_XML -DUWSGI_XML_LIBXML2")
+                    self.cflags.append("-DUPSGI_XML -DUPSGI_XML_LIBXML2")
                     self.gcc_list.append('core/xmlconf')
                     report['xml'] = 'libxml2'
                 elif self.has_include('expat.h'):
-                    self.cflags.append("-DUWSGI_XML -DUWSGI_XML_EXPAT")
+                    self.cflags.append("-DUPSGI_XML -DUPSGI_XML_EXPAT")
                     self.libs.append('-lexpat')
                     self.gcc_list.append('core/xmlconf')
                     report['xml'] = 'expat'
             elif self.get('xml') == 'libxml2':
                 xmlconf = spcall('pkg-config --libs libxml-2.0')
                 if xmlconf is None:
-                    print("*** libxml2 headers unavailable. uWSGI build is interrupted. You have to install libxml2 development package or use libexpat or disable XML")
+                    print("*** libxml2 headers unavailable. upsgi build is interrupted. You have to install libxml2 development package or use libexpat or disable XML")
                     sys.exit(1)
                 else:
                     self.libs.append(xmlconf)
                     xmlconf = spcall("pkg-config --cflags libxml-2.0")
                     if xmlconf is None:
-                        print("*** libxml2 headers unavailable. uWSGI build is interrupted. You have to install libxml2 development package or use libexpat or disable XML")
+                        print("*** libxml2 headers unavailable. upsgi build is interrupted. You have to install libxml2 development package or use libexpat or disable XML")
                         sys.exit(1)
                     else:
                         self.cflags.append(xmlconf)
-                        self.cflags.append("-DUWSGI_XML -DUWSGI_XML_LIBXML2")
+                        self.cflags.append("-DUPSGI_XML -DUPSGI_XML_LIBXML2")
                         self.gcc_list.append('core/xmlconf')
                         report['xml'] = 'libxml2'
             elif self.get('xml') == 'expat':
-                self.cflags.append("-DUWSGI_XML -DUWSGI_XML_EXPAT")
+                self.cflags.append("-DUPSGI_XML -DUPSGI_XML_EXPAT")
                 self.libs.append('-lexpat')
                 self.gcc_list.append('core/xmlconf')
                 report['xml'] = 'expat'
 
         if self.get('plugin_dir'):
-            self.cflags.append('-DUWSGI_PLUGIN_DIR="\\"%s\\""' % self.get('plugin_dir'))
+            self.cflags.append('-DUPSGI_PLUGIN_DIR="\\"%s\\""' % self.get('plugin_dir'))
             report['plugin_dir'] = self.get('plugin_dir')
 
         if self.get('debug'):
-            self.cflags.append("-DUWSGI_DEBUG")
+            self.cflags.append("-DUPSGI_DEBUG")
             self.cflags.append("-g")
             report['debug'] = True
 
@@ -1479,7 +1479,7 @@ def get_plugin_up(path):
         if not path:
             path = '.'
     elif os.path.isdir(path):
-        execfile('%s/uwsgiplugin.py' % path, up)
+        execfile('%s/upsgiplugin.py' % path, up)
     else:
         print("Error: unable to find directory '%s'" % path)
         sys.exit(1)
@@ -1535,7 +1535,7 @@ def build_plugin(path, uc, cflags, ldflags, libs, name=None):
 
     try:
         for opt in uc.config.options(name):
-            p_cflags.append('-DUWSGI_PLUGIN_%s_%s="%s"' % (name.upper(), opt.upper(), uc.config.get(name, opt, '1')))
+            p_cflags.append('-DUPSGI_PLUGIN_%s_%s="%s"' % (name.upper(), opt.upper(), uc.config.get(name, opt, '1')))
     except Exception:
         pass
 
@@ -1548,7 +1548,7 @@ def build_plugin(path, uc, cflags, ldflags, libs, name=None):
 
     gcc_list = []
 
-    if uwsgi_os == 'Darwin':
+    if upsgi_os == 'Darwin':
         shared_flag = '-dynamiclib -undefined dynamic_lookup'
 
     for cfile in up['GCC_LIST']:
@@ -1580,8 +1580,8 @@ def build_plugin(path, uc, cflags, ldflags, libs, name=None):
                     raise Exception('unable to link binary file')
             gcc_list.append('%s/%s.o' % (path, bfile[1]))
         except Exception:
-            if uwsgi_os == 'Darwin':
-                gcc_list.append('-sectcreate __DATA %s %s/%s' % (strip_prefix('_uwsgi_', bfile[0]), path, bfile[1]))
+            if upsgi_os == 'Darwin':
+                gcc_list.append('-sectcreate __DATA %s %s/%s' % (strip_prefix('_upsgi_', bfile[0]), path, bfile[1]))
 
     p_ldflags_blacklist = ('-Wl,--no-undefined',)
     for ldflag in p_ldflags_blacklist:
@@ -1611,7 +1611,7 @@ def build_plugin(path, uc, cflags, ldflags, libs, name=None):
         except ValueError:
             pass
 
-    if uwsgi_os.startswith('CYGWIN'):
+    if upsgi_os.startswith('CYGWIN'):
         try:
             p_cflags.remove('-fstack-protector')
             p_ldflags.remove('-fstack-protector')
@@ -1620,8 +1620,8 @@ def build_plugin(path, uc, cflags, ldflags, libs, name=None):
 
     need_pic = ' -fPIC'
     # on cygwin we do not need PIC
-    if uwsgi_os.startswith('CYGWIN'):
-        need_pic = ' -L. -luwsgi'
+    if upsgi_os.startswith('CYGWIN'):
+        need_pic = ' -L. -lupsgi'
 
     gccline = "%s%s %s -o %s.so %s %s %s %s" % (
         GCC,
@@ -1642,14 +1642,14 @@ def build_plugin(path, uc, cflags, ldflags, libs, name=None):
 
     try:
         if requires:
-            f = open('.uwsgi_plugin_section', 'w')
+            f = open('.upsgi_plugin_section', 'w')
             for rp in requires:
                 f.write("requires=%s\n" % rp)
             f.close()
-            objline = "objcopy %s.so --add-section uwsgi=.uwsgi_plugin_section %s.so" % (plugin_dest, plugin_dest)
+            objline = "objcopy %s.so --add-section upsgi=.upsgi_plugin_section %s.so" % (plugin_dest, plugin_dest)
             print_compilation_output(None, objline)
             subprocess.call(objline, shell=True)
-            os.unlink('.uwsgi_plugin_section')
+            os.unlink('.upsgi_plugin_section')
     except Exception:
         pass
 
@@ -1711,7 +1711,7 @@ if __name__ == "__main__":
             else:
                 bconf = options.cflags[0]
         except Exception:
-            bconf = os.environ.get('UWSGI_PROFILE', 'default.toml')
+            bconf = os.environ.get('UPSGI_PROFILE', 'default.toml')
         bconf = resolve_profile_name(bconf)
 
         uc = uConf(bconf, is_cflags)
@@ -1724,12 +1724,12 @@ if __name__ == "__main__":
             gcll = (gcc_list, cflags, ldflags, libs)
         else:
             gcll = None
-        build_uwsgi(uc, is_cflags, gcll=gcll)
+        build_upsgi(uc, is_cflags, gcll=gcll)
     elif options.plugin:
         try:
             bconf = options.plugin[1]
         except Exception:
-            bconf = os.environ.get('UWSGI_PROFILE', 'default.toml')
+            bconf = os.environ.get('UPSGI_PROFILE', 'default.toml')
         bconf = resolve_profile_name(bconf)
         uc = uConf(bconf)
         gcc_list, cflags, ldflags, libs = uc.get_gcll()
@@ -1737,12 +1737,12 @@ if __name__ == "__main__":
             name = options.plugin[2]
         except Exception:
             name = None
-        print("*** uWSGI building and linking plugin %s ***" % options.plugin[0])
+        print("*** upsgi building and linking plugin %s ***" % options.plugin[0])
         build_plugin(options.plugin[0], uc, cflags, ldflags, libs, name)
     elif options.extra_plugin:
-        print("*** uWSGI building and linking plugin from %s ***" % options.extra_plugin[0])
-        cflags = os.environ['UWSGI_PLUGINS_BUILDER_CFLAGS'].split() + os.environ.get("CFLAGS", "").split()
-        cflags.append('-I.uwsgi_plugins_builder/')
+        print("*** upsgi building and linking plugin from %s ***" % options.extra_plugin[0])
+        cflags = os.environ['UPSGI_PLUGINS_BUILDER_CFLAGS'].split() + os.environ.get("CFLAGS", "").split()
+        cflags.append('-I.upsgi_plugins_builder/')
         ldflags = os.environ.get("LDFLAGS", "").split()
         name = None
         try:

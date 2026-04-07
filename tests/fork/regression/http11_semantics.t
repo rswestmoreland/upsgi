@@ -12,7 +12,7 @@ use UpSGITest qw(build_artifact_dir default_binary fixture_app fixture_static_ro
 sub rewrite_http11_profile {
     my ($path) = @_;
     my $text = slurp($path);
-    $text =~ s/^http-socket\s*=\s*/http11-socket = /m
+    $text =~ s/^  http-socket:\s*/  http11-socket: /m
         or die "failed to switch profile to http11-socket\n";
     open my $fh, '>', $path or die "unable to rewrite $path: $!\n";
     print {$fh} $text;
@@ -97,23 +97,23 @@ sub read_until_close {
 
 my $binary = default_binary();
 my $artifact_dir = build_artifact_dir('http11_semantics');
-my $config_ini = File::Spec->catfile($artifact_dir, 'http11.ini');
+my $config_yaml = File::Spec->catfile($artifact_dir, 'http11.yaml');
 my $server_log = File::Spec->catfile($artifact_dir, 'server.log');
 my $port = pick_port(8);
 
 render_profile(
     profile => 'baseline',
-    output_ini => $config_ini,
+    output_yaml => $config_yaml,
     app => fixture_app('app_http11_semantics.psgi'),
     static_root => fixture_static_root(),
     log_file => $server_log,
     port => $port,
 );
-rewrite_http11_profile($config_ini);
+rewrite_http11_profile($config_yaml);
 
 start_server(
     binary => $binary,
-    config_ini => $config_ini,
+    config_yaml => $config_yaml,
     artifact_dir => $artifact_dir,
 );
 

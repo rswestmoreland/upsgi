@@ -6,7 +6,7 @@ use warnings;
     sub DESTROY { print STDERR "$$: Calling DESTROY\n" }
 }
 
-uwsgi::atexit(
+upsgi::atexit(
     sub {
         print STDERR "$$: Calling the atexit hook\n";
     }

@@ -1,6 +1,6 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 // Bernstein classic hash (this is not static as it is used by other areas)
 uint32_t djb33x_hash(char *key, uint64_t keylen) {
@@ -67,7 +67,7 @@ static uint32_t random_hash(char *key, uint64_t keylen) {
 */
 static uint32_t rr_hash(char *key, uint64_t keylen) {
 	static uint32_t rr = 0;
-	uint32_t max_value = uwsgi_str_num(key, keylen);
+	uint32_t max_value = upsgi_str_num(key, keylen);
 	uint32_t ret = rr;
 	rr++;
 	if (rr > max_value) {
@@ -76,8 +76,8 @@ static uint32_t rr_hash(char *key, uint64_t keylen) {
 	return ret;
 }
 
-struct uwsgi_hash_algo *uwsgi_hash_algo_get(char *name) {
-	struct uwsgi_hash_algo *uha = uwsgi.hash_algos;
+struct upsgi_hash_algo *upsgi_hash_algo_get(char *name) {
+	struct upsgi_hash_algo *uha = upsgi.hash_algos;
 	while(uha) {
 		if (!strcmp(name, uha->name)) {
 			return uha;
@@ -86,30 +86,30 @@ struct uwsgi_hash_algo *uwsgi_hash_algo_get(char *name) {
 	}
 	return NULL;
 }
-void uwsgi_hash_algo_register(char *name, uint32_t (*func)(char *, uint64_t)) {
+void upsgi_hash_algo_register(char *name, uint32_t (*func)(char *, uint64_t)) {
 
-	struct uwsgi_hash_algo *old_uha = NULL, *uha = uwsgi.hash_algos;
+	struct upsgi_hash_algo *old_uha = NULL, *uha = upsgi.hash_algos;
 	while(uha) {
 		if (!strcmp(uha->name, name)) return;
 		old_uha = uha;
 		uha = uha->next;
 	} 
 
-	uha = uwsgi_calloc(sizeof(struct uwsgi_hash_algo));
+	uha = upsgi_calloc(sizeof(struct upsgi_hash_algo));
 	uha->name = name;
 	uha->func = func;
 	if (old_uha) {
 		old_uha->next = uha;
 	}
 	else {
-		uwsgi.hash_algos = uha;
+		upsgi.hash_algos = uha;
 	}
 }
 
-void uwsgi_hash_algo_register_all() {
-	uwsgi_hash_algo_register("djb33x", djb33x_hash);
-	uwsgi_hash_algo_register("murmur2", murmur2_hash);
-	uwsgi_hash_algo_register("random", random_hash);
-	uwsgi_hash_algo_register("rand", random_hash);
-	uwsgi_hash_algo_register("rr", rr_hash);
+void upsgi_hash_algo_register_all() {
+	upsgi_hash_algo_register("djb33x", djb33x_hash);
+	upsgi_hash_algo_register("murmur2", murmur2_hash);
+	upsgi_hash_algo_register("random", random_hash);
+	upsgi_hash_algo_register("rand", random_hash);
+	upsgi_hash_algo_register("rr", rr_hash);
 }

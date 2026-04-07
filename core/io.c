@@ -1,6 +1,6 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 /*
 
@@ -9,13 +9,13 @@ extern struct uwsgi_server uwsgi;
 	DO NOT USE IN REQUEST PLUGINS !!!
 
 */
-int uwsgi_waitfd_event(int fd, int timeout, int event) {
+int upsgi_waitfd_event(int fd, int timeout, int event) {
 
 	int ret;
 	struct pollfd upoll;
 
 	if (!timeout)
-		timeout = uwsgi.socket_timeout;
+		timeout = upsgi.socket_timeout;
 
 	timeout = timeout * 1000;
 	if (timeout < 0)
@@ -27,7 +27,7 @@ int uwsgi_waitfd_event(int fd, int timeout, int event) {
 	ret = poll(&upoll, 1, timeout);
 
 	if (ret < 0) {
-		uwsgi_error("uwsgi_waitfd_event()/poll()");
+		upsgi_error("upsgi_waitfd_event()/poll()");
 	}
 	else if (ret > 0) {
 		if (upoll.revents & event) {
@@ -42,7 +42,7 @@ int uwsgi_waitfd_event(int fd, int timeout, int event) {
 /*
 	consume data from an fd (blocking)
 */
-char *uwsgi_read_fd(int fd, size_t *size, int add_zero) {
+char *upsgi_read_fd(int fd, size_t *size, int add_zero) {
 
 	char stack_buf[4096];
 	ssize_t len;
@@ -55,7 +55,7 @@ char *uwsgi_read_fd(int fd, size_t *size, int add_zero) {
 			*size += len;
 			char *tmp = realloc(buffer, *size);
 			if (!tmp) {
-				uwsgi_error("uwsgi_read_fd()/realloc()");
+				upsgi_error("upsgi_read_fd()/realloc()");
 				exit(1);
 			}
 			buffer = tmp;
@@ -67,7 +67,7 @@ char *uwsgi_read_fd(int fd, size_t *size, int add_zero) {
 		*size = *size + 1;
 		buffer = realloc(buffer, *size);
 		if (!buffer) {
-			uwsgi_error("uwsgi_read_fd()/realloc()");
+			upsgi_error("upsgi_read_fd()/realloc()");
 			exit(1);
 		}
 		buffer[*size - 1] = 0;
@@ -78,28 +78,28 @@ char *uwsgi_read_fd(int fd, size_t *size, int add_zero) {
 }
 
 // simply read the whole content of a file
-char *uwsgi_simple_file_read(char *filename) {
+char *upsgi_simple_file_read(char *filename) {
 
 	struct stat sb;
 	char *buffer;
 	ssize_t len;
 	int fd = open(filename, O_RDONLY);
 	if (fd < 0) {
-		uwsgi_error_open(filename);
+		upsgi_error_open(filename);
 		goto end;
 	}
 
 	if (fstat(fd, &sb)) {
-		uwsgi_error("uwsgi_simple_file_read()/fstat()");
+		upsgi_error("upsgi_simple_file_read()/fstat()");
 		close(fd);
 		goto end;
 	}
 
-	buffer = uwsgi_malloc(sb.st_size + 1);
+	buffer = upsgi_malloc(sb.st_size + 1);
 
 	len = read(fd, buffer, sb.st_size);
 	if (len != sb.st_size) {
-		uwsgi_error("uwsgi_simple_file_read()/read()");
+		upsgi_error("upsgi_simple_file_read()/read()");
 		free(buffer);
 		close(fd);
 		goto end;
@@ -116,25 +116,25 @@ end:
 
 }
 
-static char *uwsgi_scheme_fd(char *url, size_t *size, int add_zero) {
+static char *upsgi_scheme_fd(char *url, size_t *size, int add_zero) {
 	int fd = atoi(url);
-	return uwsgi_read_fd(fd, size, add_zero);
+	return upsgi_read_fd(fd, size, add_zero);
 }
 
-static char *uwsgi_scheme_exec(char *url, size_t *size, int add_zero) {
+static char *upsgi_scheme_exec(char *url, size_t *size, int add_zero) {
 	int cpipe[2];
 	if (pipe(cpipe)) {
-		uwsgi_error("pipe()");
+		upsgi_error("pipe()");
 		exit(1);
 	}
-	uwsgi_run_command(url, NULL, cpipe[1]);
-	char *buffer = uwsgi_read_fd(cpipe[0], size, add_zero);
+	upsgi_run_command(url, NULL, cpipe[1]);
+	char *buffer = upsgi_read_fd(cpipe[0], size, add_zero);
 	close(cpipe[0]);
 	close(cpipe[1]);
 	return buffer;
 }
 
-static char *uwsgi_scheme_http(char *url, size_t *size, int add_zero) {
+static char *upsgi_scheme_http(char *url, size_t *size, int add_zero) {
 	char byte;
         int body = 0;
 	char *buffer = NULL;
@@ -142,37 +142,37 @@ static char *uwsgi_scheme_http(char *url, size_t *size, int add_zero) {
 		char *domain = url;
 		char *uri = strchr(domain, '/');
 		if (!uri) {
-			uwsgi_log("invalid http url\n");
+			upsgi_log("invalid http url\n");
 			exit(1);
 		}
 		uri[0] = 0;
-		uwsgi_log("domain: %s\n", domain);
+		upsgi_log("domain: %s\n", domain);
 
-		char *colon = uwsgi_get_last_char(domain, ':');
+		char *colon = upsgi_get_last_char(domain, ':');
 
 		if (colon) {
 			colon[0] = 0;
 		}
 
 
-		char *ip = uwsgi_resolve_ip(domain);
+		char *ip = upsgi_resolve_ip(domain);
 		if (!ip) {
-			uwsgi_log("unable to resolve address %s\n", domain);
+			upsgi_log("unable to resolve address %s\n", domain);
 			exit(1);
 		}
 
 		if (colon) {
 			colon[0] = ':';
-			ip = uwsgi_concat2(ip, colon);
+			ip = upsgi_concat2(ip, colon);
 		}
 		else {
-			ip = uwsgi_concat2(ip, ":80");
+			ip = upsgi_concat2(ip, ":80");
 		}
 
-		int fd = uwsgi_connect(ip, 0, 0);
+		int fd = upsgi_connect(ip, 0, 0);
 
 		if (fd < 0) {
-			uwsgi_error("uwsgi_scheme_http()/connect()");
+			upsgi_error("upsgi_scheme_http()/connect()");
 			exit(1);
 		}
 
@@ -180,18 +180,18 @@ static char *uwsgi_scheme_http(char *url, size_t *size, int add_zero) {
 
 		uri[0] = '/';
 
-		if (write(fd, "GET ", 4) != 4) { uwsgi_error("uwsgi_scheme_http()/write()"); exit(1);}
-		if (write(fd, uri, strlen(uri)) != (ssize_t) strlen(uri)) { uwsgi_error("uwsgi_scheme_http()/write()"); exit(1);}
-		if (write(fd, " HTTP/1.0\r\n", 11) != 11) { uwsgi_error("uwsgi_scheme_http()/write()"); exit(1);}
-		if (write(fd, "Host: ", 6) != 6) { uwsgi_error("uwsgi_scheme_http()/write()"); exit(1);}
+		if (write(fd, "GET ", 4) != 4) { upsgi_error("upsgi_scheme_http()/write()"); exit(1);}
+		if (write(fd, uri, strlen(uri)) != (ssize_t) strlen(uri)) { upsgi_error("upsgi_scheme_http()/write()"); exit(1);}
+		if (write(fd, " HTTP/1.0\r\n", 11) != 11) { upsgi_error("upsgi_scheme_http()/write()"); exit(1);}
+		if (write(fd, "Host: ", 6) != 6) { upsgi_error("upsgi_scheme_http()/write()"); exit(1);}
 
 		uri[0] = 0;
-		if (write(fd, domain, strlen(domain)) != (ssize_t) strlen(domain)) { uwsgi_error("uwsgi_scheme_http()/write()"); exit(1);}
+		if (write(fd, domain, strlen(domain)) != (ssize_t) strlen(domain)) { upsgi_error("upsgi_scheme_http()/write()"); exit(1);}
 		uri[0] = '/';
 
-		if (write(fd, "\r\nUser-Agent: uWSGI on ", 23) != 23) { uwsgi_error("uwsgi_scheme_http()/write()"); exit(1);}
-		if (write(fd, uwsgi.hostname, uwsgi.hostname_len) != uwsgi.hostname_len) { uwsgi_error("uwsgi_scheme_http()/write()"); exit(1);}
-		if (write(fd, "\r\n\r\n", 4) != 4) { uwsgi_error("uwsgi_scheme_http()/write()"); exit(1);}
+		if (write(fd, "\r\nUser-Agent: upsgi on ", 23) != 23) { upsgi_error("upsgi_scheme_http()/write()"); exit(1);}
+		if (write(fd, upsgi.hostname, upsgi.hostname_len) != upsgi.hostname_len) { upsgi_error("upsgi_scheme_http()/write()"); exit(1);}
+		if (write(fd, "\r\n\r\n", 4) != 4) { upsgi_error("upsgi_scheme_http()/write()"); exit(1);}
 
 		int http_status_code_ptr = 0;
 
@@ -212,7 +212,7 @@ static char *uwsgi_scheme_http(char *url, size_t *size, int add_zero) {
 				*size = *size + 1;
 				char *tmp = realloc(buffer, *size);
 				if (!tmp) {
-					uwsgi_error("uwsgi_open_and_read()/realloc()");
+					upsgi_error("upsgi_open_and_read()/realloc()");
 					exit(1);
 				}
 				buffer = tmp;
@@ -223,9 +223,9 @@ static char *uwsgi_scheme_http(char *url, size_t *size, int add_zero) {
 				http_status_code_ptr++;
 				if (http_status_code_ptr == 10) {
 					if (byte != '2') {
-						uwsgi_log("Not usable HTTP response: %cxx\n", byte);
-						if (uwsgi.has_emperor) {
-							exit(UWSGI_EXILE_CODE);
+						upsgi_log("Not usable HTTP response: %cxx\n", byte);
+						if (upsgi.has_emperor) {
+							exit(UPSGI_EXILE_CODE);
 						}
 						else {
 							exit(1);
@@ -241,7 +241,7 @@ static char *uwsgi_scheme_http(char *url, size_t *size, int add_zero) {
 			*size = *size + 1;
 			char *tmp = realloc(buffer, *size);
 			if (!tmp) {
-				uwsgi_error("uwsgi_open_and_read()/realloc()");
+				upsgi_error("upsgi_open_and_read()/realloc()");
 				exit(1);
 			}
 			buffer = tmp;
@@ -252,25 +252,25 @@ static char *uwsgi_scheme_http(char *url, size_t *size, int add_zero) {
 }
 
 
-static char *uwsgi_scheme_emperor(char *url, size_t *size, int add_zero) {
+static char *upsgi_scheme_emperor(char *url, size_t *size, int add_zero) {
 
-	if (uwsgi.emperor_fd_config < 0) {
-		uwsgi_log("this is not a vassal instance\n");
+	if (upsgi.emperor_fd_config < 0) {
+		upsgi_log("this is not a vassal instance\n");
 		exit(1);
 	}
 	ssize_t rlen;
-	struct uwsgi_header uh;
+	struct upsgi_header uh;
 	size_t remains = 4;
 	char *ptr = (char *) &uh;
 	while(remains) {
-		int ret = uwsgi_waitfd(uwsgi.emperor_fd_config, 5);
+		int ret = upsgi_waitfd(upsgi.emperor_fd_config, 5);
 		if (ret <= 0) {
-			uwsgi_log("[uwsgi-vassal] error waiting for config header %s !!!\n", url);
+			upsgi_log("[upsgi-vassal] error waiting for config header %s !!!\n", url);
 			exit(1);
 		}
-		rlen = read(uwsgi.emperor_fd_config, ptr, remains);
+		rlen = read(upsgi.emperor_fd_config, ptr, remains);
 		if (rlen <= 0) {
-			uwsgi_log("[uwsgi-vassal] error reading config header from %s !!!\n", url);
+			upsgi_log("[upsgi-vassal] error reading config header from %s !!!\n", url);
 			exit(1);
 		}
 		ptr+=rlen;
@@ -279,21 +279,21 @@ static char *uwsgi_scheme_emperor(char *url, size_t *size, int add_zero) {
 
 	remains = uh._pktsize;
 	if (!remains) {
-		uwsgi_log("[uwsgi-vassal] invalid config from %s\n", url);
+		upsgi_log("[upsgi-vassal] invalid config from %s\n", url);
 		exit(1);
 	}
 
-	char *buffer = uwsgi_calloc(remains + add_zero);
+	char *buffer = upsgi_calloc(remains + add_zero);
 	ptr = buffer;
 	while (remains) {
-		int ret = uwsgi_waitfd(uwsgi.emperor_fd_config, 5);
+		int ret = upsgi_waitfd(upsgi.emperor_fd_config, 5);
                 if (ret <= 0) {
-                	uwsgi_log("[uwsgi-vassal] error waiting for config %s !!!\n", url);
+                	upsgi_log("[upsgi-vassal] error waiting for config %s !!!\n", url);
                         exit(1);
                 }
-		rlen = read(uwsgi.emperor_fd_config, ptr, remains);
+		rlen = read(upsgi.emperor_fd_config, ptr, remains);
 		if (rlen <= 0) {
-                	uwsgi_log("[uwsgi-vassal] error reading config from %s !!!\n", url);
+                	upsgi_log("[upsgi-vassal] error reading config from %s !!!\n", url);
                         exit(1);
                 }
                 ptr+=rlen;
@@ -304,23 +304,23 @@ static char *uwsgi_scheme_emperor(char *url, size_t *size, int add_zero) {
 	return buffer;
 }
 
-static char *uwsgi_scheme_data(char *url, size_t *size, int add_zero) {
+static char *upsgi_scheme_data(char *url, size_t *size, int add_zero) {
 	char *buffer = NULL;
-	int fd = open(uwsgi.binary_path, O_RDONLY);
+	int fd = open(upsgi.binary_path, O_RDONLY);
 	if (fd < 0) {
-		uwsgi_error_open(uwsgi.binary_path);
+		upsgi_error_open(upsgi.binary_path);
 		exit(1);
 	}
 	int slot = atoi(url);
 	if (slot < 0) {
-		uwsgi_log("invalid binary data slot requested\n");
+		upsgi_log("invalid binary data slot requested\n");
 		exit(1);
 	}
-	uwsgi_log("requesting binary data slot %d\n", slot);
+	upsgi_log("requesting binary data slot %d\n", slot);
 	off_t fo = lseek(fd, 0, SEEK_END);
 	if (fo < 0) {
-		uwsgi_error("lseek()");
-		uwsgi_log("invalid binary data slot requested\n");
+		upsgi_error("lseek()");
+		upsgi_log("invalid binary data slot requested\n");
 		exit(1);
 	}
 	int i = 0;
@@ -328,28 +328,28 @@ static char *uwsgi_scheme_data(char *url, size_t *size, int add_zero) {
 	for (i = 0; i <= slot; i++) {
 		fo = lseek(fd, -8, SEEK_CUR);
 		if (fo < 0) {
-			uwsgi_error("lseek()");
-			uwsgi_log("invalid binary data slot requested\n");
+			upsgi_error("lseek()");
+			upsgi_log("invalid binary data slot requested\n");
 			exit(1);
 		}
 		ssize_t len = read(fd, &datasize, 8);
 		if (len != 8) {
-			uwsgi_error("read()");
-			uwsgi_log("invalid binary data slot requested\n");
+			upsgi_error("read()");
+			upsgi_log("invalid binary data slot requested\n");
 			exit(1);
 		}
 		if (datasize == 0) {
-			uwsgi_log("0 size binary data !!!\n");
+			upsgi_log("0 size binary data !!!\n");
 			exit(1);
 		}
 		if (datasize > SIZE_MAX-1) {
-			uwsgi_log("size binary data bigger than SIZE_MAX !!!\n");
+			upsgi_log("size binary data bigger than SIZE_MAX !!!\n");
 			exit(1);
 		}
 		fo = lseek(fd, -(datasize + 8), SEEK_CUR);
 		if (fo < 0) {
-			uwsgi_error("lseek()");
-			uwsgi_log("invalid binary data slot requested\n");
+			upsgi_error("lseek()");
+			upsgi_log("invalid binary data slot requested\n");
 			exit(1);
 		}
 
@@ -358,12 +358,12 @@ static char *uwsgi_scheme_data(char *url, size_t *size, int add_zero) {
 			if (add_zero) {
 				*size += 1;
 			}
-			buffer = uwsgi_malloc(*size);
+			buffer = upsgi_malloc(*size);
 			memset(buffer, 0, *size);
 			len = read(fd, buffer, datasize);
 			if (len != (ssize_t) datasize) {
-				uwsgi_error("read()");
-				uwsgi_log("invalid binary data slot requested\n");
+				upsgi_error("read()");
+				upsgi_log("invalid binary data slot requested\n");
 				exit(1);
 			}
 		}
@@ -373,42 +373,42 @@ static char *uwsgi_scheme_data(char *url, size_t *size, int add_zero) {
 	return buffer;
 }
 
-static char *uwsgi_scheme_call(char *url, size_t *size, int add_zero) {
+static char *upsgi_scheme_call(char *url, size_t *size, int add_zero) {
         char *(*func)(void) = dlsym(RTLD_DEFAULT, url);
 	if (!func) {
-		uwsgi_log("unable to find symbol %s\n", url);
+		upsgi_log("unable to find symbol %s\n", url);
                 exit(1);
 	}
 
 	char *s = func();
 	if (!s) {
-		uwsgi_log("called symbol %s did not return a string\n", url);
+		upsgi_log("called symbol %s did not return a string\n", url);
                 exit(1);
 	}
         *size = strlen(s);
         if (add_zero) {
                 *size += 1;
         }
-        char *buffer = uwsgi_malloc(*size);
+        char *buffer = upsgi_malloc(*size);
         memset(buffer, 0, *size);
         memcpy(buffer, s, strlen(s));
 
         return buffer;
 }
 
-static char *uwsgi_scheme_callint(char *url, size_t *size, int add_zero) {
+static char *upsgi_scheme_callint(char *url, size_t *size, int add_zero) {
         int (*func)(void) = dlsym(RTLD_DEFAULT, url);
         if (!func) {
-                uwsgi_log("unable to find symbol %s\n", url);
+                upsgi_log("unable to find symbol %s\n", url);
                 exit(1);
         }
 
-	char *s = uwsgi_num2str(func());
+	char *s = upsgi_num2str(func());
         *size = strlen(s);
         if (add_zero) {
                 *size += 1;
         }
-        char *buffer = uwsgi_malloc(*size);
+        char *buffer = upsgi_malloc(*size);
         memset(buffer, 0, *size);
         memcpy(buffer, s, strlen(s));
 	free(s);
@@ -417,7 +417,7 @@ static char *uwsgi_scheme_callint(char *url, size_t *size, int add_zero) {
 }
 
 
-static char *uwsgi_scheme_sym(char *url, size_t *size, int add_zero) {
+static char *upsgi_scheme_sym(char *url, size_t *size, int add_zero) {
 	void *sym_start_ptr = NULL, *sym_end_ptr = NULL;
 	char **raw_symbol = dlsym(RTLD_DEFAULT, url);
 	if (raw_symbol) {
@@ -425,17 +425,17 @@ static char *uwsgi_scheme_sym(char *url, size_t *size, int add_zero) {
 		sym_end_ptr = sym_start_ptr + strlen(sym_start_ptr);
 		goto found;
 	}
-	char *symbol = uwsgi_concat3("_binary_", url, "_start");
+	char *symbol = upsgi_concat3("_binary_", url, "_start");
 	sym_start_ptr = dlsym(RTLD_DEFAULT, symbol);
 	if (!sym_start_ptr) {
-		uwsgi_log("unable to find symbol %s\n", symbol);
+		upsgi_log("unable to find symbol %s\n", symbol);
 		exit(1);
 	}
 	free(symbol);
-	symbol = uwsgi_concat3("_binary_", url, "_end");
+	symbol = upsgi_concat3("_binary_", url, "_end");
 	sym_end_ptr = dlsym(RTLD_DEFAULT, symbol);
 	if (!sym_end_ptr) {
-		uwsgi_log("unable to find symbol %s\n", symbol);
+		upsgi_log("unable to find symbol %s\n", symbol);
 		exit(1);
 	}
 	free(symbol);
@@ -446,19 +446,19 @@ found:
 	if (add_zero) {
 		*size += 1;
 	}
-	char *buffer = uwsgi_malloc(*size);
+	char *buffer = upsgi_malloc(*size);
 	memset(buffer, 0, *size);
 	memcpy(buffer, sym_start_ptr, sym_end_ptr - sym_start_ptr);
 
 	return buffer;
 }
 
-static char *uwsgi_scheme_section(char *url, size_t *size, int add_zero) {
-#ifdef UWSGI_ELF
+static char *upsgi_scheme_section(char *url, size_t *size, int add_zero) {
+#ifdef UPSGI_ELF
 	size_t s_len = 0;
-	char *buffer = uwsgi_elf_section(uwsgi.binary_path, url, &s_len);
+	char *buffer = upsgi_elf_section(upsgi.binary_path, url, &s_len);
 	if (!buffer) {
-		uwsgi_log("unable to find section %s in %s\n", url + 10, uwsgi.binary_path);
+		upsgi_log("unable to find section %s in %s\n", url + 10, upsgi.binary_path);
 		exit(1);
 	}
 	*size = s_len;
@@ -466,25 +466,25 @@ static char *uwsgi_scheme_section(char *url, size_t *size, int add_zero) {
 		*size += 1;
 	return buffer;
 #else
-	uwsgi_log("section:// scheme not supported on this platform\n");
+	upsgi_log("section:// scheme not supported on this platform\n");
 	exit(1);
 #endif
 }
 
-struct uwsgi_string_list *uwsgi_register_scheme(char *name, char * (*func)(char *, size_t *, int)) {
-	struct uwsgi_string_list *usl = NULL;
-	uwsgi_foreach(usl, uwsgi.schemes) {
+struct upsgi_string_list *upsgi_register_scheme(char *name, char * (*func)(char *, size_t *, int)) {
+	struct upsgi_string_list *usl = NULL;
+	upsgi_foreach(usl, upsgi.schemes) {
 		if (!strcmp(usl->value, name)) goto found;
 	}
 
-	usl = uwsgi_string_new_list(&uwsgi.schemes, name); 	
+	usl = upsgi_string_new_list(&upsgi.schemes, name); 	
 
 found:
 	usl->custom_ptr = func;
 	return usl;
 }
 
-char *uwsgi_open_and_read(char *url, size_t *size, int add_zero, char *magic_table[]) {
+char *upsgi_open_and_read(char *url, size_t *size, int add_zero, char *magic_table[]) {
 
         struct stat sb;
         char *buffer = NULL;
@@ -496,47 +496,47 @@ char *uwsgi_open_and_read(char *url, size_t *size, int add_zero, char *magic_tab
 
         // stdin ?
         if (!strcmp(url, "-")) {
-                buffer = uwsgi_read_fd(0, size, add_zero);
+                buffer = upsgi_read_fd(0, size, add_zero);
 		goto end;
         }
-#ifdef UWSGI_EMBED_CONFIG
+#ifdef UPSGI_EMBED_CONFIG
 	else if (url[0] == 0) {
-		*size = &UWSGI_EMBED_CONFIG_END - &UWSGI_EMBED_CONFIG;
+		*size = &UPSGI_EMBED_CONFIG_END - &UPSGI_EMBED_CONFIG;
 		if (add_zero) {
 			*size += 1;
 		}
-		buffer = uwsgi_malloc(*size);
+		buffer = upsgi_malloc(*size);
 		memset(buffer, 0, *size);
-		memcpy(buffer, &UWSGI_EMBED_CONFIG, &UWSGI_EMBED_CONFIG_END - &UWSGI_EMBED_CONFIG);
+		memcpy(buffer, &UPSGI_EMBED_CONFIG, &UPSGI_EMBED_CONFIG_END - &UPSGI_EMBED_CONFIG);
 		goto end;
 	}
 #endif
 
-	struct uwsgi_string_list *usl = uwsgi_check_scheme(url);
+	struct upsgi_string_list *usl = upsgi_check_scheme(url);
 	if (!usl) goto fallback;
 
 	char *(*func)(char *, size_t *, int) = (char *(*)(char *, size_t *, int)) usl->custom_ptr;
 	buffer = func(url + usl->len + 3, size, add_zero);
 	if (buffer) goto end;
 	// never here !!!
-	uwsgi_log("unable to parse config file %s\n", url);
+	upsgi_log("unable to parse config file %s\n", url);
 	exit(1);
 	
 	// fallback to file
 fallback:
 		fd = open(url, O_RDONLY);
 		if (fd < 0) {
-			uwsgi_error_open(url);
+			upsgi_error_open(url);
 			exit(1);
 		}
 
 		if (fstat(fd, &sb)) {
-			uwsgi_error("fstat()");
+			upsgi_error("fstat()");
 			exit(1);
 		}
 
 		if (S_ISFIFO(sb.st_mode)) {
-			buffer = uwsgi_read_fd(fd, size, add_zero);
+			buffer = upsgi_read_fd(fd, size, add_zero);
 			close(fd);
 			goto end;
 		}
@@ -548,7 +548,7 @@ fallback:
 			sb.st_size = 4096;
 		}
 
-		buffer = uwsgi_malloc(sb.st_size + add_zero);
+		buffer = upsgi_malloc(sb.st_size + add_zero);
 
 		len = read(fd, buffer, sb.st_size);
 		if (!is_virtual) {
@@ -560,7 +560,7 @@ fallback:
 				sb.st_size = len;
 			}
 			else {
-				uwsgi_error("read()");
+				upsgi_error("read()");
 				exit(1);
 			}
 		}
@@ -576,34 +576,34 @@ end:
 
 	if (magic_table) {
 		// here we inject blobs
-		struct uwsgi_string_list *usl = NULL;
-		if (uwsgi.inject_before || uwsgi.inject_after) {
-			struct uwsgi_buffer *ub = uwsgi_buffer_new(uwsgi.page_size);
-			uwsgi_foreach(usl, uwsgi.inject_before) {
+		struct upsgi_string_list *usl = NULL;
+		if (upsgi.inject_before || upsgi.inject_after) {
+			struct upsgi_buffer *ub = upsgi_buffer_new(upsgi.page_size);
+			upsgi_foreach(usl, upsgi.inject_before) {
 				size_t rlen = 0;
-				char *before = uwsgi_open_and_read(usl->value, &rlen, 0, NULL);
-				if (uwsgi_buffer_append(ub, before, rlen)) {
-					uwsgi_log("unable to inject data in the config file\n");
+				char *before = upsgi_open_and_read(usl->value, &rlen, 0, NULL);
+				if (upsgi_buffer_append(ub, before, rlen)) {
+					upsgi_log("unable to inject data in the config file\n");
 					exit(1);
 				}	
 				free(before);
 			}
-			if (uwsgi_buffer_append(ub, buffer, *size - add_zero)) {
-                        	uwsgi_log("unable to inject data in the config file\n");
+			if (upsgi_buffer_append(ub, buffer, *size - add_zero)) {
+                        	upsgi_log("unable to inject data in the config file\n");
                                 exit(1);
                         }
-			uwsgi_foreach(usl, uwsgi.inject_after) {
+			upsgi_foreach(usl, upsgi.inject_after) {
 				size_t rlen = 0;
-                                char *after = uwsgi_open_and_read(usl->value, &rlen, 0, NULL);
-                                if (uwsgi_buffer_append(ub, after, rlen)) {
-                                        uwsgi_log("unable to inject data in the config file\n");
+                                char *after = upsgi_open_and_read(usl->value, &rlen, 0, NULL);
+                                if (upsgi_buffer_append(ub, after, rlen)) {
+                                        upsgi_log("unable to inject data in the config file\n");
                                         exit(1);
                                 }       
                                 free(after);
 			}
 			if (add_zero) {
-				if (uwsgi_buffer_append(ub, "\0", 1)) {
-                                        uwsgi_log("unable to inject data in the config file\n");
+				if (upsgi_buffer_append(ub, "\0", 1)) {
+                                        upsgi_log("unable to inject data in the config file\n");
                                         exit(1);
                                 }
 			}
@@ -613,7 +613,7 @@ end:
 			buffer = ub->buf;
 			// aboid destroying buffer
 			ub->buf = NULL;
-			uwsgi_buffer_destroy(ub);
+			upsgi_buffer_destroy(ub);
 		}
 		magic_buf = magic_sub(buffer, *size, size, magic_table);
 		free(buffer);
@@ -624,7 +624,7 @@ end:
 }
 
 // attach an fd using UNIX sockets
-int *uwsgi_attach_fd(int fd, int *count_ptr, char *code, size_t code_len) {
+int *upsgi_attach_fd(int fd, int *count_ptr, char *code, size_t code_len) {
 
 	struct msghdr msg;
 	ssize_t len;
@@ -636,13 +636,13 @@ int *uwsgi_attach_fd(int fd, int *count_ptr, char *code, size_t code_len) {
 	int i;
 	int count = *count_ptr;
 
-	void *msg_control = uwsgi_malloc(CMSG_SPACE(sizeof(int) * count));
+	void *msg_control = upsgi_malloc(CMSG_SPACE(sizeof(int) * count));
 
 	memset(msg_control, 0, CMSG_SPACE(sizeof(int) * count));
 
 	if (code && code_len > 0) {
 		// allocate space for code and num_sockets
-		id = uwsgi_malloc(code_len + sizeof(int));
+		id = upsgi_malloc(code_len + sizeof(int));
 		memset(id, 0, code_len);
 		iov.iov_len = code_len + sizeof(int);
 	}
@@ -664,13 +664,13 @@ int *uwsgi_attach_fd(int fd, int *count_ptr, char *code, size_t code_len) {
 
 	len = recvmsg(fd, &msg, 0);
 	if (len <= 0) {
-		uwsgi_error("recvmsg()");
+		upsgi_error("recvmsg()");
 		free(msg_control);
 		return NULL;
 	}
 
 	if (code && code_len > 0) {
-		if (uwsgi_strncmp(id, code_len, code, code_len)) {
+		if (upsgi_strncmp(id, code_len, code, code_len)) {
 			free(msg_control);
 			return NULL;
 		}
@@ -698,12 +698,12 @@ int *uwsgi_attach_fd(int fd, int *count_ptr, char *code, size_t code_len) {
 	}
 
 	if ((size_t) (cmsg->cmsg_len - ((char *) CMSG_DATA(cmsg) - (char *) cmsg)) > (size_t) (sizeof(int) * (count + 1))) {
-		uwsgi_log("not enough space for sockets data, consider increasing it\n");
+		upsgi_log("not enough space for sockets data, consider increasing it\n");
 		free(msg_control);
 		return NULL;
 	}
 
-	ret = uwsgi_malloc(sizeof(int) * (count + 1));
+	ret = upsgi_malloc(sizeof(int) * (count + 1));
 	for (i = 0; i < count + 1; i++) {
 		ret[i] = -1;
 	}
@@ -719,35 +719,35 @@ int *uwsgi_attach_fd(int fd, int *count_ptr, char *code, size_t code_len) {
 }
 
 // signal free close
-void uwsgi_protected_close(int fd) {
+void upsgi_protected_close(int fd) {
 
 	sigset_t mask, oset;
 	sigfillset(&mask);
 	if (sigprocmask(SIG_BLOCK, &mask, &oset)) {
-		uwsgi_error("sigprocmask()");
+		upsgi_error("sigprocmask()");
 		exit(1);
 	}
 	close(fd);
 	if (sigprocmask(SIG_SETMASK, &oset, NULL)) {
-		uwsgi_error("sigprocmask()");
+		upsgi_error("sigprocmask()");
 		exit(1);
 	}
 }
 
 // signal free read
-ssize_t uwsgi_protected_read(int fd, void *buf, size_t len) {
+ssize_t upsgi_protected_read(int fd, void *buf, size_t len) {
 
 	sigset_t mask, oset;
 	sigfillset(&mask);
 	if (sigprocmask(SIG_BLOCK, &mask, &oset)) {
-		uwsgi_error("sigprocmask()");
+		upsgi_error("sigprocmask()");
 		exit(1);
 	}
 
 	ssize_t ret = read(fd, buf, len);
 
 	if (sigprocmask(SIG_SETMASK, &oset, NULL)) {
-		uwsgi_error("sigprocmask()");
+		upsgi_error("sigprocmask()");
 		exit(1);
 	}
 	return ret;
@@ -755,26 +755,26 @@ ssize_t uwsgi_protected_read(int fd, void *buf, size_t len) {
 
 
 // pipe datas from a fd to another (blocking)
-ssize_t uwsgi_pipe(int src, int dst, int timeout) {
+ssize_t upsgi_pipe(int src, int dst, int timeout) {
 	char buf[8192];
 	size_t written = -1;
 	ssize_t len;
 
 	for (;;) {
-		int ret = uwsgi_waitfd(src, timeout);
+		int ret = upsgi_waitfd(src, timeout);
 		if (ret > 0) {
 			len = read(src, buf, 8192);
 			if (len == 0) {
 				return written;
 			}
 			else if (len < 0) {
-				uwsgi_error("read()");
+				upsgi_error("read()");
 				return -1;
 			}
 
 			size_t remains = len;
 			while (remains > 0) {
-				int ret = uwsgi_waitfd_write(dst, timeout);
+				int ret = upsgi_waitfd_write(dst, timeout);
 				if (ret > 0) {
 					len = write(dst, buf, remains);
 					if (len > 0) {
@@ -785,7 +785,7 @@ ssize_t uwsgi_pipe(int src, int dst, int timeout) {
 						return written;
 					}
 					else {
-						uwsgi_error("write()");
+						upsgi_error("write()");
 						return -1;
 					}
 				}
@@ -807,17 +807,17 @@ ssize_t uwsgi_pipe(int src, int dst, int timeout) {
 
 	return written;
 timeout:
-	uwsgi_log("timeout while piping from %d to %d !!!\n", src, dst);
+	upsgi_log("timeout while piping from %d to %d !!!\n", src, dst);
 	return -1;
 }
 
 /*
 	even if it is marked as non-blocking, so not use in request plugins as it uses poll() and not the hooks
 */
-int uwsgi_write_nb(int fd, char *buf, size_t remains, int timeout) {
+int upsgi_write_nb(int fd, char *buf, size_t remains, int timeout) {
 	char *ptr = buf;
 	while(remains > 0) {
-		int ret = uwsgi_waitfd_write(fd, timeout);
+		int ret = upsgi_waitfd_write(fd, timeout);
 		if (ret > 0) {
 			ssize_t len = write(fd, ptr, remains);
 			if (len <= 0) {
@@ -834,9 +834,9 @@ int uwsgi_write_nb(int fd, char *buf, size_t remains, int timeout) {
 }
 
 /*
-	this is like uwsgi_write_nb() but with fast initial write and hooked wait (use it in request plugin)
+	this is like upsgi_write_nb() but with fast initial write and hooked wait (use it in request plugin)
 */
-int uwsgi_write_true_nb(int fd, char *buf, size_t remains, int timeout) {
+int upsgi_write_true_nb(int fd, char *buf, size_t remains, int timeout) {
         char *ptr = buf;
 	int ret;
 
@@ -846,11 +846,11 @@ int uwsgi_write_true_nb(int fd, char *buf, size_t remains, int timeout) {
 		if (len > 0) goto written;
 		if (len == 0) return -1;		
 		if (len < 0) {
-			if (uwsgi_is_again()) goto wait;
+			if (upsgi_is_again()) goto wait;
 			return -1;
 		}
 wait:
-                ret = uwsgi.wait_write_hook(fd, timeout);
+                ret = upsgi.wait_write_hook(fd, timeout);
                 if (ret > 0) {
 			len = write(fd, ptr, remains);
 			if (len > 0) goto written;
@@ -868,27 +868,27 @@ written:
 
 
 
-// like uwsgi_pipe but with fixed size
-ssize_t uwsgi_pipe_sized(int src, int dst, size_t required, int timeout) {
+// like upsgi_pipe but with fixed size
+ssize_t upsgi_pipe_sized(int src, int dst, size_t required, int timeout) {
 	char buf[8192];
 	size_t written = 0;
 	ssize_t len;
 
 	while (written < required) {
-		int ret = uwsgi_waitfd(src, timeout);
+		int ret = upsgi_waitfd(src, timeout);
 		if (ret > 0) {
 			len = read(src, buf, UMIN(8192, required - written));
 			if (len == 0) {
 				return written;
 			}
 			else if (len < 0) {
-				uwsgi_error("read()");
+				upsgi_error("read()");
 				return -1;
 			}
 
 			size_t remains = len;
 			while (remains > 0) {
-				int ret = uwsgi_waitfd_write(dst, timeout);
+				int ret = upsgi_waitfd_write(dst, timeout);
 				if (ret > 0) {
 					len = write(dst, buf, remains);
 					if (len > 0) {
@@ -899,7 +899,7 @@ ssize_t uwsgi_pipe_sized(int src, int dst, size_t required, int timeout) {
 						return written;
 					}
 					else {
-						uwsgi_error("write()");
+						upsgi_error("write()");
 						return -1;
 					}
 				}
@@ -921,13 +921,13 @@ ssize_t uwsgi_pipe_sized(int src, int dst, size_t required, int timeout) {
 
 	return written;
 timeout:
-	uwsgi_log("timeout while piping from %d to %d !!!\n", src, dst);
+	upsgi_log("timeout while piping from %d to %d !!!\n", src, dst);
 	return -1;
 }
 
 
 // check if an fd is valid
-int uwsgi_valid_fd(int fd) {
+int upsgi_valid_fd(int fd) {
 	int ret = fcntl(fd, F_GETFL);
 	if (ret == -1) {
 		return 0;
@@ -935,9 +935,9 @@ int uwsgi_valid_fd(int fd) {
 	return 1;
 }
 
-void uwsgi_close_all_fds(void) {
+void upsgi_close_all_fds(void) {
 	int i;
-	for (i = 3; i < (int) uwsgi.max_fd; i++) {
+	for (i = 3; i < (int) upsgi.max_fd; i++) {
 #ifdef __APPLE__
         	fcntl(i, F_SETFD, FD_CLOEXEC);
 #else
@@ -946,11 +946,11 @@ void uwsgi_close_all_fds(void) {
 	}
 }
 
-int uwsgi_read_uh(int fd, struct uwsgi_header *uh, int timeout) {
+int upsgi_read_uh(int fd, struct upsgi_header *uh, int timeout) {
 	char *ptr = (char *) uh;
 	size_t remains = 4;
 	while(remains > 0) {
-		int ret = uwsgi_waitfd(fd, timeout);
+		int ret = upsgi_waitfd(fd, timeout);
 		if (ret > 0) {
 			ssize_t len = read(fd, ptr, remains);
 			if (len <= 0) {
@@ -966,10 +966,10 @@ int uwsgi_read_uh(int fd, struct uwsgi_header *uh, int timeout) {
 	return 0;
 }
 
-int uwsgi_read_nb(int fd, char *buf, size_t remains, int timeout) {
+int upsgi_read_nb(int fd, char *buf, size_t remains, int timeout) {
 	char *ptr = buf;
         while(remains > 0) {
-                int ret = uwsgi_waitfd(fd, timeout);
+                int ret = upsgi_waitfd(fd, timeout);
                 if (ret > 0) {
                         ssize_t len = read(fd, ptr, remains);
                         if (len <= 0) {
@@ -986,9 +986,9 @@ int uwsgi_read_nb(int fd, char *buf, size_t remains, int timeout) {
 }
 
 /*
-        this is like uwsgi_read_nb() but with fast initial read and hooked wait (use it in request plugin)
+        this is like upsgi_read_nb() but with fast initial read and hooked wait (use it in request plugin)
 */
-ssize_t uwsgi_read_true_nb(int fd, char *buf, size_t len, int timeout) {
+ssize_t upsgi_read_true_nb(int fd, char *buf, size_t len, int timeout) {
         int ret;
 
 	errno = 0;
@@ -998,12 +998,12 @@ ssize_t uwsgi_read_true_nb(int fd, char *buf, size_t len, int timeout) {
 	}
         if (rlen == 0) return -1;
         if (rlen < 0) {
-        	if (uwsgi_is_again()) goto wait;
+        	if (upsgi_is_again()) goto wait;
         }
         return -1;
 wait:
 	errno = 0;
-        ret = uwsgi.wait_read_hook(fd, timeout);
+        ret = upsgi.wait_read_hook(fd, timeout);
         if (ret > 0) {
 		errno = 0;
         	rlen = read(fd, buf, len);
@@ -1020,10 +1020,10 @@ wait:
 	like the previous one but consume the whole len (if possible)
 */
 
-int uwsgi_read_whole_true_nb(int fd, char *buf, size_t remains, int timeout) {
+int upsgi_read_whole_true_nb(int fd, char *buf, size_t remains, int timeout) {
 	char *ptr = buf;
 	while(remains > 0) {
-		ssize_t len = uwsgi_read_true_nb(fd, ptr, remains, timeout);
+		ssize_t len = upsgi_read_true_nb(fd, ptr, remains, timeout);
 		if (len <= 0) return -1;
 		ptr += len;
 		remains -= len;
@@ -1032,12 +1032,12 @@ int uwsgi_read_whole_true_nb(int fd, char *buf, size_t remains, int timeout) {
 }
 
 /*
-	this is a pretty magic function used for reading a full uwsgi response
+	this is a pretty magic function used for reading a full upsgi response
 	it is true non blocking, so you can use it in request plugins
 	buffer is expected to be at least 4 bytes, rlen is a get/set value
 */
 
-int uwsgi_read_with_realloc(int fd, char **buffer, size_t *rlen, int timeout, uint8_t *modifier1, uint8_t *modifier2) {
+int upsgi_read_with_realloc(int fd, char **buffer, size_t *rlen, int timeout, uint8_t *modifier1, uint8_t *modifier2) {
 	if (*rlen < 4) return -1;
 	char *buf = *buffer;
 	int ret;
@@ -1050,11 +1050,11 @@ int uwsgi_read_with_realloc(int fd, char **buffer, size_t *rlen, int timeout, ui
                 if (len > 0) goto readok;
                 if (len == 0) return -1;
                 if (len < 0) {
-                        if (uwsgi_is_again()) goto wait;
+                        if (upsgi_is_again()) goto wait;
                         return -1;
                 }
 wait:
-                ret = uwsgi.wait_read_hook(fd, timeout);
+                ret = upsgi.wait_read_hook(fd, timeout);
                 if (ret > 0) {
                         len = read(fd, ptr, remains);
                         if (len > 0) goto readok;
@@ -1066,7 +1066,7 @@ readok:
                 continue;
         }
 
-	struct uwsgi_header *uh = (struct uwsgi_header *) buf;
+	struct upsgi_header *uh = (struct upsgi_header *) buf;
 	uint16_t pktsize = uh->_pktsize;
 	if (modifier1)
 		*modifier1 = uh->modifier1;
@@ -1076,7 +1076,7 @@ readok:
 	if (pktsize > *rlen) {
 		char *tmp_buf = realloc(buf, pktsize);
 		if (!tmp_buf) {
-			uwsgi_error("uwsgi_read_with_realloc()/realloc()");
+			upsgi_error("upsgi_read_with_realloc()/realloc()");
 			return -1;
 		}
 		*buffer = tmp_buf;
@@ -1092,11 +1092,11 @@ readok:
                 if (len > 0) goto readok2;
                 if (len == 0) return -1;
                 if (len < 0) {
-                        if (uwsgi_is_again()) goto wait2;
+                        if (upsgi_is_again()) goto wait2;
                         return -1;
                 }
 wait2:
-                ret = uwsgi.wait_read_hook(fd, timeout);
+                ret = upsgi.wait_read_hook(fd, timeout);
                 if (ret > 0) {
                         len = read(fd, ptr, remains);
                         if (len > 0) goto readok2;
@@ -1119,66 +1119,66 @@ readok2:
 
 */
 
-int uwsgi_proxy_nb(struct wsgi_request *wsgi_req, char *addr, struct uwsgi_buffer *ub, size_t remains, int timeout) {
+int upsgi_proxy_nb(struct wsgi_request *wsgi_req, char *addr, struct upsgi_buffer *ub, size_t remains, int timeout) {
 
-	struct uwsgi_buffer *headers = NULL;
+	struct upsgi_buffer *headers = NULL;
 
 	if (!ub) {
 		return -1;
 	}
 
-	int fd = uwsgi_connect(addr, 0, 1);
+	int fd = upsgi_connect(addr, 0, 1);
 	if (fd < 0) {
 		return -1;
 	}
 
-	int ret = uwsgi.wait_write_hook(fd, timeout);
+	int ret = upsgi.wait_write_hook(fd, timeout);
 	if (ret <= 0) {
 		goto end;
 	}
 
 	// send the request (+ remaining data)
-	if (uwsgi_write_true_nb(fd, ub->buf, ub->pos, timeout)) {
+	if (upsgi_write_true_nb(fd, ub->buf, ub->pos, timeout)) {
 		goto end;
 	}
 
 	// send the body
 	while(remains > 0) {
 		ssize_t rlen = 0;
-		char *buf = uwsgi_request_body_read(wsgi_req, 8192, &rlen);
+		char *buf = upsgi_request_body_read(wsgi_req, 8192, &rlen);
 		if (!buf) {
 			goto end;
 		}
-		if (buf == uwsgi.empty) break;
+		if (buf == upsgi.empty) break;
 		// write data to the node
-		if (uwsgi_write_true_nb(fd, buf, rlen, timeout)) {
+		if (upsgi_write_true_nb(fd, buf, rlen, timeout)) {
 			goto end;
 		}
 		remains -= rlen;
 	}
 
 	// read the response
-	headers = uwsgi_buffer_new(8192);
+	headers = upsgi_buffer_new(8192);
 	// max 64k headers
 	ub->limit = UMAX16;
 	for(;;) {
 		char buf[8192];
-		ssize_t rlen = uwsgi_read_true_nb(fd, buf, 8192, timeout);
+		ssize_t rlen = upsgi_read_true_nb(fd, buf, 8192, timeout);
 		if (rlen > 0) {
 			if (headers) {
-				if (uwsgi_buffer_append(headers, buf, rlen)) {
+				if (upsgi_buffer_append(headers, buf, rlen)) {
 					goto end;
 				}
 				// check if we have a full HTTP response
-				if (uwsgi_is_full_http(headers)) {
-					int ret = uwsgi_blob_to_response(wsgi_req, headers->buf, headers->pos);	
+				if (upsgi_is_full_http(headers)) {
+					int ret = upsgi_blob_to_response(wsgi_req, headers->buf, headers->pos);	
 					if (ret) continue;
-					uwsgi_buffer_destroy(headers);
+					upsgi_buffer_destroy(headers);
 					headers = NULL;
 				}
 			}
 			else {
-				if (uwsgi_response_write_body_do(wsgi_req, buf, rlen)) {
+				if (upsgi_response_write_body_do(wsgi_req, buf, rlen)) {
 					break;
 				}
 			}
@@ -1186,36 +1186,36 @@ int uwsgi_proxy_nb(struct wsgi_request *wsgi_req, char *addr, struct uwsgi_buffe
 		}
 		break;
 	}
-	if (headers) uwsgi_buffer_destroy(headers);
+	if (headers) upsgi_buffer_destroy(headers);
 
 	close(fd);
 	return 0;
 end:
-	if (headers) uwsgi_buffer_destroy(headers);
+	if (headers) upsgi_buffer_destroy(headers);
 	close(fd);
 	return -1;
 }
 
-void uwsgi_file_write_do(struct uwsgi_string_list *usl) {
+void upsgi_file_write_do(struct upsgi_string_list *usl) {
 
-	struct uwsgi_string_list *fl = usl;
+	struct upsgi_string_list *fl = usl;
 	while(fl) {
 		char *equal = strchr(fl->value, '=');
 		if (equal) {
 			*equal = 0;
 			FILE *f = fopen(fl->value, "w");
 			if (!f) {
-				uwsgi_error_open("uwsgi_file_write_do()");
+				upsgi_error_open("upsgi_file_write_do()");
 				exit(1);
 			}
-			uwsgi_log("writing \"%s\" to \"%s\" ...\n", equal+1, fl->value);
+			upsgi_log("writing \"%s\" to \"%s\" ...\n", equal+1, fl->value);
 			if (fprintf(f, "%s\n", equal+1) <= 0 || ferror(f) || fclose(f)) {
-				uwsgi_error("uwsgi_file_write_do()");
+				upsgi_error("upsgi_file_write_do()");
 				exit(1);
 			}
 		}
 		else {
-			uwsgi_log("unable to write empty value for \"%s\"\n", fl->value);
+			upsgi_log("unable to write empty value for \"%s\"\n", fl->value);
 			exit(1);
 		}
 		*equal = '=';	
@@ -1223,91 +1223,91 @@ void uwsgi_file_write_do(struct uwsgi_string_list *usl) {
 	}
 }
 
-int uwsgi_fd_is_safe(int fd) {
+int upsgi_fd_is_safe(int fd) {
 	int i;
-	for(i=0;i<uwsgi.safe_fds_cnt;i++) {
-		if (uwsgi.safe_fds[i] == fd) {
+	for(i=0;i<upsgi.safe_fds_cnt;i++) {
+		if (upsgi.safe_fds[i] == fd) {
 			return 1;
 		}
 	}
 	return 0;
 }
-void uwsgi_add_safe_fd(int fd) {
+void upsgi_add_safe_fd(int fd) {
 	// check if the fd is already safe
-	if (uwsgi_fd_is_safe(fd)) return;
+	if (upsgi_fd_is_safe(fd)) return;
 
-	size_t len = sizeof(int) * (uwsgi.safe_fds_cnt+1);
-	int *tmp = realloc(uwsgi.safe_fds, len);
+	size_t len = sizeof(int) * (upsgi.safe_fds_cnt+1);
+	int *tmp = realloc(upsgi.safe_fds, len);
 	if (!tmp) {
-		uwsgi_error("uwsgi_add_safe_fd()/realloc()");
+		upsgi_error("upsgi_add_safe_fd()/realloc()");
 		exit(1);
 	}
-	uwsgi.safe_fds = tmp;	
-	uwsgi.safe_fds[uwsgi.safe_fds_cnt] = fd;	
-	uwsgi.safe_fds_cnt++;
+	upsgi.safe_fds = tmp;	
+	upsgi.safe_fds[upsgi.safe_fds_cnt] = fd;	
+	upsgi.safe_fds_cnt++;
 }
 
-int uwsgi_is_again() {
+int upsgi_is_again() {
 	if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS) {
 		return 1;
 	}
 	return 0;
 }
 
-void uwsgi_disconnect(struct wsgi_request *wsgi_req) {
+void upsgi_disconnect(struct wsgi_request *wsgi_req) {
 	if (wsgi_req->socket) {
                 wsgi_req->socket->proto_close(wsgi_req);
         }
         wsgi_req->fd_closed = 1;
 }
 
-int uwsgi_ready_fd(struct wsgi_request *wsgi_req) {
+int upsgi_ready_fd(struct wsgi_request *wsgi_req) {
 	if (wsgi_req->async_ready_fd) return wsgi_req->async_last_ready_fd;
 	return -1;
 }
 
-void uwsgi_setup_schemes() {
-	uwsgi_register_scheme("emperor", uwsgi_scheme_emperor);	
-	uwsgi_register_scheme("http", uwsgi_scheme_http);	
-	uwsgi_register_scheme("data", uwsgi_scheme_data);	
-	uwsgi_register_scheme("sym", uwsgi_scheme_sym);	
-	uwsgi_register_scheme("section", uwsgi_scheme_section);	
-	uwsgi_register_scheme("fd", uwsgi_scheme_fd);	
-	uwsgi_register_scheme("exec", uwsgi_scheme_exec);	
-	uwsgi_register_scheme("call", uwsgi_scheme_call);	
-	uwsgi_register_scheme("callint", uwsgi_scheme_callint);	
+void upsgi_setup_schemes() {
+	upsgi_register_scheme("emperor", upsgi_scheme_emperor);	
+	upsgi_register_scheme("http", upsgi_scheme_http);	
+	upsgi_register_scheme("data", upsgi_scheme_data);	
+	upsgi_register_scheme("sym", upsgi_scheme_sym);	
+	upsgi_register_scheme("section", upsgi_scheme_section);	
+	upsgi_register_scheme("fd", upsgi_scheme_fd);	
+	upsgi_register_scheme("exec", upsgi_scheme_exec);	
+	upsgi_register_scheme("call", upsgi_scheme_call);	
+	upsgi_register_scheme("callint", upsgi_scheme_callint);	
 }
 
-struct uwsgi_string_list *uwsgi_check_scheme(char *file) {
-	struct uwsgi_string_list *usl;
-	uwsgi_foreach(usl, uwsgi.schemes) {
-		char *url = uwsgi_concat2(usl->value, "://");
-		int ret = uwsgi_startswith(file, url, strlen(url));
+struct upsgi_string_list *upsgi_check_scheme(char *file) {
+	struct upsgi_string_list *usl;
+	upsgi_foreach(usl, upsgi.schemes) {
+		char *url = upsgi_concat2(usl->value, "://");
+		int ret = upsgi_startswith(file, url, strlen(url));
 		free(url);
 		if (!ret) return usl;
 	}
 	return NULL;
 }
 
-void uwsgi_remap_fd(int fd, char *filename) {
+void upsgi_remap_fd(int fd, char *filename) {
 
 	int fdin = open(filename, O_RDWR);
         if (fdin < 0) {
-                uwsgi_error_open(filename);
+                upsgi_error_open(filename);
                 exit(1);
         }
 
         /* stdin */
         if (fdin != fd) {
                 if (dup2(fdin, fd) < 0) {
-                        uwsgi_error("uwsgi_remap_fd()/dup2()");
+                        upsgi_error("upsgi_remap_fd()/dup2()");
                         exit(1);
                 }
                 close(fdin);
         }
 }
 
-int uwsgi_is_connected(int fd) {
+int upsgi_is_connected(int fd) {
 	int soopt;
         socklen_t solen = sizeof(int);
 
@@ -1320,12 +1320,12 @@ int uwsgi_is_connected(int fd) {
 }
 
 
-int uwsgi_pass_cred(int fd, char *code, size_t code_len) {
+int upsgi_pass_cred(int fd, char *code, size_t code_len) {
 #ifdef SCM_CREDENTIALS
 	struct msghdr cr_msg;
         struct cmsghdr *cmsg;
         struct iovec cr_iov;
-        void *cr_msg_control = uwsgi_calloc(CMSG_SPACE(sizeof(struct ucred)));
+        void *cr_msg_control = upsgi_calloc(CMSG_SPACE(sizeof(struct ucred)));
 
         cr_iov.iov_base = code;
         cr_iov.iov_len = code_len;
@@ -1351,7 +1351,7 @@ int uwsgi_pass_cred(int fd, char *code, size_t code_len) {
 	u->gid = getgid();	
 
         if (sendmsg(fd, &cr_msg, 0) < 0) {
-                uwsgi_error("uwsgi_pass_cred()/sendmsg()");
+                upsgi_error("upsgi_pass_cred()/sendmsg()");
         	free(cr_msg_control);
 		return -1;
         }
@@ -1363,12 +1363,12 @@ int uwsgi_pass_cred(int fd, char *code, size_t code_len) {
 #endif
 }
 
-int uwsgi_pass_cred2(int fd, char *code, size_t code_len, struct sockaddr *addr, size_t addr_len) {
+int upsgi_pass_cred2(int fd, char *code, size_t code_len, struct sockaddr *addr, size_t addr_len) {
 #ifdef SCM_CREDENTIALS
         struct msghdr cr_msg;
         struct cmsghdr *cmsg;
         struct iovec cr_iov;
-        void *cr_msg_control = uwsgi_calloc(CMSG_SPACE(sizeof(struct ucred)));
+        void *cr_msg_control = upsgi_calloc(CMSG_SPACE(sizeof(struct ucred)));
 
         cr_iov.iov_base = code;
         cr_iov.iov_len = code_len;
@@ -1394,7 +1394,7 @@ int uwsgi_pass_cred2(int fd, char *code, size_t code_len, struct sockaddr *addr,
         u->gid = getgid();
 
         if (sendmsg(fd, &cr_msg, 0) < 0) {
-                uwsgi_error("uwsgi_pass_cred2()/sendmsg()");
+                upsgi_error("upsgi_pass_cred2()/sendmsg()");
                 free(cr_msg_control);
                 return -1;
         }
@@ -1407,14 +1407,14 @@ int uwsgi_pass_cred2(int fd, char *code, size_t code_len, struct sockaddr *addr,
 }
 
 
-int uwsgi_recv_cred(int fd, char *code, size_t code_len, pid_t *pid, uid_t *uid, gid_t *gid) {
+int upsgi_recv_cred(int fd, char *code, size_t code_len, pid_t *pid, uid_t *uid, gid_t *gid) {
 #ifdef SCM_CREDENTIALS
         struct iovec iov;
 	int ret = -1;
 
-        void *msg_control = uwsgi_calloc(CMSG_SPACE(sizeof(struct ucred)));
+        void *msg_control = upsgi_calloc(CMSG_SPACE(sizeof(struct ucred)));
 
-        iov.iov_base = uwsgi_malloc(code_len);
+        iov.iov_base = upsgi_malloc(code_len);
         iov.iov_len = code_len;
 
 	struct msghdr msg;
@@ -1431,7 +1431,7 @@ int uwsgi_recv_cred(int fd, char *code, size_t code_len, pid_t *pid, uid_t *uid,
 
         ssize_t len = recvmsg(fd, &msg, 0);
 	if (len <= 0) {
-		uwsgi_error("uwsgi_recv_cred()/recvmsg()");
+		upsgi_error("upsgi_recv_cred()/recvmsg()");
 		goto clear;
 	}
 
@@ -1442,7 +1442,7 @@ int uwsgi_recv_cred(int fd, char *code, size_t code_len, pid_t *pid, uid_t *uid,
 		goto clear;
         }
 
-	if (uwsgi_strncmp(code, code_len, iov.iov_base, iov.iov_len)) goto clear;
+	if (upsgi_strncmp(code, code_len, iov.iov_base, iov.iov_len)) goto clear;
 
 	struct ucred *u = (struct ucred *) CMSG_DATA(cmsg);
 	*pid = u->pid;
@@ -1459,12 +1459,12 @@ clear:
 #endif
 }
 
-ssize_t uwsgi_recv_cred2(int fd, char *buf, size_t buf_len, pid_t *pid, uid_t *uid, gid_t *gid) {
+ssize_t upsgi_recv_cred2(int fd, char *buf, size_t buf_len, pid_t *pid, uid_t *uid, gid_t *gid) {
 #ifdef SCM_CREDENTIALS
         struct iovec iov;
         ssize_t ret = -1;
 
-        void *msg_control = uwsgi_calloc(CMSG_SPACE(sizeof(struct ucred)));
+        void *msg_control = upsgi_calloc(CMSG_SPACE(sizeof(struct ucred)));
 
         iov.iov_base = buf;
         iov.iov_len = buf_len;
@@ -1483,7 +1483,7 @@ ssize_t uwsgi_recv_cred2(int fd, char *buf, size_t buf_len, pid_t *pid, uid_t *u
 
         ssize_t len = recvmsg(fd, &msg, 0);
         if (len <= 0) {
-                uwsgi_error("uwsgi_recv_cred2()/recvmsg()");
+                upsgi_error("upsgi_recv_cred2()/recvmsg()");
                 goto clear;
         }
 
@@ -1508,14 +1508,14 @@ clear:
 #endif
 }
 
-ssize_t uwsgi_recv_cred_and_fds(int fd, char *buf, size_t buf_len, pid_t *pid, uid_t *uid, gid_t *gid, int *fds, int *fds_count) {
+ssize_t upsgi_recv_cred_and_fds(int fd, char *buf, size_t buf_len, pid_t *pid, uid_t *uid, gid_t *gid, int *fds, int *fds_count) {
 #if defined(SCM_CREDENTIALS) && defined(SCM_RIGHTS)
         ssize_t ret = -1;
 
 	size_t msg_len = CMSG_SPACE(sizeof(struct ucred)) + CMSG_SPACE(sizeof(int) * (*fds_count));
 
 	// allocate space for credentials and file descriptors
-        void *msg_control = uwsgi_calloc(msg_len);
+        void *msg_control = upsgi_calloc(msg_len);
 
 	// read into buf
         struct iovec iov;
@@ -1537,7 +1537,7 @@ ssize_t uwsgi_recv_cred_and_fds(int fd, char *buf, size_t buf_len, pid_t *pid, u
 
         ssize_t len = recvmsg(fd, &msg, 0);
         if (len <= 0) {
-                uwsgi_error("uwsgi_recv_cred_and_fds()/recvmsg()");
+                upsgi_error("upsgi_recv_cred_and_fds()/recvmsg()");
                 goto clear;
         }
 
@@ -1573,12 +1573,12 @@ clear:
 }
 
 
-int uwsgi_send_fds_and_body(int fd, int *fds, int fds_count, char *body, size_t len) {
+int upsgi_send_fds_and_body(int fd, int *fds, int fds_count, char *body, size_t len) {
 
 	int ret = -1;
 
         struct msghdr msg;
-        void *msg_control = uwsgi_malloc(CMSG_SPACE(sizeof(int) * fds_count));
+        void *msg_control = upsgi_malloc(CMSG_SPACE(sizeof(int) * fds_count));
         struct iovec iov;
         struct cmsghdr *cmsg;
 
@@ -1606,7 +1606,7 @@ int uwsgi_send_fds_and_body(int fd, int *fds, int fds_count, char *body, size_t 
 
         ssize_t rlen = sendmsg(fd, &msg, 0);
 	if (rlen <= 0) {
-                uwsgi_error("uwsgi_send_fds_and_body()/sendmsg()");
+                upsgi_error("upsgi_send_fds_and_body()/sendmsg()");
 		goto end;	
         }
 	else {
@@ -1616,11 +1616,11 @@ int uwsgi_send_fds_and_body(int fd, int *fds, int fds_count, char *body, size_t 
 			ssize_t wlen = write(fd, buf, remains);
 			if (wlen == 0) goto end;
 			if (wlen < 0) {
-				if (uwsgi_is_again()) {
+				if (upsgi_is_again()) {
 					// wait for write
 					continue;
 				}
-				uwsgi_error("uwsgi_send_fds_and_body()/write()");
+				upsgi_error("upsgi_send_fds_and_body()/write()");
 				goto end;
 			}
 			rlen += wlen;

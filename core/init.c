@@ -1,6 +1,6 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 struct http_status_codes {
         const char      key[4];
@@ -68,113 +68,113 @@ struct http_status_codes hsc[] = {
 
 
 
-void uwsgi_init_default() {
+void upsgi_init_default() {
 
-	uwsgi.cpus = 1;
-	uwsgi.new_argc = -1;
-	uwsgi.binary_argc = 1;
+	upsgi.cpus = 1;
+	upsgi.new_argc = -1;
+	upsgi.binary_argc = 1;
 
-	uwsgi.backtrace_depth = 64;
-	uwsgi.max_apps = 64;
+	upsgi.backtrace_depth = 64;
+	upsgi.max_apps = 64;
 
-	uwsgi.master_queue = -1;
+	upsgi.master_queue = -1;
 
-	uwsgi.signal_socket = -1;
-	uwsgi.my_signal_socket = -1;
-	uwsgi.stats_fd = -1;
+	upsgi.signal_socket = -1;
+	upsgi.my_signal_socket = -1;
+	upsgi.stats_fd = -1;
 
-	uwsgi.stats_pusher_default_freq = 3;
+	upsgi.stats_pusher_default_freq = 3;
 
-	uwsgi.original_log_fd = 2;
+	upsgi.original_log_fd = 2;
 
-	uwsgi.emperor_fd_config = -1;
-	uwsgi.emperor_fd_proxy = -1;
+	upsgi.emperor_fd_config = -1;
+	upsgi.emperor_fd_proxy = -1;
 	// default emperor scan frequency
-	uwsgi.emperor_freq = 3;
-	uwsgi.emperor_throttle = 1000;
-	uwsgi.emperor_heartbeat = 30;
-	uwsgi.emperor_curse_tolerance = 30;
+	upsgi.emperor_freq = 3;
+	upsgi.emperor_throttle = 1000;
+	upsgi.emperor_heartbeat = 30;
+	upsgi.emperor_curse_tolerance = 30;
 	// max 3 minutes throttling
-	uwsgi.emperor_max_throttle = 1000 * 180;
-	uwsgi.emperor_pid = -1;
+	upsgi.emperor_max_throttle = 1000 * 180;
+	upsgi.emperor_pid = -1;
 
-	uwsgi.subscribe_freq = 10;
-	uwsgi.subscription_tolerance = 17;
-	uwsgi.subscription_tolerance_inactive = 17;
+	upsgi.subscribe_freq = 10;
+	upsgi.subscription_tolerance = 17;
+	upsgi.subscription_tolerance_inactive = 17;
 
-	uwsgi.cores = 1;
-	uwsgi.threads = 1;
+	upsgi.cores = 1;
+	upsgi.threads = 1;
 
-	uwsgi.need_app = 1;
+	upsgi.need_app = 1;
 
 	// default max number of rpc slot
-	uwsgi.rpc_max = 64;
+	upsgi.rpc_max = 64;
 
-	uwsgi.offload_threads_events = 64;
+	upsgi.offload_threads_events = 64;
 
-	uwsgi.default_app = -1;
+	upsgi.default_app = -1;
 
-	uwsgi.buffer_size = 4096;
-	uwsgi.body_read_warning = 8;
-	uwsgi.numproc = 1;
+	upsgi.buffer_size = 4096;
+	upsgi.body_read_warning = 8;
+	upsgi.numproc = 1;
 
-	uwsgi.forkbomb_delay = 2;
+	upsgi.forkbomb_delay = 2;
 
-	uwsgi.async = 0;
-	uwsgi.async_warn_if_queue_full = 1;
-	uwsgi.listen_queue = 100;
+	upsgi.async = 0;
+	upsgi.async_warn_if_queue_full = 1;
+	upsgi.listen_queue = 100;
 
-	uwsgi.cheaper_overload = 3;
-	uwsgi.cheaper_idle = 10;
+	upsgi.cheaper_overload = 3;
+	upsgi.cheaper_idle = 10;
 
-	uwsgi.log_master_bufsize = 8192;
-	uwsgi.log_drain_burst = 8;
+	upsgi.log_master_bufsize = 8192;
+	upsgi.log_drain_burst = 8;
 
-	uwsgi.worker_reload_mercy = 60;
-	uwsgi.mule_reload_mercy = 60;
+	upsgi.worker_reload_mercy = 60;
+	upsgi.mule_reload_mercy = 60;
 
-	uwsgi.max_vars = MAX_VARS;
-	uwsgi.vec_size = 4 + 1 + (4 * MAX_VARS);
+	upsgi.max_vars = MAX_VARS;
+	upsgi.vec_size = 4 + 1 + (4 * MAX_VARS);
 
-	uwsgi.socket_timeout = 4;
-	uwsgi.logging_options.enabled = 1;
+	upsgi.socket_timeout = 4;
+	upsgi.logging_options.enabled = 1;
 
 	// a workers hould be running for at least 10 seconds
-	uwsgi.min_worker_lifetime = 10;
+	upsgi.min_worker_lifetime = 10;
 
-	uwsgi.spooler_frequency = 30;
+	upsgi.spooler_frequency = 30;
 
-	uwsgi.shared->spooler_signal_pipe[0] = -1;
-	uwsgi.shared->spooler_signal_pipe[1] = -1;
+	upsgi.shared->spooler_signal_pipe[0] = -1;
+	upsgi.shared->spooler_signal_pipe[1] = -1;
 
-	uwsgi.shared->mule_signal_pipe[0] = -1;
-	uwsgi.shared->mule_signal_pipe[1] = -1;
+	upsgi.shared->mule_signal_pipe[0] = -1;
+	upsgi.shared->mule_signal_pipe[1] = -1;
 
-	uwsgi.shared->mule_queue_pipe[0] = -1;
-	uwsgi.shared->mule_queue_pipe[1] = -1;
+	upsgi.shared->mule_queue_pipe[0] = -1;
+	upsgi.shared->mule_queue_pipe[1] = -1;
 
-	uwsgi.shared->worker_log_pipe[0] = -1;
-	uwsgi.shared->worker_log_pipe[1] = -1;
+	upsgi.shared->worker_log_pipe[0] = -1;
+	upsgi.shared->worker_log_pipe[1] = -1;
 
-	uwsgi.shared->worker_req_log_pipe[0] = -1;
-	uwsgi.shared->worker_req_log_pipe[1] = -1;
+	upsgi.shared->worker_req_log_pipe[0] = -1;
+	upsgi.shared->worker_req_log_pipe[1] = -1;
 
-	uwsgi.req_log_fd = 2;
+	upsgi.req_log_fd = 2;
 
-#ifdef UWSGI_SSL
+#ifdef UPSGI_SSL
 	// 1 day of tolerance
-	uwsgi.subscriptions_sign_check_tolerance = 3600 * 24;
-	uwsgi.ssl_sessions_timeout = 300;
-	uwsgi.ssl_verify_depth = 1;
+	upsgi.subscriptions_sign_check_tolerance = 3600 * 24;
+	upsgi.ssl_sessions_timeout = 300;
+	upsgi.ssl_verify_depth = 1;
 #endif
 
-	uwsgi.alarm_freq = 3;
-	uwsgi.alarm_msg_size = 8192;
+	upsgi.alarm_freq = 3;
+	upsgi.alarm_msg_size = 8192;
 
-	uwsgi.exception_handler_msg_size = 65536;
+	upsgi.exception_handler_msg_size = 65536;
 
-	uwsgi.multicast_ttl = 1;
-	uwsgi.multicast_loop = 1;
+	upsgi.multicast_ttl = 1;
+	upsgi.multicast_loop = 1;
 
 	// filling http status codes
 	struct http_status_codes *http_sc;
@@ -182,119 +182,119 @@ void uwsgi_init_default() {
                 http_sc->message_size = strlen(http_sc->message);
         }
 
-	uwsgi.empty = "";
+	upsgi.empty = "";
 
 #ifdef __linux__
-	uwsgi.cgroup_dir_mode = "0700";
+	upsgi.cgroup_dir_mode = "0700";
 #endif
 
-	uwsgi.wait_read_hook = uwsgi_simple_wait_read_hook;
-	uwsgi.wait_write_hook = uwsgi_simple_wait_write_hook;
-	uwsgi.wait_milliseconds_hook = uwsgi_simple_wait_milliseconds_hook;
-	uwsgi.wait_read2_hook = uwsgi_simple_wait_read2_hook;
+	upsgi.wait_read_hook = upsgi_simple_wait_read_hook;
+	upsgi.wait_write_hook = upsgi_simple_wait_write_hook;
+	upsgi.wait_milliseconds_hook = upsgi_simple_wait_milliseconds_hook;
+	upsgi.wait_read2_hook = upsgi_simple_wait_read2_hook;
 
-	uwsgi_websockets_init();
+	upsgi_websockets_init();
 	
 	// 1 MB default limit
-	uwsgi.chunked_input_limit = 1024*1024;
+	upsgi.chunked_input_limit = 1024*1024;
 
 	// clear reforked status
-	uwsgi.master_is_reforked = 0;
+	upsgi.master_is_reforked = 0;
 
-	uwsgi.master_fifo_fd = -1;
-	uwsgi_master_fifo_prepare();
+	upsgi.master_fifo_fd = -1;
+	upsgi_master_fifo_prepare();
 
-	uwsgi.notify_socket_fd = -1;
+	upsgi.notify_socket_fd = -1;
 
-	uwsgi.mule_msg_recv_size = 65536;
+	upsgi.mule_msg_recv_size = 65536;
 
-	uwsgi.harakiri_graceful_signal = SIGTERM;
+	upsgi.harakiri_graceful_signal = SIGTERM;
 }
 
-void uwsgi_setup_reload() {
+void upsgi_setup_reload() {
 
 	char env_reload_buf[11];
 
-	char *env_reloads = getenv("UWSGI_RELOADS");
+	char *env_reloads = getenv("UPSGI_RELOADS");
 	if (env_reloads) {
 		//convert env value to int
-		uwsgi.reloads = atoi(env_reloads);
-		uwsgi.reloads++;
+		upsgi.reloads = atoi(env_reloads);
+		upsgi.reloads++;
 		//convert reloads to string
-		int rlen = snprintf(env_reload_buf, 10, "%u", uwsgi.reloads);
+		int rlen = snprintf(env_reload_buf, 10, "%u", upsgi.reloads);
 		if (rlen > 0 && rlen < 10) {
 			env_reload_buf[rlen] = 0;
-			if (setenv("UWSGI_RELOADS", env_reload_buf, 1)) {
-				uwsgi_error("setenv()");
+			if (setenv("UPSGI_RELOADS", env_reload_buf, 1)) {
+				upsgi_error("setenv()");
 			}
 		}
-		uwsgi.is_a_reload = 1;
+		upsgi.is_a_reload = 1;
 	}
 	else {
-		if (setenv("UWSGI_RELOADS", "0", 1)) {
-			uwsgi_error("setenv()");
+		if (setenv("UPSGI_RELOADS", "0", 1)) {
+			upsgi_error("setenv()");
 		}
 	}
 
 }
 
-void uwsgi_autoload_plugins_by_name(char *argv_zero) {
+void upsgi_autoload_plugins_by_name(char *argv_zero) {
 
 	char *plugins_requested = NULL;
 
-	char *original_proc_name = getenv("UWSGI_ORIGINAL_PROC_NAME");
+	char *original_proc_name = getenv("UPSGI_ORIGINAL_PROC_NAME");
 	if (!original_proc_name) {
 		// here we use argv[0];
 		original_proc_name = argv_zero;
-		setenv("UWSGI_ORIGINAL_PROC_NAME", original_proc_name, 1);
+		setenv("UPSGI_ORIGINAL_PROC_NAME", original_proc_name, 1);
 	}
 	char *p = strrchr(original_proc_name, '/');
 	if (p == NULL)
 		p = original_proc_name;
-	p = strstr(p, "uwsgi_");
+	p = strstr(p, "upsgi_");
 	if (p != NULL) {
 		char *ctx = NULL;
-		uwsgi_foreach_token(uwsgi_str(p + 6), "_", plugins_requested, ctx) {
-			uwsgi_log("[uwsgi] implicit plugin requested %s\n", plugins_requested);
-			uwsgi_load_plugin(-1, plugins_requested, NULL);
+		upsgi_foreach_token(upsgi_str(p + 6), "_", plugins_requested, ctx) {
+			upsgi_log("[upsgi] implicit plugin requested %s\n", plugins_requested);
+			upsgi_load_plugin(-1, plugins_requested, NULL);
 		}
 	}
 
-	plugins_requested = getenv("UWSGI_PLUGINS");
+	plugins_requested = getenv("UPSGI_PLUGINS");
 	if (plugins_requested) {
-		plugins_requested = uwsgi_concat2(plugins_requested, "");
+		plugins_requested = upsgi_concat2(plugins_requested, "");
 		char *p, *ctx = NULL;
-		uwsgi_foreach_token(plugins_requested, ",", p, ctx) {
-			uwsgi_load_plugin(-1, p, NULL);
+		upsgi_foreach_token(plugins_requested, ",", p, ctx) {
+			upsgi_load_plugin(-1, p, NULL);
 		}
 	}
 
 }
 
-void uwsgi_commandline_config() {
+void upsgi_commandline_config() {
 	int i;
 
-	uwsgi.option_index = -1;
+	upsgi.option_index = -1;
 	// required in case we want to call getopt_long from the beginning
 	optind = 0;
 
-	int argc = uwsgi.argc;
-	char **argv = uwsgi.argv;
+	int argc = upsgi.argc;
+	char **argv = upsgi.argv;
 
 	// we might want to ignore some arguments not meant for us
 	char binary_argv0_pretty[256] = {'\0'};
 	char *binary_argv0_actual = NULL;
 
-	if (uwsgi.new_argc > -1 && uwsgi.new_argv) {
-		argc = uwsgi.new_argc;
-		argv = uwsgi.new_argv;
+	if (upsgi.new_argc > -1 && upsgi.new_argv) {
+		argc = upsgi.new_argc;
+		argv = upsgi.new_argv;
 	}
 
-	if (uwsgi.binary_argc > 1 && argc >= uwsgi.binary_argc) {
+	if (upsgi.binary_argc > 1 && argc >= upsgi.binary_argc) {
 		char *pretty = (char *)binary_argv0_pretty;
 		strncat(pretty, argv[0], 255);
 
-		for (i = 1; i < uwsgi.binary_argc; i++) {
+		for (i = 1; i < upsgi.binary_argc; i++) {
 			if (strlen(pretty) + 1 + strlen(argv[i]) + 1 > 256)
 				break;
 
@@ -302,53 +302,53 @@ void uwsgi_commandline_config() {
 			strcat(pretty, argv[i]);
 		}
 
-		argc -= uwsgi.binary_argc - 1;
-		argv += uwsgi.binary_argc - 1;
+		argc -= upsgi.binary_argc - 1;
+		argv += upsgi.binary_argc - 1;
 
 		binary_argv0_actual = argv[0];
 		argv[0] = (char *)binary_argv0_pretty;
 	}
 
 	char *optname;
-	while ((i = getopt_long(argc, argv, uwsgi.short_options, uwsgi.long_options, &uwsgi.option_index)) != -1) {
+	while ((i = getopt_long(argc, argv, upsgi.short_options, upsgi.long_options, &upsgi.option_index)) != -1) {
 
 		if (i == '?') {
-			uwsgi_log("getopt_long() error\n");
+			upsgi_log("getopt_long() error\n");
 			exit(1);
 		}
 
-		if (uwsgi.option_index > -1) {
-			optname = (char *) uwsgi.long_options[uwsgi.option_index].name;
+		if (upsgi.option_index > -1) {
+			optname = (char *) upsgi.long_options[upsgi.option_index].name;
 		}
 		else {
-			optname = uwsgi_get_optname_by_index(i);
+			optname = upsgi_get_optname_by_index(i);
 		}
 		if (!optname) {
-			uwsgi_log("unable to parse command line options\n");
+			upsgi_log("unable to parse command line options\n");
 			exit(1);
 		}
-		uwsgi.option_index = -1;
+		upsgi.option_index = -1;
 		add_exported_option(optname, optarg, 0);
 	}
 
 	if (binary_argv0_actual != NULL)
 		argv[0] = binary_argv0_actual;
 
-#ifdef UWSGI_DEBUG
-	uwsgi_log("optind:%d argc:%d\n", optind, uwsgi.argc);
+#ifdef UPSGI_DEBUG
+	upsgi_log("optind:%d argc:%d\n", optind, upsgi.argc);
 #endif
 
 	if (optind < argc) {
 		for (i = optind; i < argc; i++) {
 			char *lazy = argv[i];
 			if (lazy[0] != '[') {
-				uwsgi_opt_load(NULL, lazy, NULL);
+				upsgi_opt_load(NULL, lazy, NULL);
 				// manage magic mountpoint
 				int magic = 0;
 				int j;
-				for (j = 0; j < uwsgi.gp_cnt; j++) {
-					if (uwsgi.gp[j]->magic) {
-						if (uwsgi.gp[j]->magic(NULL, lazy)) {
+				for (j = 0; j < upsgi.gp_cnt; j++) {
+					if (upsgi.gp[j]->magic) {
+						if (upsgi.gp[j]->magic(NULL, lazy)) {
 							magic = 1;
 							break;
 						}
@@ -356,8 +356,8 @@ void uwsgi_commandline_config() {
 				}
 				if (!magic) {
 					for (j = 0; j < 256; j++) {
-						if (uwsgi.p[j]->magic) {
-							if (uwsgi.p[j]->magic(NULL, lazy)) {
+						if (upsgi.p[j]->magic) {
+							if (upsgi.p[j]->magic(NULL, lazy)) {
 								magic = 1;
 								break;
 							}
@@ -370,179 +370,179 @@ void uwsgi_commandline_config() {
 
 }
 
-void uwsgi_setup_workers() {
+void upsgi_setup_workers() {
 	int i, j;
 	// allocate shared memory for workers + master
-	uwsgi.workers = (struct uwsgi_worker *) uwsgi_calloc_shared(sizeof(struct uwsgi_worker) * (uwsgi.numproc + 1));
+	upsgi.workers = (struct upsgi_worker *) upsgi_calloc_shared(sizeof(struct upsgi_worker) * (upsgi.numproc + 1));
 
-	for (i = 0; i <= uwsgi.numproc; i++) {
+	for (i = 0; i <= upsgi.numproc; i++) {
 		// allocate memory for apps
-		uwsgi.workers[i].apps = (struct uwsgi_app *) uwsgi_calloc_shared(sizeof(struct uwsgi_app) * uwsgi.max_apps);
+		upsgi.workers[i].apps = (struct upsgi_app *) upsgi_calloc_shared(sizeof(struct upsgi_app) * upsgi.max_apps);
 
 		// allocate memory for cores
-		uwsgi.workers[i].cores = (struct uwsgi_core *) uwsgi_calloc_shared(sizeof(struct uwsgi_core) * uwsgi.cores);
+		upsgi.workers[i].cores = (struct upsgi_core *) upsgi_calloc_shared(sizeof(struct upsgi_core) * upsgi.cores);
 
 		// this is a trick for avoiding too much memory areas
-		void *ts = uwsgi_calloc_shared(sizeof(void *) * uwsgi.max_apps * uwsgi.cores);
-		// add 4 bytes for uwsgi header
-		void *buffers = uwsgi_malloc_shared((uwsgi.buffer_size+4) * uwsgi.cores);
-		void *hvec = uwsgi_malloc_shared(sizeof(struct iovec) * uwsgi.vec_size * uwsgi.cores);
+		void *ts = upsgi_calloc_shared(sizeof(void *) * upsgi.max_apps * upsgi.cores);
+		// add 4 bytes for upsgi header
+		void *buffers = upsgi_malloc_shared((upsgi.buffer_size+4) * upsgi.cores);
+		void *hvec = upsgi_malloc_shared(sizeof(struct iovec) * upsgi.vec_size * upsgi.cores);
 		void *post_buf = NULL;
-		if (uwsgi.post_buffering > 0)
-			post_buf = uwsgi_malloc_shared(uwsgi.post_buffering_bufsize * uwsgi.cores);
+		if (upsgi.post_buffering > 0)
+			post_buf = upsgi_malloc_shared(upsgi.post_buffering_bufsize * upsgi.cores);
 
 
-		for (j = 0; j < uwsgi.cores; j++) {
+		for (j = 0; j < upsgi.cores; j++) {
 			// allocate shared memory for thread states (required for some language, like python)
-			uwsgi.workers[i].cores[j].ts = ts + ((sizeof(void *) * uwsgi.max_apps) * j);
-			// raw per-request buffer (+4 bytes for uwsgi header)
-			uwsgi.workers[i].cores[j].buffer = buffers + ((uwsgi.buffer_size+4) * j);
-			// iovec for uwsgi vars
-			uwsgi.workers[i].cores[j].hvec = hvec + ((sizeof(struct iovec) * uwsgi.vec_size) * j);
+			upsgi.workers[i].cores[j].ts = ts + ((sizeof(void *) * upsgi.max_apps) * j);
+			// raw per-request buffer (+4 bytes for upsgi header)
+			upsgi.workers[i].cores[j].buffer = buffers + ((upsgi.buffer_size+4) * j);
+			// iovec for upsgi vars
+			upsgi.workers[i].cores[j].hvec = hvec + ((sizeof(struct iovec) * upsgi.vec_size) * j);
 			if (post_buf)
-				uwsgi.workers[i].cores[j].post_buf = post_buf + (uwsgi.post_buffering_bufsize * j);
+				upsgi.workers[i].cores[j].post_buf = post_buf + (upsgi.post_buffering_bufsize * j);
 		}
 
 		// master does not need to following steps...
 		if (i == 0)
 			continue;
-		uwsgi.workers[i].signal_pipe[0] = -1;
-		uwsgi.workers[i].signal_pipe[1] = -1;
-		snprintf(uwsgi.workers[i].name, 0xff, "uWSGI worker %d", i);
+		upsgi.workers[i].signal_pipe[0] = -1;
+		upsgi.workers[i].signal_pipe[1] = -1;
+		snprintf(upsgi.workers[i].name, 0xff, "upsgi worker %d", i);
 	}
 
-	uint64_t total_memory = (sizeof(struct uwsgi_app) * uwsgi.max_apps) + (sizeof(struct uwsgi_core) * uwsgi.cores) + (sizeof(void *) * uwsgi.max_apps * uwsgi.cores) + (uwsgi.buffer_size * uwsgi.cores) + (sizeof(struct iovec) * uwsgi.vec_size * uwsgi.cores);
-	if (uwsgi.post_buffering > 0) {
-		total_memory += (uwsgi.post_buffering_bufsize * uwsgi.cores);
+	uint64_t total_memory = (sizeof(struct upsgi_app) * upsgi.max_apps) + (sizeof(struct upsgi_core) * upsgi.cores) + (sizeof(void *) * upsgi.max_apps * upsgi.cores) + (upsgi.buffer_size * upsgi.cores) + (sizeof(struct iovec) * upsgi.vec_size * upsgi.cores);
+	if (upsgi.post_buffering > 0) {
+		total_memory += (upsgi.post_buffering_bufsize * upsgi.cores);
 	}
 
-	total_memory *= (uwsgi.numproc + uwsgi.master_process);
-	if (uwsgi.numproc > 0)
-		uwsgi_log("mapped %llu bytes (%llu KB) for %d cores\n", (unsigned long long) total_memory, (unsigned long long) (total_memory / 1024), uwsgi.cores * uwsgi.numproc);
+	total_memory *= (upsgi.numproc + upsgi.master_process);
+	if (upsgi.numproc > 0)
+		upsgi_log("mapped %llu bytes (%llu KB) for %d cores\n", (unsigned long long) total_memory, (unsigned long long) (total_memory / 1024), upsgi.cores * upsgi.numproc);
 
 	// allocate signal table
-        uwsgi.shared->signal_table = uwsgi_calloc_shared(sizeof(struct uwsgi_signal_entry) * 256 * (uwsgi.numproc + 1));
+        upsgi.shared->signal_table = upsgi_calloc_shared(sizeof(struct upsgi_signal_entry) * 256 * (upsgi.numproc + 1));
 
-#ifdef UWSGI_ROUTING
-	uwsgi_fixup_routes(uwsgi.routes);
-	uwsgi_fixup_routes(uwsgi.error_routes);
-	uwsgi_fixup_routes(uwsgi.response_routes);
-	uwsgi_fixup_routes(uwsgi.final_routes);
+#ifdef UPSGI_ROUTING
+	upsgi_fixup_routes(upsgi.routes);
+	upsgi_fixup_routes(upsgi.error_routes);
+	upsgi_fixup_routes(upsgi.response_routes);
+	upsgi_fixup_routes(upsgi.final_routes);
 #endif
 
 }
 
-pid_t uwsgi_daemonize2() {
-	if (uwsgi.has_emperor) {
-		logto(uwsgi.daemonize2);
+pid_t upsgi_daemonize2() {
+	if (upsgi.has_emperor) {
+		logto(upsgi.daemonize2);
 	}
 	else {
-		if (!uwsgi.is_a_reload) {
-			uwsgi_log("*** daemonizing uWSGI ***\n");
-			daemonize(uwsgi.daemonize2);
+		if (!upsgi.is_a_reload) {
+			upsgi_log("*** daemonizing upsgi ***\n");
+			daemonize(upsgi.daemonize2);
 		}
-		else if (uwsgi.log_reopen) {
-			logto(uwsgi.daemonize2);
+		else if (upsgi.log_reopen) {
+			logto(upsgi.daemonize2);
 		}
 	}
-	uwsgi.mypid = getpid();
+	upsgi.mypid = getpid();
 
-	uwsgi.workers[0].pid = uwsgi.mypid;
+	upsgi.workers[0].pid = upsgi.mypid;
 
-	if (uwsgi.pidfile && !uwsgi.is_a_reload) {
-		uwsgi_write_pidfile(uwsgi.pidfile);
+	if (upsgi.pidfile && !upsgi.is_a_reload) {
+		upsgi_write_pidfile(upsgi.pidfile);
 	}
 
-	if (uwsgi.pidfile2 && !uwsgi.is_a_reload) {
-		uwsgi_write_pidfile(uwsgi.pidfile2);
+	if (upsgi.pidfile2 && !upsgi.is_a_reload) {
+		upsgi_write_pidfile(upsgi.pidfile2);
 	}
 
-	if (uwsgi.log_master) 
-		uwsgi_setup_log_master();
+	if (upsgi.log_master) 
+		upsgi_setup_log_master();
 
-	return uwsgi.mypid;
+	return upsgi.mypid;
 }
 
 // fix/check related options
 void sanitize_args() {
 
-        if (uwsgi.async > 0) {
-                uwsgi.cores = uwsgi.async;
+        if (upsgi.async > 0) {
+                upsgi.cores = upsgi.async;
         }
 
-        uwsgi.has_threads = 1;
-        if (uwsgi.threads > 1) {
-                uwsgi.cores = uwsgi.threads;
+        upsgi.has_threads = 1;
+        if (upsgi.threads > 1) {
+                upsgi.cores = upsgi.threads;
         }
 
-        if (uwsgi.harakiri_options.workers > 0) {
-                if (!uwsgi.post_buffering) {
-                        uwsgi_log(" *** WARNING: you have enabled harakiri without post buffering. Slow upload could be rejected on post-unbuffered webservers *** \n");
+        if (upsgi.harakiri_options.workers > 0) {
+                if (!upsgi.post_buffering) {
+                        upsgi_log(" *** WARNING: you have enabled harakiri without post buffering. Slow upload could be rejected on post-unbuffered webservers *** \n");
                 }
         }
 
-        if (uwsgi.write_errors_exception_only) {
-                uwsgi.ignore_sigpipe = 1;
-                uwsgi.ignore_write_errors = 1;
+        if (upsgi.write_errors_exception_only) {
+                upsgi.ignore_sigpipe = 1;
+                upsgi.ignore_write_errors = 1;
         }
 
-        if (uwsgi.cheaper_count == 0) uwsgi.cheaper = 0;
+        if (upsgi.cheaper_count == 0) upsgi.cheaper = 0;
 
-        if (uwsgi.cheaper_count > 0 && uwsgi.cheaper_count >= uwsgi.numproc) {
-                uwsgi_log("invalid cheaper value: must be lower than processes\n");
+        if (upsgi.cheaper_count > 0 && upsgi.cheaper_count >= upsgi.numproc) {
+                upsgi_log("invalid cheaper value: must be lower than processes\n");
                 exit(1);
         }
 
-        if (uwsgi.cheaper && uwsgi.cheaper_count) {
-		if (uwsgi.cheaper_initial) {
-                	if (uwsgi.cheaper_initial < uwsgi.cheaper_count) {
-                        	uwsgi_log("warning: invalid cheaper-initial value (%d), must be equal or higher than cheaper (%d), using %d as initial number of workers\n",
-                                	uwsgi.cheaper_initial, uwsgi.cheaper_count, uwsgi.cheaper_count);
-                        	uwsgi.cheaper_initial = uwsgi.cheaper_count;
+        if (upsgi.cheaper && upsgi.cheaper_count) {
+		if (upsgi.cheaper_initial) {
+                	if (upsgi.cheaper_initial < upsgi.cheaper_count) {
+                        	upsgi_log("warning: invalid cheaper-initial value (%d), must be equal or higher than cheaper (%d), using %d as initial number of workers\n",
+                                	upsgi.cheaper_initial, upsgi.cheaper_count, upsgi.cheaper_count);
+                        	upsgi.cheaper_initial = upsgi.cheaper_count;
                 	}
-                	else if (uwsgi.cheaper_initial > uwsgi.numproc) {
-                        	uwsgi_log("warning: invalid cheaper-initial value (%d), must be lower or equal than worker count (%d), using %d as initial number of workers\n",
-                                	uwsgi.cheaper_initial, uwsgi.numproc, uwsgi.numproc);
-                        	uwsgi.cheaper_initial = uwsgi.numproc;
+                	else if (upsgi.cheaper_initial > upsgi.numproc) {
+                        	upsgi_log("warning: invalid cheaper-initial value (%d), must be lower or equal than worker count (%d), using %d as initial number of workers\n",
+                                	upsgi.cheaper_initial, upsgi.numproc, upsgi.numproc);
+                        	upsgi.cheaper_initial = upsgi.numproc;
                 	}
 		}
 		else {
-                        uwsgi.cheaper_initial = uwsgi.cheaper_count;
+                        upsgi.cheaper_initial = upsgi.cheaper_count;
 		}
         }
 
-	if (uwsgi.max_worker_lifetime > 0 && uwsgi.min_worker_lifetime >= uwsgi.max_worker_lifetime) {
-		uwsgi_log("invalid min-worker-lifetime value (%d), must be lower than max-worker-lifetime (%d)\n",
-			uwsgi.min_worker_lifetime, uwsgi.max_worker_lifetime);
+	if (upsgi.max_worker_lifetime > 0 && upsgi.min_worker_lifetime >= upsgi.max_worker_lifetime) {
+		upsgi_log("invalid min-worker-lifetime value (%d), must be lower than max-worker-lifetime (%d)\n",
+			upsgi.min_worker_lifetime, upsgi.max_worker_lifetime);
 		exit(1);
 	}
 
-	if (uwsgi.cheaper_rss_limit_soft && !uwsgi.logging_options.memory_report && uwsgi.force_get_memusage != 1) {
-		uwsgi_log("enabling cheaper-rss-limit-soft requires enabling also memory-report\n");
+	if (upsgi.cheaper_rss_limit_soft && !upsgi.logging_options.memory_report && upsgi.force_get_memusage != 1) {
+		upsgi_log("enabling cheaper-rss-limit-soft requires enabling also memory-report\n");
 		exit(1);
 	}
-	if (uwsgi.cheaper_rss_limit_hard && !uwsgi.cheaper_rss_limit_soft) {
-		uwsgi_log("enabling cheaper-rss-limit-hard requires setting also cheaper-rss-limit-soft\n");
+	if (upsgi.cheaper_rss_limit_hard && !upsgi.cheaper_rss_limit_soft) {
+		upsgi_log("enabling cheaper-rss-limit-hard requires setting also cheaper-rss-limit-soft\n");
 		exit(1);
 	}
-	if ( uwsgi.cheaper_rss_limit_hard && uwsgi.cheaper_rss_limit_hard <= uwsgi.cheaper_rss_limit_soft) {
-		uwsgi_log("cheaper-rss-limit-hard value must be higher than cheaper-rss-limit-soft value\n");
+	if ( upsgi.cheaper_rss_limit_hard && upsgi.cheaper_rss_limit_hard <= upsgi.cheaper_rss_limit_soft) {
+		upsgi_log("cheaper-rss-limit-hard value must be higher than cheaper-rss-limit-soft value\n");
 		exit(1);
 	}
 
-	if (uwsgi.evil_reload_on_rss || uwsgi.evil_reload_on_as) {
-		if (!uwsgi.mem_collector_freq) uwsgi.mem_collector_freq = 3;
+	if (upsgi.evil_reload_on_rss || upsgi.evil_reload_on_as) {
+		if (!upsgi.mem_collector_freq) upsgi.mem_collector_freq = 3;
 	}
 
 	/* here we try to choose if thunder lock is a good thing */
 #ifdef UNBIT
-	if (uwsgi.numproc > 1 && !uwsgi.map_socket) {
-		uwsgi.use_thunder_lock = 1;
+	if (upsgi.numproc > 1 && !upsgi.map_socket) {
+		upsgi.use_thunder_lock = 1;
 	}
 #endif
 }
 
-const char *uwsgi_http_status_msg(char *status, uint16_t *len) {
+const char *upsgi_http_status_msg(char *status, uint16_t *len) {
 	struct http_status_codes *http_sc;
 	for (http_sc = hsc; http_sc->message != NULL; http_sc++) {
                 if (!strncmp(http_sc->key, status, 3)) {

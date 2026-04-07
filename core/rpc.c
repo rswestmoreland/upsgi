@@ -1,86 +1,86 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
-int uwsgi_register_rpc(char *name, struct uwsgi_plugin *plugin, uint8_t args, void *func) {
+int upsgi_register_rpc(char *name, struct upsgi_plugin *plugin, uint8_t args, void *func) {
 
-	struct uwsgi_rpc *urpc;
+	struct upsgi_rpc *urpc;
 	int ret = -1;
 
-	if (!uwsgi.workers || !uwsgi.shared || !uwsgi.rpc_table_lock) {
-		uwsgi_log("RPC subsystem still not initialized\n");
+	if (!upsgi.workers || !upsgi.shared || !upsgi.rpc_table_lock) {
+		upsgi_log("RPC subsystem still not initialized\n");
 		return -1;
 	}
 
-	if (uwsgi.mywid == 0 && uwsgi.workers[0].pid != uwsgi.mypid) {
-		uwsgi_log("only the master and the workers can register RPC functions\n");
+	if (upsgi.mywid == 0 && upsgi.workers[0].pid != upsgi.mypid) {
+		upsgi_log("only the master and the workers can register RPC functions\n");
 		return -1;
 	}
 
 	if (strlen(name) >= UMAX8)  {
-	      uwsgi_log("the supplied RPC name string is too long, max size is %d\n", UMAX8-1);
+	      upsgi_log("the supplied RPC name string is too long, max size is %d\n", UMAX8-1);
 	      return -1;
 	}
 
-	uwsgi_lock(uwsgi.rpc_table_lock);
+	upsgi_lock(upsgi.rpc_table_lock);
 
 	// first check if a function is already registered
 	size_t i;
-	for(i=0;i<uwsgi.shared->rpc_count[uwsgi.mywid];i++) {
-		int pos = (uwsgi.mywid * uwsgi.rpc_max) + i;
-		urpc = &uwsgi.rpc_table[pos];
+	for(i=0;i<upsgi.shared->rpc_count[upsgi.mywid];i++) {
+		int pos = (upsgi.mywid * upsgi.rpc_max) + i;
+		urpc = &upsgi.rpc_table[pos];
 		if (!strcmp(name, urpc->name)) {
 			goto already;
 		}
 	}
 
-	if (uwsgi.shared->rpc_count[uwsgi.mywid] < uwsgi.rpc_max) {
-		int pos = (uwsgi.mywid * uwsgi.rpc_max) + uwsgi.shared->rpc_count[uwsgi.mywid];
-		urpc = &uwsgi.rpc_table[pos];
-		uwsgi.shared->rpc_count[uwsgi.mywid]++;
+	if (upsgi.shared->rpc_count[upsgi.mywid] < upsgi.rpc_max) {
+		int pos = (upsgi.mywid * upsgi.rpc_max) + upsgi.shared->rpc_count[upsgi.mywid];
+		urpc = &upsgi.rpc_table[pos];
+		upsgi.shared->rpc_count[upsgi.mywid]++;
 already:
 		memcpy(urpc->name, name, strlen(name));
 		urpc->plugin = plugin;
 		urpc->args = args;
 		urpc->func = func;
-		urpc->shared = uwsgi.mywid == 0 ? 1 : 0;
+		urpc->shared = upsgi.mywid == 0 ? 1 : 0;
 
 		ret = 0;
-		if (uwsgi.mywid == 0) {
-			uwsgi_log("registered shared/inherited RPC function \"%s\"\n", name);
+		if (upsgi.mywid == 0) {
+			upsgi_log("registered shared/inherited RPC function \"%s\"\n", name);
 		}
 		else {
-			uwsgi_log("registered RPC function \"%s\" on worker %d\n", name, uwsgi.mywid);
+			upsgi_log("registered RPC function \"%s\" on worker %d\n", name, upsgi.mywid);
 		}
 	}
 
 	// implement cow
-	if (uwsgi.mywid == 0) {
+	if (upsgi.mywid == 0) {
 		int i;
-		for(i=1;i<=uwsgi.numproc;i++) {
-			uwsgi.shared->rpc_count[i] = uwsgi.shared->rpc_count[0];
-			int pos = (i * uwsgi.rpc_max);
-			memcpy(&uwsgi.rpc_table[pos], uwsgi.rpc_table, sizeof(struct uwsgi_rpc) * uwsgi.rpc_max);
+		for(i=1;i<=upsgi.numproc;i++) {
+			upsgi.shared->rpc_count[i] = upsgi.shared->rpc_count[0];
+			int pos = (i * upsgi.rpc_max);
+			memcpy(&upsgi.rpc_table[pos], upsgi.rpc_table, sizeof(struct upsgi_rpc) * upsgi.rpc_max);
 		}
 	}
 
-	uwsgi_unlock(uwsgi.rpc_table_lock);
+	upsgi_unlock(upsgi.rpc_table_lock);
 
 	return ret;
 }
 
-uint64_t uwsgi_rpc(char *name, uint8_t argc, char *argv[], uint16_t argvs[], char **output) {
+uint64_t upsgi_rpc(char *name, uint8_t argc, char *argv[], uint16_t argvs[], char **output) {
 
-	struct uwsgi_rpc *urpc = NULL;
+	struct upsgi_rpc *urpc = NULL;
 	uint64_t i;
 	uint64_t ret = 0;
 
-	int pos = (uwsgi.mywid * uwsgi.rpc_max);
+	int pos = (upsgi.mywid * upsgi.rpc_max);
 
-	for (i = 0; i < uwsgi.shared->rpc_count[uwsgi.mywid]; i++) {
-		if (uwsgi.rpc_table[pos + i].name[0] != 0) {
-			if (!strcmp(uwsgi.rpc_table[pos + i].name, name)) {
-				urpc = &uwsgi.rpc_table[pos + i];
+	for (i = 0; i < upsgi.shared->rpc_count[upsgi.mywid]; i++) {
+		if (upsgi.rpc_table[pos + i].name[0] != 0) {
+			if (!strcmp(upsgi.rpc_table[pos + i].name, name)) {
+				urpc = &upsgi.rpc_table[pos + i];
 				break;
 			}
 		}
@@ -98,27 +98,27 @@ uint64_t uwsgi_rpc(char *name, uint8_t argc, char *argv[], uint16_t argvs[], cha
 static void rpc_context_hook(char *key, uint16_t kl, char *value, uint16_t vl, void *data) {
 	size_t *r = (size_t *) data;
 
-	if (!uwsgi_strncmp(key, kl, "CONTENT_LENGTH", 14)) {
-		*r = uwsgi_str_num(value, vl);
+	if (!upsgi_strncmp(key, kl, "CONTENT_LENGTH", 14)) {
+		*r = upsgi_str_num(value, vl);
 	}
 }
 
-char *uwsgi_do_rpc(char *node, char *func, uint8_t argc, char *argv[], uint16_t argvs[], uint64_t * len) {
+char *upsgi_do_rpc(char *node, char *func, uint8_t argc, char *argv[], uint16_t argvs[], uint64_t * len) {
 
 	uint8_t i;
 	uint16_t ulen;
-	struct uwsgi_header *uh = NULL;
+	struct upsgi_header *uh = NULL;
 	char *buffer = NULL;
 
 	*len = 0;
 
 	if (node == NULL || !strcmp(node, "")) {
 		// allocate the whole buffer
-		if (!uwsgi.rpc_table) {
-                	uwsgi_log("local rpc subsystem is still not initialized !!!\n");
+		if (!upsgi.rpc_table) {
+                	upsgi_log("local rpc subsystem is still not initialized !!!\n");
                 	return NULL;
         	}
-		*len = uwsgi_rpc(func, argc, argv, argvs, &buffer);
+		*len = upsgi_rpc(func, argc, argv, argvs, &buffer);
 		if (buffer)
 			return buffer;
 		return NULL;
@@ -126,18 +126,18 @@ char *uwsgi_do_rpc(char *node, char *func, uint8_t argc, char *argv[], uint16_t 
 
 
 	// connect to node (async way)
-	int fd = uwsgi_connect(node, 0, 1);
+	int fd = upsgi_connect(node, 0, 1);
 	if (fd < 0)
 		return NULL;
 
 	// wait for connection;
-	int ret = uwsgi.wait_write_hook(fd, uwsgi.socket_timeout);
+	int ret = upsgi.wait_write_hook(fd, upsgi.socket_timeout);
 	if (ret <= 0) {
 		close(fd);
 		return NULL;
 	}
 
-	// prepare a uwsgi array
+	// prepare a upsgi array
 	size_t buffer_size = 2 + strlen(func);
 
 	for (i = 0; i < argc; i++) {
@@ -145,16 +145,16 @@ char *uwsgi_do_rpc(char *node, char *func, uint8_t argc, char *argv[], uint16_t 
 	}
 
 	if (buffer_size > 0xffff) {
-		uwsgi_log("RPC packet length overflow!!! Must be less than or equal to 65535, have %llu\n", buffer_size);
+		upsgi_log("RPC packet length overflow!!! Must be less than or equal to 65535, have %llu\n", buffer_size);
 		close(fd);
 		return NULL;
 	}
 
 	// allocate the whole buffer
-	buffer = uwsgi_malloc(4+buffer_size);
+	buffer = upsgi_malloc(4+buffer_size);
 
-	// set the uwsgi header
-	uh = (struct uwsgi_header *) buffer;
+	// set the upsgi header
+	uh = (struct upsgi_header *) buffer;
 	uh->modifier1 = 173;
 	uh->_pktsize = (uint16_t) buffer_size;
 	uh->modifier2 = 0;
@@ -176,21 +176,21 @@ char *uwsgi_do_rpc(char *node, char *func, uint8_t argc, char *argv[], uint16_t 
 	}
 
 	// ok the request is ready, let's send it in non blocking way
-	if (uwsgi_write_true_nb(fd, buffer, buffer_size+4, uwsgi.socket_timeout)) {
+	if (upsgi_write_true_nb(fd, buffer, buffer_size+4, upsgi.socket_timeout)) {
 		goto error;
 	}
 
 	// ok time to wait for the response in non blocking way
 	size_t rlen = buffer_size+4;
 	uint8_t modifier2 = 0;
-	if (uwsgi_read_with_realloc(fd, &buffer, &rlen, uwsgi.socket_timeout, NULL, &modifier2)) {
+	if (upsgi_read_with_realloc(fd, &buffer, &rlen, upsgi.socket_timeout, NULL, &modifier2)) {
 		goto error;
 	}
 
 	// 64bit response ?
 	if (modifier2 == 5) {
 		size_t content_len = 0;
-		if (uwsgi_hooked_parse(buffer, rlen, rpc_context_hook, &content_len )) goto error;
+		if (upsgi_hooked_parse(buffer, rlen, rpc_context_hook, &content_len )) goto error;
 
 		if (content_len > rlen) {
 			char *tmp_buf = realloc(buffer, content_len);
@@ -201,7 +201,7 @@ char *uwsgi_do_rpc(char *node, char *func, uint8_t argc, char *argv[], uint16_t 
 		rlen = content_len;
 
 		// read the raw value from the socket
-                if (uwsgi_read_whole_true_nb(fd, buffer, rlen, uwsgi.socket_timeout)) {
+                if (upsgi_read_whole_true_nb(fd, buffer, rlen, upsgi.socket_timeout)) {
 			goto error;
                 }
 	}
@@ -222,7 +222,7 @@ error2:
 }
 
 
-void uwsgi_rpc_init() {
-	uwsgi.rpc_table = uwsgi_calloc_shared((sizeof(struct uwsgi_rpc) * uwsgi.rpc_max) * (uwsgi.numproc+1));
-	uwsgi.shared->rpc_count = uwsgi_calloc_shared(sizeof(uint64_t) * (uwsgi.numproc+1));
+void upsgi_rpc_init() {
+	upsgi.rpc_table = upsgi_calloc_shared((sizeof(struct upsgi_rpc) * upsgi.rpc_max) * (upsgi.numproc+1));
+	upsgi.shared->rpc_count = upsgi_calloc_shared(sizeof(uint64_t) * (upsgi.numproc+1));
 }

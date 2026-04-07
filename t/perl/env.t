@@ -23,8 +23,8 @@ my %exp  = (
     SERVER_NAME              => $host,
     SERVER_PORT              => 5000,
     SERVER_PROTOCOL          => 'HTTP/1.1',
-    'psgi.errors'            => re(qr/^uwsgi::error=SCALAR\(0x[\da-f]+\)$/),
-    'psgi.input'             => re(qr/^uwsgi::input=SCALAR\(0x[\da-f]+\)$/),
+    'psgi.errors'            => re(qr/^upsgi::error=SCALAR\(0x[\da-f]+\)$/),
+    'psgi.input'             => re(qr/^upsgi::input=SCALAR\(0x[\da-f]+\)$/),
     'psgi.multiprocess'      => $f,
     'psgi.multithread'       => $f,
     'psgi.nonblocking'       => $f,
@@ -51,7 +51,7 @@ my @tests = (
 );
 
 push @tests, [ 'Threads', { 'psgi.multithread' => $t }, '--threads' => 2 ]
-    if $ENV{UWSGI_PERL} =~ /-thread$/;
+    if $ENV{UPSGI_PERL} =~ /-thread$/;
 
 plan tests => scalar @tests;
 
@@ -59,7 +59,7 @@ for (@tests) {
     my ( $name, $exp, @opts ) = @$_;
 
     exec qw(
-        ./uwsgi
+        ./upsgi
         --disable-logging
         --http-socket :5000
         --perl-no-die-catch
@@ -67,7 +67,7 @@ for (@tests) {
         --psgi t/perl/apps/env.psgi
     ), @opts unless my $pid = fork;
 
-    sleep 1;    # Let uWSGI start.
+    sleep 1;    # Let upsgi start.
 
     my %got = split /\n/, $http->get('http://localhost:5000')->{content};
 
@@ -75,5 +75,5 @@ for (@tests) {
 
     kill 15, $pid;
 
-    sleep 1;    # Let uWSGI kill it's workers.
+    sleep 1;    # Let upsgi kill it's workers.
 }

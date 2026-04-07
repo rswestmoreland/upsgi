@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-UWSGI_BIN="${1:-${REPO_DIR}/upsgi}"
+UPSGI_BIN="${1:-${REPO_DIR}/upsgi}"
 APP="$REPO_DIR/tests/upsgi/apps/logging_smoke.psgi"
 HELPER="$REPO_DIR/tests/upsgi/helpers/udp_log_collector.py"
 TMPDIR="${TMPDIR:-/tmp}/upsgi_r4_1d_$$"
@@ -64,8 +64,8 @@ wait_http() {
     return 1
 }
 
-if [[ ! -x "$UWSGI_BIN" ]]; then
-    echo "missing executable upsgi binary: $UWSGI_BIN" >&2
+if [[ ! -x "$UPSGI_BIN" ]]; then
+    echo "missing executable upsgi binary: $UPSGI_BIN" >&2
     echo "build the fork first, then rerun this smoke harness" >&2
     exit 2
 fi
@@ -75,7 +75,7 @@ UDP1_PID=$!
 python3 "$HELPER" --port "$RSYSLOG_PORT" --output "$TMPDIR/rsyslog.out" --timeout 8 &
 UDP2_PID=$!
 
-"$UWSGI_BIN" \
+"$UPSGI_BIN" \
     --master \
     --workers 1 \
     --need-app \
@@ -119,7 +119,7 @@ wait "$SERVER_PID" >/dev/null 2>&1 || true
 unset SERVER_PID
 sleep 2
 
-"$UWSGI_BIN" \
+"$UPSGI_BIN" \
     --master \
     --workers 1 \
     --need-app \
@@ -141,6 +141,6 @@ fi
 request "$PORT" /error >/dev/null || true
 sleep 2
 
-grep -Eq "Devel::StackTrace|logging smoke requested failure|\[uwsgi-perl error\] upsgi regression die marker" "$TMPDIR/server_debug.log"
+grep -Eq "Devel::StackTrace|logging smoke requested failure|\[upsgi-perl error\] upsgi regression die marker" "$TMPDIR/server_debug.log"
 
 echo "R4.1d logging smoke passed"

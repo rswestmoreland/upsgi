@@ -128,7 +128,7 @@ return sub {
 
     if ($path eq '/bad-stream') {
         return sub {
-            return uwsgi::stream('not-an-arrayref');
+            return upsgi::stream('not-an-arrayref');
         };
     }
 

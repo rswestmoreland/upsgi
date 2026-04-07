@@ -32,7 +32,7 @@ Does not own:
 
 ### `plugins/psgi/psgi_loader.c`
 Owns:
-- XS bootstrap for `uwsgi::*`, including `psgix.logger`, streaming writer, and `psgix.informational` callbacks
+- XS bootstrap for `upsgi::*`, including `psgix.logger`, streaming writer, and `psgix.informational` callbacks
 - Perl interpreter construction
 - PSGI app loading and registration helpers
 - opt-in exception-hook installation for debugging
@@ -44,7 +44,7 @@ Does not own:
 - generic logging core behavior
 - static-map request interception
 
-### `plugins/psgi/uwsgi_plmodule.c`
+### `plugins/psgi/upsgi_plmodule.c`
 Owns:
 - retained Perl extras/supporting XS helpers kept in v1
 
@@ -61,6 +61,6 @@ When changing PSGI behavior in upsgi:
 1. change request routing/selection in `psgi_plugin.c`
 2. change response shaping/body emission in `psgi_response.c`
 3. change Perl bridge/app loading in `psgi_loader.c`
-4. keep optional Perl extras isolated in `uwsgi_plmodule.c`
+4. keep optional Perl extras isolated in `upsgi_plmodule.c`
 
 This keeps the fork easier to audit and prepares the code for later cleanup and, eventually, a separate Rust reimplementation.

@@ -10,6 +10,8 @@ use File::Temp qw(tempdir);
 use HTTP::Tiny;
 use IO::Socket::INET;
 
+my %ALLOCATED_PORTS;
+
 our @EXPORT_OK = qw(
     fork_root
     repo_root
@@ -28,6 +30,7 @@ our @EXPORT_OK = qw(
     run_ok
     reload_server
     pick_port
+    append_yaml_options
 );
 
 sub fork_root {
@@ -62,6 +65,9 @@ sub build_artifact_dir {
 }
 
 sub default_binary {
+    if ($ENV{UPTEST_BIN}) {
+        return $ENV{UPTEST_BIN};
+    }
     if ($ENV{UPSGI_BIN}) {
         return $ENV{UPSGI_BIN};
     }
@@ -70,19 +76,23 @@ sub default_binary {
 
 sub run_ok {
     my (@cmd) = @_;
+    local @ENV{qw(UPSGI_BIN UPSGI_TEST_PORT UPSGI_TEST_PORT_BASE UPTEST_BIN UPTEST_PORT UPTEST_PORT_BASE)};
     system(@cmd);
     return $? == 0;
 }
 
-
 sub pick_port {
     my ($offset) = @_;
     $offset ||= 0;
+    if (defined $ENV{UPTEST_PORT}) {
+        return $ENV{UPTEST_PORT} + $offset;
+    }
     if (defined $ENV{UPSGI_TEST_PORT}) {
         return $ENV{UPSGI_TEST_PORT} + $offset;
     }
-    my $base = $ENV{UPSGI_TEST_PORT_BASE} || 19080;
+    my $base = $ENV{UPTEST_PORT_BASE} || $ENV{UPSGI_TEST_PORT_BASE} || 19080;
     for my $port (($base + $offset) .. ($base + $offset + 2000)) {
+        next if $ALLOCATED_PORTS{$port};
         my $sock = IO::Socket::INET->new(
             LocalAddr => '127.0.0.1',
             LocalPort => $port,
@@ -92,10 +102,25 @@ sub pick_port {
         );
         if ($sock) {
             close $sock;
+            $ALLOCATED_PORTS{$port} = 1;
             return $port;
         }
     }
     die "unable to find an available test port\n";
+}
+
+sub append_yaml_options {
+    my ($path, @lines) = @_;
+    open my $fh, '>>', $path or die "unable to append to $path: $!\n";
+    print {$fh} "\n";
+    for my $line (@lines) {
+        $line =~ s/^\s+//;
+        $line =~ s/\s+$//;
+        next unless length $line;
+        $line =~ s/\s*=\s*/: /;
+        print {$fh} "  $line\n";
+    }
+    close $fh;
 }
 
 sub render_profile {
@@ -105,7 +130,7 @@ sub render_profile {
         $helper,
         'render',
         $args{profile},
-        $args{output_ini},
+        $args{output_yaml},
         $args{app},
         $args{static_root},
         $args{log_file},
@@ -117,7 +142,7 @@ sub render_profile {
 sub start_server {
     my (%args) = @_;
     my $helper = helper_path('start_server.sh');
-    die "failed to start server\n" unless run_ok($helper, $args{binary}, $args{config_ini}, $args{artifact_dir});
+    die "failed to start server\n" unless run_ok($helper, $args{binary}, $args{config_yaml}, $args{artifact_dir});
 }
 
 sub stop_server {

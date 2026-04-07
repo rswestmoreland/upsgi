@@ -7,7 +7,7 @@ use Test::More;
 use Time::HiRes qw(sleep);
 
 use lib File::Spec->catdir($FindBin::Bin, '..', 'lib');
-use UpSGITest qw(build_artifact_dir default_binary fixture_app fixture_static_root http_get pick_port render_profile start_server stop_server wait_http slurp);
+use UpSGITest qw(append_yaml_options build_artifact_dir default_binary fixture_app fixture_static_root http_get pick_port render_profile start_server stop_server wait_http slurp);
 
 sub wait_for_log_pattern {
     my ($path, $pattern, $attempts, $sleep_seconds) = @_;
@@ -29,37 +29,37 @@ my $binary = default_binary();
 
 {
     my $artifact_dir = build_artifact_dir('accept_path_mapped');
-    my $config_ini = File::Spec->catfile($artifact_dir, 'mapped.ini');
+    my $config_yaml = File::Spec->catfile($artifact_dir, 'mapped.yaml');
     my $server_log = File::Spec->catfile($artifact_dir, 'server.log');
     my $port_a = pick_port(20);
     my $port_b = pick_port(21);
 
     render_profile(
         profile => 'baseline',
-        output_ini => $config_ini,
+        output_yaml => $config_yaml,
         app => fixture_app('app_simple.psgi'),
         static_root => fixture_static_root(),
         log_file => $server_log,
         port => $port_a,
     );
 
-    open my $append_fh, '>>', $config_ini or die "unable to append mapped accept-path config: $!
+    open my $append_fh, '>>', $config_yaml or die "unable to append mapped accept-path config: $!
 ";
-    print {$append_fh} "workers = 2
+    print {$append_fh} "\n  workers: 2
 ";
-    print {$append_fh} "thunder-lock = true
+    print {$append_fh} "  thunder-lock: true
 ";
-    print {$append_fh} "http-socket = 127.0.0.1:$port_b
+    print {$append_fh} "  http-socket: 127.0.0.1:$port_b
 ";
-    print {$append_fh} "map-socket = 0:1
+    print {$append_fh} "  map-socket: 0:1
 ";
-    print {$append_fh} "map-socket = 1:2
+    print {$append_fh} "  map-socket: 1:2
 ";
     close $append_fh;
 
     start_server(
         binary => $binary,
-        config_ini => $config_ini,
+        config_yaml => $config_yaml,
         artifact_dir => $artifact_dir,
     );
 
@@ -77,32 +77,32 @@ my $binary = default_binary();
 
 {
     my $artifact_dir = build_artifact_dir('accept_path_reuse_port');
-    my $config_ini = File::Spec->catfile($artifact_dir, 'reuse_port.ini');
+    my $config_yaml = File::Spec->catfile($artifact_dir, 'reuse_port.yaml');
     my $server_log = File::Spec->catfile($artifact_dir, 'server.log');
     my $port = pick_port(22);
 
     render_profile(
         profile => 'baseline',
-        output_ini => $config_ini,
+        output_yaml => $config_yaml,
         app => fixture_app('app_simple.psgi'),
         static_root => fixture_static_root(),
         log_file => $server_log,
         port => $port,
     );
 
-    open my $append_fh, '>>', $config_ini or die "unable to append reuse-port accept-path config: $!
+    open my $append_fh, '>>', $config_yaml or die "unable to append reuse-port accept-path config: $!
 ";
-    print {$append_fh} "workers = 2
+    print {$append_fh} "\n  workers: 2
 ";
-    print {$append_fh} "thunder-lock = true
+    print {$append_fh} "  thunder-lock: true
 ";
-    print {$append_fh} "reuse-port = true
+    print {$append_fh} "  reuse-port: true
 ";
     close $append_fh;
 
     start_server(
         binary => $binary,
-        config_ini => $config_ini,
+        config_yaml => $config_yaml,
         artifact_dir => $artifact_dir,
     );
 

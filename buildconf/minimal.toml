@@ -1,6 +1,6 @@
 [build]
 xml = false
-yaml = false
+yaml = true
 json = false
 ssl = false
 pcre = false

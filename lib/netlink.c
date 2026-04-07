@@ -1,4 +1,4 @@
-#include "../uwsgi.h"
+#include "../upsgi.h"
 
 #ifdef OBSOLETE_LINUX_KERNEL
 #ifndef __u16
@@ -29,32 +29,32 @@
 #endif
 
 
-struct uwsgi_nl_req {
+struct upsgi_nl_req {
 	struct nlmsghdr nlmsg;
 	struct ifinfomsg ifinfomsg;
 };
 
-struct uwsgi_nl_ipreq {
+struct upsgi_nl_ipreq {
 	struct nlmsghdr nlmsg;
 	struct ifaddrmsg ifaddrmsg;
 };
 
-struct uwsgi_nl_rtreq {
+struct upsgi_nl_rtreq {
 	struct nlmsghdr nlmsg;
 	struct rtmsg rtmsg;
 };
 
-int uwsgi_nl_send(struct nlmsghdr *);
+int upsgi_nl_send(struct nlmsghdr *);
 
-struct nlmsghdr *uwsgi_netlink_alloc() {
+struct nlmsghdr *upsgi_netlink_alloc() {
 
 	size_t len = NLMSG_ALIGN(8192) + NLMSG_ALIGN(sizeof(struct nlmsghdr *));
 
-	struct nlmsghdr *nlmsg = (struct nlmsghdr *) uwsgi_malloc(len);
+	struct nlmsghdr *nlmsg = (struct nlmsghdr *) upsgi_malloc(len);
 
 	memset(nlmsg, 0, len);
 
-	struct uwsgi_nl_req *unr = (struct uwsgi_nl_req *)nlmsg;
+	struct upsgi_nl_req *unr = (struct upsgi_nl_req *)nlmsg;
         unr->ifinfomsg.ifi_family = AF_UNSPEC;
 
 	nlmsg->nlmsg_len = NLMSG_LENGTH(sizeof(struct ifinfomsg));
@@ -64,15 +64,15 @@ struct nlmsghdr *uwsgi_netlink_alloc() {
 	return nlmsg;
 }
 
-struct nlmsghdr *uwsgi_netlink_ip_alloc() {
+struct nlmsghdr *upsgi_netlink_ip_alloc() {
 
         size_t len = NLMSG_ALIGN(8192) + NLMSG_ALIGN(sizeof(struct nlmsghdr *));
 
-        struct nlmsghdr *nlmsg = (struct nlmsghdr *) uwsgi_malloc(len);
+        struct nlmsghdr *nlmsg = (struct nlmsghdr *) upsgi_malloc(len);
 
         memset(nlmsg, 0, len);
 
-        struct uwsgi_nl_ipreq *uni = (struct uwsgi_nl_ipreq *)nlmsg;
+        struct upsgi_nl_ipreq *uni = (struct upsgi_nl_ipreq *)nlmsg;
         uni->ifaddrmsg.ifa_family = AF_INET;
         uni->ifaddrmsg.ifa_scope = 0;
 
@@ -84,15 +84,15 @@ struct nlmsghdr *uwsgi_netlink_ip_alloc() {
         return nlmsg;
 }
 
-struct nlmsghdr *uwsgi_netlink_rt_alloc() {
+struct nlmsghdr *upsgi_netlink_rt_alloc() {
 
         size_t len = NLMSG_ALIGN(8192) + NLMSG_ALIGN(sizeof(struct nlmsghdr *));
 
-        struct nlmsghdr *nlmsg = (struct nlmsghdr *) uwsgi_malloc(len);
+        struct nlmsghdr *nlmsg = (struct nlmsghdr *) upsgi_malloc(len);
 
         memset(nlmsg, 0, len);
 
-        struct uwsgi_nl_rtreq *unr = (struct uwsgi_nl_rtreq *)nlmsg;
+        struct upsgi_nl_rtreq *unr = (struct upsgi_nl_rtreq *)nlmsg;
         unr->rtmsg.rtm_family = AF_INET;
 	unr->rtmsg.rtm_table = RT_TABLE_MAIN;
 	unr->rtmsg.rtm_protocol = RTPROT_STATIC;
@@ -108,29 +108,29 @@ struct nlmsghdr *uwsgi_netlink_rt_alloc() {
         return nlmsg;
 }
 
-int uwsgi_netlink_rt(char *src, char *dst, int dst_prefix, char *gw) {
+int upsgi_netlink_rt(char *src, char *dst, int dst_prefix, char *gw) {
 
-	struct nlmsghdr *nlmsg = uwsgi_netlink_rt_alloc();
+	struct nlmsghdr *nlmsg = upsgi_netlink_rt_alloc();
         struct rtattr *rta;
         struct in_addr ia;
         struct in_addr oa;
         struct in_addr ga;
-	struct uwsgi_nl_rtreq *unr = (struct uwsgi_nl_rtreq *)nlmsg;
+	struct upsgi_nl_rtreq *unr = (struct upsgi_nl_rtreq *)nlmsg;
 
         if (inet_pton(AF_INET, src, &ia) <= 0) {
-                uwsgi_error("inet_pton()");
+                upsgi_error("inet_pton()");
                 free(nlmsg);
                 return -1;
         }
 
         if (inet_pton(AF_INET, dst, &oa) <= 0) {
-                uwsgi_error("inet_pton()");
+                upsgi_error("inet_pton()");
                 free(nlmsg);
                 return -1;
         }
 
         if (inet_pton(AF_INET, gw, &ga) <= 0) {
-                uwsgi_error("inet_pton()");
+                upsgi_error("inet_pton()");
                 free(nlmsg);
                 return -1;
         }
@@ -156,12 +156,12 @@ int uwsgi_netlink_rt(char *src, char *dst, int dst_prefix, char *gw) {
 	unr->rtmsg.rtm_src_len = 0; 
 	unr->rtmsg.rtm_dst_len = dst_prefix;
 
-        return uwsgi_nl_send(nlmsg);
+        return upsgi_nl_send(nlmsg);
 }
 
-int uwsgi_netlink_gw(char *iface, char *ip) {
+int upsgi_netlink_gw(char *iface, char *ip) {
 
-        struct nlmsghdr *nlmsg = uwsgi_netlink_rt_alloc();
+        struct nlmsghdr *nlmsg = upsgi_netlink_rt_alloc();
         struct rtattr *rta;
         struct in_addr ia;
 	uint32_t zero = 0;
@@ -170,7 +170,7 @@ int uwsgi_netlink_gw(char *iface, char *ip) {
         if (!index) return -1;
 
         if (inet_pton(AF_INET, ip, &ia) <= 0) {
-                uwsgi_error("inet_pton()");
+                upsgi_error("inet_pton()");
                 free(nlmsg);
                 return -1;
         }
@@ -194,14 +194,14 @@ int uwsgi_netlink_gw(char *iface, char *ip) {
         memcpy(RTA_DATA(rta), &index, sizeof(int));
         nlmsg->nlmsg_len = NLMSG_ALIGN(nlmsg->nlmsg_len) + RTA_ALIGN(rta->rta_len);
 
-        return uwsgi_nl_send(nlmsg);
+        return upsgi_nl_send(nlmsg);
 }
 
 
-int uwsgi_netlink_ip(char *iface, char *ip, int prefix) {
+int upsgi_netlink_ip(char *iface, char *ip, int prefix) {
 
-	struct nlmsghdr *nlmsg = uwsgi_netlink_ip_alloc();
-        struct uwsgi_nl_ipreq *uni = (struct uwsgi_nl_ipreq *)nlmsg;
+	struct nlmsghdr *nlmsg = upsgi_netlink_ip_alloc();
+        struct upsgi_nl_ipreq *uni = (struct upsgi_nl_ipreq *)nlmsg;
         struct rtattr *rta;
 	struct in_addr ia;
 
@@ -212,7 +212,7 @@ int uwsgi_netlink_ip(char *iface, char *ip, int prefix) {
         uni->ifaddrmsg.ifa_prefixlen = prefix;
 	
 	if (inet_pton(AF_INET, ip, &ia) <= 0) {
-		uwsgi_error("inet_pton()");
+		upsgi_error("inet_pton()");
 		free(nlmsg);
 		return -1;
 	}
@@ -229,13 +229,13 @@ int uwsgi_netlink_ip(char *iface, char *ip, int prefix) {
         memcpy(RTA_DATA(rta), &ia, sizeof(struct in_addr));
         nlmsg->nlmsg_len = NLMSG_ALIGN(nlmsg->nlmsg_len) + RTA_ALIGN(rta->rta_len);
 
-        return uwsgi_nl_send(nlmsg);
+        return upsgi_nl_send(nlmsg);
 }
 
-int uwsgi_netlink_veth_attach(char *veth1, pid_t pid) {
+int upsgi_netlink_veth_attach(char *veth1, pid_t pid) {
 
-	struct nlmsghdr *nlmsg = uwsgi_netlink_alloc();
-	struct uwsgi_nl_req *unr = (struct uwsgi_nl_req *)nlmsg;
+	struct nlmsghdr *nlmsg = upsgi_netlink_alloc();
+	struct upsgi_nl_req *unr = (struct upsgi_nl_req *)nlmsg;
 	struct rtattr *rta;
 
 	int index = if_nametoindex(veth1);
@@ -249,14 +249,14 @@ int uwsgi_netlink_veth_attach(char *veth1, pid_t pid) {
 	memcpy(RTA_DATA(rta), &pid, sizeof(pid_t));
 	nlmsg->nlmsg_len = NLMSG_ALIGN(nlmsg->nlmsg_len) + RTA_ALIGN(rta->rta_len);
 
-	return uwsgi_nl_send(nlmsg);
+	return upsgi_nl_send(nlmsg);
 	
 }
 
-int uwsgi_netlink_ifup(char *iface) {
+int upsgi_netlink_ifup(char *iface) {
 
-        struct nlmsghdr *nlmsg = uwsgi_netlink_alloc();
-        struct uwsgi_nl_req *unr = (struct uwsgi_nl_req *)nlmsg;
+        struct nlmsghdr *nlmsg = upsgi_netlink_alloc();
+        struct upsgi_nl_req *unr = (struct upsgi_nl_req *)nlmsg;
 
         int index = if_nametoindex(iface);
         if (!index) return -1;
@@ -264,31 +264,31 @@ int uwsgi_netlink_ifup(char *iface) {
         unr->ifinfomsg.ifi_index = index;
 	unr->ifinfomsg.ifi_change |= IFF_UP;
 	unr->ifinfomsg.ifi_flags |= IFF_UP;	
-        return uwsgi_nl_send(nlmsg);
+        return upsgi_nl_send(nlmsg);
 
 }
 
-int uwsgi_netlink_del(char *iface) {
+int upsgi_netlink_del(char *iface) {
 
-        struct nlmsghdr *nlmsg = uwsgi_netlink_alloc();
-        struct uwsgi_nl_req *unr = (struct uwsgi_nl_req *)nlmsg;
+        struct nlmsghdr *nlmsg = upsgi_netlink_alloc();
+        struct upsgi_nl_req *unr = (struct upsgi_nl_req *)nlmsg;
 
         int index = if_nametoindex(iface);
         if (!index) return -1;
 
 	nlmsg->nlmsg_type = RTM_DELLINK;
         unr->ifinfomsg.ifi_index = index;
-        return uwsgi_nl_send(nlmsg);
+        return upsgi_nl_send(nlmsg);
 
 }
 
 
 
-int uwsgi_netlink_veth(char *veth0, char *veth1) {
+int upsgi_netlink_veth(char *veth0, char *veth1) {
 
 	struct rtattr *rta, *rta0, *rta1, *rta2;
 	
-	struct nlmsghdr *nlmsg = uwsgi_netlink_alloc();
+	struct nlmsghdr *nlmsg = upsgi_netlink_alloc();
 
 	nlmsg->nlmsg_flags |= NLM_F_CREATE|NLM_F_EXCL;
 
@@ -337,10 +337,10 @@ int uwsgi_netlink_veth(char *veth0, char *veth1) {
 	memcpy(RTA_DATA(rta), veth0, strlen(veth0));
 	nlmsg->nlmsg_len = NLMSG_ALIGN(nlmsg->nlmsg_len) + RTA_ALIGN(rta->rta_len);
 
-	return uwsgi_nl_send(nlmsg);	
+	return upsgi_nl_send(nlmsg);	
 }
 
-int uwsgi_nl_send(struct nlmsghdr *nlmsg) {
+int upsgi_nl_send(struct nlmsghdr *nlmsg) {
 
 	struct sockaddr_nl nladdr;
 
@@ -365,21 +365,21 @@ int uwsgi_nl_send(struct nlmsghdr *nlmsg) {
 
 	nlfd = socket(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
 	if (nlfd < 0) {
-		uwsgi_error("socket()");
+		upsgi_error("socket()");
 		free(nlmsg);
 		return -1;
 	}
 
 	ret = sendmsg(nlfd, &msg, 0);
 	if (ret < 0) {
-		uwsgi_error("sendmsg()");
+		upsgi_error("sendmsg()");
 		free(nlmsg);
 		close(nlfd);
 		return -1;
 	}
 	ret = recvmsg(nlfd, &msg, 0);
 	if (ret < 0) {
-		uwsgi_error("recvmsg()");
+		upsgi_error("recvmsg()");
 		free(nlmsg);
 		close(nlfd);
 		return -1;

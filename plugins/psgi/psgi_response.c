@@ -1,6 +1,6 @@
 #include "psgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 /*
  * PSGI response layer:
@@ -13,11 +13,11 @@ extern struct uwsgi_server uwsgi;
  */
 
 static int psgi_invalid_response(struct wsgi_request *wsgi_req, char *message) {
-	uwsgi_log("%s\n", message);
+	upsgi_log("%s\n", message);
 	if (!wsgi_req->headers_sent) {
-		uwsgi_500(wsgi_req);
+		upsgi_500(wsgi_req);
 	}
-	return UWSGI_OK;
+	return UPSGI_OK;
 }
 
 static int psgi_status_forbids_entity_headers(int status) {
@@ -31,7 +31,7 @@ static int psgi_header_name_is_valid(const char *key, STRLEN key_len) {
 	if (!key || key_len == 0) return 0;
 	if (!((key[0] >= 'A' && key[0] <= 'Z') || (key[0] >= 'a' && key[0] <= 'z'))) return 0;
 	if (key[key_len - 1] == '-' || key[key_len - 1] == '_') return 0;
-	if (key_len == 6 && !uwsgi_strnicmp((char *) key, key_len, "Status", 6)) return 0;
+	if (key_len == 6 && !upsgi_strnicmp((char *) key, key_len, "Status", 6)) return 0;
 	for (i = 0; i < key_len; i++) {
 		char c = key[i];
 		if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-') {
@@ -68,32 +68,32 @@ struct psgi_body_coalescer {
 };
 
 static int psgi_body_coalescer_flush(struct wsgi_request *wsgi_req, struct psgi_body_coalescer *coalescer) {
-	if (!coalescer || coalescer->len == 0) return UWSGI_OK;
-	uwsgi_response_write_body_do(wsgi_req, coalescer->buf, coalescer->len);
-	uwsgi_pl_check_write_errors {
+	if (!coalescer || coalescer->len == 0) return UPSGI_OK;
+	upsgi_response_write_body_do(wsgi_req, coalescer->buf, coalescer->len);
+	upsgi_pl_check_write_errors {
 		coalescer->len = 0;
-		return UWSGI_OK;
+		return UPSGI_OK;
 	}
 	coalescer->len = 0;
-	return UWSGI_OK;
+	return UPSGI_OK;
 }
 
 static int psgi_body_coalescer_write(struct wsgi_request *wsgi_req, struct psgi_body_coalescer *coalescer, const char *chunk, size_t chunk_len) {
-	if (!coalescer || !chunk || chunk_len == 0) return UWSGI_OK;
+	if (!coalescer || !chunk || chunk_len == 0) return UPSGI_OK;
 	if (chunk_len > sizeof(coalescer->buf)) {
-		if (psgi_body_coalescer_flush(wsgi_req, coalescer) != UWSGI_OK) return UWSGI_OK;
-		uwsgi_response_write_body_do(wsgi_req, (char *) chunk, chunk_len);
-		uwsgi_pl_check_write_errors {
-			return UWSGI_OK;
+		if (psgi_body_coalescer_flush(wsgi_req, coalescer) != UPSGI_OK) return UPSGI_OK;
+		upsgi_response_write_body_do(wsgi_req, (char *) chunk, chunk_len);
+		upsgi_pl_check_write_errors {
+			return UPSGI_OK;
 		}
-		return UWSGI_OK;
+		return UPSGI_OK;
 	}
 	if (coalescer->len > 0 && coalescer->len + chunk_len > sizeof(coalescer->buf)) {
-		if (psgi_body_coalescer_flush(wsgi_req, coalescer) != UWSGI_OK) return UWSGI_OK;
+		if (psgi_body_coalescer_flush(wsgi_req, coalescer) != UPSGI_OK) return UPSGI_OK;
 	}
 	memcpy(coalescer->buf + coalescer->len, chunk, chunk_len);
 	coalescer->len += chunk_len;
-	return UWSGI_OK;
+	return UPSGI_OK;
 }
 
 static int psgi_validate_status(SV *status_sv, int *status_code) {
@@ -132,10 +132,10 @@ static int psgi_validate_headers(AV *headers, int status_code, int *has_content_
 		value = SvPV(*hitem, value_len);
 		if (!psgi_header_value_is_valid(value, value_len)) return -1;
 
-		if (key_len == 12 && !uwsgi_strnicmp(key, key_len, "Content-Type", 12)) {
+		if (key_len == 12 && !upsgi_strnicmp(key, key_len, "Content-Type", 12)) {
 			*has_content_type = 1;
 		}
-		else if (key_len == 14 && !uwsgi_strnicmp(key, key_len, "Content-Length", 14)) {
+		else if (key_len == 14 && !upsgi_strnicmp(key, key_len, "Content-Length", 14)) {
 			*has_content_length = 1;
 		}
 	}
@@ -172,8 +172,8 @@ static int psgi_validate_body_slot(SV **body_item, int body_optional) {
 	if (io) return 0;
 
 	if (SvOBJECT(rv)) {
-		if (uwsgi_perl_obj_can(*body_item, "path", 4)) return 0;
-		if (uwsgi_perl_obj_can(*body_item, STR_WITH_LEN("getline"))) return 0;
+		if (upsgi_perl_obj_can(*body_item, "path", 4)) return 0;
+		if (upsgi_perl_obj_can(*body_item, STR_WITH_LEN("getline"))) return 0;
 		return -1;
 	}
 
@@ -188,7 +188,7 @@ static int psgi_validate_body_slot(SV **body_item, int body_optional) {
 	return 0;
 }
 
-static int psgi_write_raw_buffer(struct wsgi_request *wsgi_req, struct uwsgi_buffer *ub) {
+static int psgi_write_raw_buffer(struct wsgi_request *wsgi_req, struct upsgi_buffer *ub) {
 	size_t old_write_pos = wsgi_req->write_pos;
 	int ret = -1;
 	if (!ub) return -1;
@@ -197,21 +197,21 @@ static int psgi_write_raw_buffer(struct wsgi_request *wsgi_req, struct uwsgi_buf
 		errno = 0;
 		ret = wsgi_req->socket->proto_write_headers(wsgi_req, ub->buf, ub->pos);
 		if (ret < 0) {
-			if (!uwsgi.ignore_write_errors) {
-				uwsgi_req_error("psgi_write_raw_buffer()/proto_write_headers");
+			if (!upsgi.ignore_write_errors) {
+				upsgi_req_error("psgi_write_raw_buffer()/proto_write_headers");
 			}
 			wsgi_req->write_errors++;
 			wsgi_req->write_pos = old_write_pos;
 			return -1;
 		}
-		if (ret == UWSGI_OK) {
+		if (ret == UPSGI_OK) {
 			break;
 		}
-		if (!uwsgi_is_again()) continue;
-		ret = uwsgi_wait_write_req(wsgi_req);
+		if (!upsgi_is_again()) continue;
+		ret = upsgi_wait_write_req(wsgi_req);
 		if (ret <= 0) {
 			if (ret == 0) {
-				uwsgi_log("psgi_write_raw_buffer() TIMEOUT !!!\n");
+				upsgi_log("psgi_write_raw_buffer() TIMEOUT !!!\n");
 			}
 			wsgi_req->write_errors++;
 			wsgi_req->write_pos = old_write_pos;
@@ -223,8 +223,8 @@ static int psgi_write_raw_buffer(struct wsgi_request *wsgi_req, struct uwsgi_buf
 }
 
 int psgi_informational_response(struct wsgi_request *wsgi_req, int status, AV *headers) {
-	struct uwsgi_buffer *ub = NULL;
-	struct uwsgi_buffer *hh = NULL;
+	struct upsgi_buffer *ub = NULL;
+	struct upsgi_buffer *hh = NULL;
 	SV **hitem = NULL;
 	STRLEN key_len = 0;
 	STRLEN value_len = 0;
@@ -242,7 +242,7 @@ int psgi_informational_response(struct wsgi_request *wsgi_req, int status, AV *h
 
 	if (!wsgi_req || !headers) return -1;
 	if (wsgi_req->headers_sent || wsgi_req->response_size) return -1;
-	if (!(wsgi_req->protocol_len == 8 && !uwsgi_strncmp("HTTP/1.1", 8, wsgi_req->protocol, wsgi_req->protocol_len))) {
+	if (!(wsgi_req->protocol_len == 8 && !upsgi_strncmp("HTTP/1.1", 8, wsgi_req->protocol, wsgi_req->protocol_len))) {
 		return -1;
 	}
 	if (status < 100 || status >= 200 || status == 101) return -1;
@@ -250,10 +250,10 @@ int psgi_informational_response(struct wsgi_request *wsgi_req, int status, AV *h
 	header_validation = psgi_validate_headers(headers, status, &has_content_type, &has_content_length);
 	if (header_validation != 0) return -1;
 
-	uwsgi_num2str2(status, status_buf);
-	status_msg = uwsgi_http_status_msg(status_buf, &status_msg_len);
+	upsgi_num2str2(status, status_buf);
+	status_msg = upsgi_http_status_msg(status_buf, &status_msg_len);
 	if (status_msg) {
-		status_line = uwsgi_concat3n(status_buf, 3, " ", 1, (char *) status_msg, status_msg_len);
+		status_line = upsgi_concat3n(status_buf, 3, " ", 1, (char *) status_msg, status_msg_len);
 		status_line_len = 4 + status_msg_len;
 	}
 	else {
@@ -271,20 +271,20 @@ int psgi_informational_response(struct wsgi_request *wsgi_req, int status, AV *h
 		value = SvPV(*hitem, value_len);
 		hh = wsgi_req->socket->proto_add_header(wsgi_req, key, key_len, value, value_len);
 		if (!hh) goto error;
-		if (uwsgi_buffer_append(ub, hh->buf, hh->pos)) {
-			uwsgi_buffer_destroy(hh);
+		if (upsgi_buffer_append(ub, hh->buf, hh->pos)) {
+			upsgi_buffer_destroy(hh);
 			goto error;
 		}
-		uwsgi_buffer_destroy(hh);
+		upsgi_buffer_destroy(hh);
 	}
 
-	if (uwsgi_buffer_append(ub, "\r\n", 2)) goto error;
+	if (upsgi_buffer_append(ub, "\r\n", 2)) goto error;
 	if (psgi_write_raw_buffer(wsgi_req, ub)) goto error;
-	uwsgi_buffer_destroy(ub);
+	upsgi_buffer_destroy(ub);
 	return 0;
 
 error:
-	uwsgi_buffer_destroy(ub);
+	upsgi_buffer_destroy(ub);
 	return -1;
 }
 
@@ -313,15 +313,15 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 		wsgi_req->async_force_again = 0;
 
 		wsgi_req->switches++;
-		SV *chunk = uwsgi_perl_obj_call(wsgi_req->async_placeholder, "getline");
+		SV *chunk = upsgi_perl_obj_call(wsgi_req->async_placeholder, "getline");
 		if (!chunk) {
-			uwsgi_500(wsgi_req);
-			return UWSGI_OK;
+			upsgi_500(wsgi_req);
+			return UPSGI_OK;
 		}
 
 		if (!SvOK(chunk)) {
 			SvREFCNT_dec(chunk);
-			SV *closed = uwsgi_perl_obj_call(wsgi_req->async_placeholder, "close");
+			SV *closed = upsgi_perl_obj_call(wsgi_req->async_placeholder, "close");
 			if (closed) {
 				SvREFCNT_dec(closed);
 			}
@@ -332,7 +332,7 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 			}
 
 			SvREFCNT_dec(wsgi_req->async_result);
-			return UWSGI_OK;
+			return UPSGI_OK;
 		}
 
 		if (!psgi_body_chunk_is_valid(chunk)) {
@@ -344,7 +344,7 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 
 		if (hlen <= 0) {
 			SvREFCNT_dec(chunk);
-			SV *closed = uwsgi_perl_obj_call(wsgi_req->async_placeholder, "close");
+			SV *closed = upsgi_perl_obj_call(wsgi_req->async_placeholder, "close");
 			if (closed) {
 				SvREFCNT_dec(closed);
 			}
@@ -356,17 +356,17 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 			}
 
 			SvREFCNT_dec(wsgi_req->async_result);
-			return UWSGI_OK;
+			return UPSGI_OK;
 		}
 
-		uwsgi_response_write_body_do(wsgi_req, chitem, hlen);
-		uwsgi_pl_check_write_errors {
+		upsgi_response_write_body_do(wsgi_req, chitem, hlen);
+		upsgi_pl_check_write_errors {
 			SvREFCNT_dec(chunk);
-			return UWSGI_OK;
+			return UPSGI_OK;
 		}
 		SvREFCNT_dec(chunk);
 		wsgi_req->async_force_again = 1;
-		return UWSGI_AGAIN;
+		return UPSGI_AGAIN;
 	}
 
 	/* PSGI responses must resolve to an array reference contract here. */
@@ -421,8 +421,8 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 		return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
 	}
 
-	if (uwsgi_response_prepare_headers_int(wsgi_req, status)) {
-		return UWSGI_OK;
+	if (upsgi_response_prepare_headers_int(wsgi_req, status)) {
+		return UPSGI_OK;
 	}
 
 	for (i = 0; i <= (int) av_len(headers); i += 2) {
@@ -430,11 +430,11 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 		chitem = SvPV(*hitem, hlen);
 		hitem = av_fetch(headers, i + 1, 0);
 		chitem2 = SvPV(*hitem, hlen2);
-		if (uwsgi_response_add_header(wsgi_req, chitem, hlen, chitem2, hlen2)) return UWSGI_OK;
+		if (upsgi_response_add_header(wsgi_req, chitem, hlen, chitem2, hlen2)) return UPSGI_OK;
 	}
 
 	if (!body_item && body_optional) {
-		return UWSGI_OK;
+		return UPSGI_OK;
 	}
 	if (!body_item) {
 		return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
@@ -450,17 +450,17 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 		const int fd = PerlIO_fileno(IoIFP(io));
 		if (fd >= 0) {
 			wsgi_req->sendfile_fd = fd;
-			uwsgi_response_sendfile_do(wsgi_req, wsgi_req->sendfile_fd, 0, 0);
-			uwsgi_pl_check_write_errors {
+			upsgi_response_sendfile_do(wsgi_req, wsgi_req->sendfile_fd, 0, 0);
+			upsgi_pl_check_write_errors {
 				/* noop */
 			}
-			return UWSGI_OK;
+			return UPSGI_OK;
 		}
 	}
 
 	if (SvOBJECT(rv)) {
-		if (uwsgi_perl_obj_can(*body_item, "path", 4)) {
-			SV *p = uwsgi_perl_obj_call(*body_item, "path");
+		if (upsgi_perl_obj_can(*body_item, "path", 4)) {
+			SV *p = upsgi_perl_obj_call(*body_item, "path");
 			if (!p || !SvOK(p)) {
 				if (p) SvREFCNT_dec(p);
 				return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
@@ -470,21 +470,21 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 			if (fd < 0) {
 				return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
 			}
-			uwsgi_response_sendfile_do(wsgi_req, fd, 0, 0);
-			uwsgi_pl_check_write_errors {
+			upsgi_response_sendfile_do(wsgi_req, fd, 0, 0);
+			upsgi_pl_check_write_errors {
 				/* noop */
 			}
-			return UWSGI_OK;
+			return UPSGI_OK;
 		}
-		else if (uwsgi_perl_obj_can(*body_item, STR_WITH_LEN("getline"))) {
+		else if (upsgi_perl_obj_can(*body_item, STR_WITH_LEN("getline"))) {
 			struct psgi_body_coalescer coalescer;
 			coalescer.len = 0;
 			for (;;) {
 				SV *chunk = NULL;
 				wsgi_req->switches++;
-				chunk = uwsgi_perl_obj_call(*body_item, "getline");
+				chunk = upsgi_perl_obj_call(*body_item, "getline");
 				if (!chunk) {
-					uwsgi_500(wsgi_req);
+					upsgi_500(wsgi_req);
 					break;
 				}
 
@@ -501,43 +501,43 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 				chitem = SvPV(chunk, hlen);
 				if (hlen <= 0) {
 					SvREFCNT_dec(chunk);
-					if (uwsgi.async > 0 && wsgi_req->async_force_again) {
+					if (upsgi.async > 0 && wsgi_req->async_force_again) {
 						wsgi_req->async_placeholder = (SV *) *body_item;
-						return UWSGI_AGAIN;
+						return UPSGI_AGAIN;
 					}
 					break;
 				}
 
-				if (uwsgi.async > 0) {
-					uwsgi_response_write_body_do(wsgi_req, chitem, hlen);
-					uwsgi_pl_check_write_errors {
+				if (upsgi.async > 0) {
+					upsgi_response_write_body_do(wsgi_req, chitem, hlen);
+					upsgi_pl_check_write_errors {
 						SvREFCNT_dec(chunk);
 						break;
 					}
 				}
 				else {
-					if (psgi_body_coalescer_write(wsgi_req, &coalescer, chitem, hlen) != UWSGI_OK) {
+					if (psgi_body_coalescer_write(wsgi_req, &coalescer, chitem, hlen) != UPSGI_OK) {
 						SvREFCNT_dec(chunk);
 						break;
 					}
-					uwsgi_pl_check_write_errors {
+					upsgi_pl_check_write_errors {
 						SvREFCNT_dec(chunk);
 						break;
 					}
 				}
 				SvREFCNT_dec(chunk);
-				if (uwsgi.async > 0) {
+				if (upsgi.async > 0) {
 					wsgi_req->async_placeholder = (SV *) *body_item;
 					wsgi_req->async_force_again = 1;
-					return UWSGI_AGAIN;
+					return UPSGI_AGAIN;
 				}
 			}
 
-			if (uwsgi.async == 0 && psgi_body_coalescer_flush(wsgi_req, &coalescer) != UWSGI_OK) {
-				return UWSGI_OK;
+			if (upsgi.async == 0 && psgi_body_coalescer_flush(wsgi_req, &coalescer) != UPSGI_OK) {
+				return UPSGI_OK;
 			}
 
-			SV *closed = uwsgi_perl_obj_call(*body_item, "close");
+			SV *closed = upsgi_perl_obj_call(*body_item, "close");
 			if (closed) {
 				SvREFCNT_dec(closed);
 			}
@@ -553,22 +553,22 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 				return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
 			}
 			chitem = SvPV(*hitem, hlen);
-			if (psgi_body_coalescer_write(wsgi_req, &coalescer, chitem, hlen) != UWSGI_OK) {
+			if (psgi_body_coalescer_write(wsgi_req, &coalescer, chitem, hlen) != UPSGI_OK) {
 				break;
 			}
-			uwsgi_pl_check_write_errors {
+			upsgi_pl_check_write_errors {
 				break;
 			}
 		}
-		if (psgi_body_coalescer_flush(wsgi_req, &coalescer) != UWSGI_OK) {
-			return UWSGI_OK;
+		if (psgi_body_coalescer_flush(wsgi_req, &coalescer) != UPSGI_OK) {
+			return UPSGI_OK;
 		}
 	}
 	else {
 		return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
 	}
 
-	return UWSGI_OK;
+	return UPSGI_OK;
 }
 
 int psgi_response(struct wsgi_request *wsgi_req, AV *response) {

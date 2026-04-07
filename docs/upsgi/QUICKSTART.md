@@ -2,27 +2,37 @@
 
 ## Baseline launch
 
-```ini
-[uwsgi]
-master = true
-workers = 2
-need-app = true
-strict = true
-vacuum = true
-die-on-term = true
-http-socket = :9090
-psgi = app.psgi
-static-map = /assets=./public
-logto = ./upsgi.log
-log-x-forwarded-for = true
+```yaml
+upsgi:
+  master: true
+  workers: 2
+  need-app: true
+  strict: true
+  vacuum: true
+  die-on-term: true
+  http-socket: :9090
+  psgi: examples/upsgi/app.psgi
+  static-map: /assets=examples/upsgi/public
+  logto: ./upsgi.log
+  log-x-forwarded-for: true
 ```
 
-Run the default build:
+Run the default build and start the baseline example:
 
 ```sh
 make
-./upsgi --ini baseline.ini
+./upsgi --config examples/upsgi/baseline.yaml
+
+For a fuller starting point, copy and edit:
+
 ```
+./upsgi --config examples/upsgi/upsgi.example.yaml
+```
+```
+
+Existing INI, XML, JSON, and YAML configs still load through the retained
+multi-format runtime path. YAML is simply the preferred format for new runtime
+configs and examples.
 
 ## Baseline-supported options
 - `--master`
@@ -61,9 +71,10 @@ make
 
 ## Shipped release examples
 - `examples/upsgi/app.psgi`
-- `examples/upsgi/baseline.ini`
-- `examples/upsgi/debug_exceptions.ini`
-- `examples/upsgi/migration_legacy.ini`
+- `examples/upsgi/baseline.yaml`
+- `examples/upsgi/debug_exceptions.yaml`
+- `examples/upsgi/migration_legacy.yaml`
+- `examples/upsgi/upsgi.example.yaml`
 
 ## Docs map
 - For the full maintained docs map, start at `docs/upsgi/INDEX.md`.

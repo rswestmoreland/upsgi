@@ -1,4 +1,4 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
 /*
 
@@ -7,8 +7,8 @@
 	to simplify setups (especially because the mount command could not be available in
 	the initial phase of jailing, we need an api to mount/umount filesystems
 
-	int uwsgi_mount(char *fs, char *what, char *where, int flags);
-	int uwsgi_umount(char *where, int flags);
+	int upsgi_mount(char *fs, char *what, char *where, int flags);
+	int upsgi_umount(char *where, int flags);
 
 */
 
@@ -19,12 +19,12 @@
 #include <sys/statfs.h>
 #endif
 
-struct uwsgi_mount_flag {
+struct upsgi_mount_flag {
 	char *key;
 	uint64_t value;
 };
 
-static struct uwsgi_mount_flag umflags[] = {
+static struct upsgi_mount_flag umflags[] = {
 #ifdef MS_BIND
 	{"bind", MS_BIND},
 #endif
@@ -96,8 +96,8 @@ static struct uwsgi_mount_flag umflags[] = {
 	{NULL, 0},
 };
 
-uint64_t uwsgi_mount_flag(char *mflag) {
-	struct uwsgi_mount_flag *umf = umflags;
+uint64_t upsgi_mount_flag(char *mflag) {
+	struct upsgi_mount_flag *umf = umflags;
 	while(umf->key) {
 		if (!strcmp(umf->key, mflag)) return umf->value;
 		umf++; 
@@ -105,21 +105,21 @@ uint64_t uwsgi_mount_flag(char *mflag) {
 	return 0;
 }
 
-int uwsgi_mount(char *fs, char *what, char *where, char *flags, char *data) {
+int upsgi_mount(char *fs, char *what, char *where, char *flags, char *data) {
 #if defined(__linux__) || defined(__FreeBSD__) || defined(__GNU_kFreeBSD__)
 #if defined(__FreeBSD__) || defined(__GNU_kFreeBSD__)
 	struct iovec iov[6];
 #endif
 	unsigned long mountflags = 0;
 	if (!flags) goto parsed;
-	char *mflags = uwsgi_str(flags);
+	char *mflags = upsgi_str(flags);
 	char *p, *ctx = NULL;
-	uwsgi_foreach_token(mflags, ",", p, ctx) {
+	upsgi_foreach_token(mflags, ",", p, ctx) {
 		if (strcmp(p, "defaults") == 0)
 			continue;
-		unsigned long flag = (unsigned long) uwsgi_mount_flag(p);
+		unsigned long flag = (unsigned long) upsgi_mount_flag(p);
 		if (!flag) {
-			uwsgi_log("unknown mount flag \"%s\"\n", p);
+			upsgi_log("unknown mount flag \"%s\"\n", p);
 			exit(1);
 		}
 		mountflags |= flag;
@@ -151,16 +151,16 @@ parsed:
 	return -1;
 }
 
-int uwsgi_umount(char *where, char *flags) {
+int upsgi_umount(char *where, char *flags) {
 #if defined(__linux__) || defined(__FreeBSD__) || defined(__GNU_kFreeBSD__)
 	unsigned long mountflags = 0;
         if (!flags) goto parsed;
-        char *mflags = uwsgi_str(flags);
+        char *mflags = upsgi_str(flags);
         char *p, *ctx = NULL;
-	uwsgi_foreach_token(mflags, ",", p, ctx) {
-                unsigned long flag = (unsigned long) uwsgi_mount_flag(p);
+	upsgi_foreach_token(mflags, ",", p, ctx) {
+                unsigned long flag = (unsigned long) upsgi_mount_flag(p);
                 if (!flag) {
-                        uwsgi_log("unknown umount flag \"%s\"\n", p);
+                        upsgi_log("unknown umount flag \"%s\"\n", p);
                         exit(1);
                 }
                 mountflags |= flag;
@@ -172,13 +172,13 @@ parsed:
 	if (mountflags & MS_REC) {
 		mountflags &= ~MS_REC;
 		int unmounted = 1;
-		char *slashed = uwsgi_concat2(where, "/");
+		char *slashed = upsgi_concat2(where, "/");
 		while (unmounted) {
                 	unmounted = 0;
                 	FILE *procmounts = fopen("/proc/self/mounts", "r");
                 	if (!procmounts) {
-				uwsgi_log("the /proc filesystem must be mounted for recursive umount\n");
-				uwsgi_error("open()");
+				upsgi_log("the /proc filesystem must be mounted for recursive umount\n");
+				upsgi_error("open()");
 				exit(1);
 			}
 			char line[1024];
@@ -189,7 +189,7 @@ parsed:
                         	char *delim1 = strchr(delim0, ' ');
                         	if (!delim1) continue;
                         	*delim1 = 0;
-				if (!uwsgi_starts_with(delim0, strlen(delim0), slashed, strlen(slashed))) goto unmountable; 
+				if (!upsgi_starts_with(delim0, strlen(delim0), slashed, strlen(slashed))) goto unmountable; 
                                 continue;
 unmountable:
                         	if (!umount2(delim0, mountflags)) unmounted++;
@@ -206,9 +206,9 @@ unmountable:
         return -1;
 }
 
-int uwsgi_mount_hook(char *arg) {
+int upsgi_mount_hook(char *arg) {
 	char *data = NULL;
-	char *tmp_arg = uwsgi_str(arg);
+	char *tmp_arg = upsgi_str(arg);
 	char *fs = tmp_arg;
 	char *what = strchr(fs, ' ');
 	if (!what) goto error;
@@ -224,8 +224,8 @@ int uwsgi_mount_hook(char *arg) {
 			*data = 0; data++;
 		}
 	}
-	if (uwsgi_mount(fs, what, where, flags, data)) {
-		uwsgi_error("uwsgi_mount()");
+	if (upsgi_mount(fs, what, where, flags, data)) {
+		upsgi_error("upsgi_mount()");
 		free(tmp_arg);
 		return -1;
 	}	
@@ -233,19 +233,19 @@ int uwsgi_mount_hook(char *arg) {
 	return 0;
 error:
 	free(tmp_arg);
-	uwsgi_log("uwsgi_mount_hook() invalid syntax\n");
+	upsgi_log("upsgi_mount_hook() invalid syntax\n");
 	return -1;
 }
 
-int uwsgi_umount_hook(char *arg) {
-	char *tmp_arg = uwsgi_str(arg);
+int upsgi_umount_hook(char *arg) {
+	char *tmp_arg = upsgi_str(arg);
 	char *where = tmp_arg;
         char *flags = strchr(where, ' ');
         if (flags) {
         	*flags = 0; flags++;
 	}
-        if (uwsgi_umount(where, flags)) {
-                uwsgi_error("uwsgi_umount()");
+        if (upsgi_umount(where, flags)) {
+                upsgi_error("upsgi_umount()");
                 free(tmp_arg);
                 return -1;
         }       
@@ -253,17 +253,17 @@ int uwsgi_umount_hook(char *arg) {
         return 0;
 }
 
-int uwsgi_check_mountpoint(char *mountpoint) {
+int upsgi_check_mountpoint(char *mountpoint) {
 #ifdef __linux__
 	struct statfs sfs;
 	int ret = statfs(mountpoint, &sfs);
 	if (ret) {
-		uwsgi_error("uwsgi_check_mountpoint()/statfs()");
+		upsgi_error("upsgi_check_mountpoint()/statfs()");
 		return -1;
 	}
 	return 0;
 #else
-	uwsgi_log("this platform does not support mountpoints check !!!\n");
+	upsgi_log("this platform does not support mountpoints check !!!\n");
 	return -1;
 #endif
 }

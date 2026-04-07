@@ -1,8 +1,8 @@
 /* async SCGI protocol parser */
 
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 static int scgi_parse(struct wsgi_request *wsgi_req) {
 	char *buf = wsgi_req->proto_parser_buf;
@@ -11,7 +11,7 @@ static int scgi_parse(struct wsgi_request *wsgi_req) {
 	size_t scgi_len = 0;
 	for(i=0;i<len;i++) {
 		if (buf[i] == ':') {
-			scgi_len = uwsgi_str_num(buf, i);
+			scgi_len = upsgi_str_num(buf, i);
 			if (scgi_len == 0) return -1;
 			goto keyval;
 		}
@@ -41,7 +41,7 @@ keyval:
 		if (buf[i] == 0) {
 			if (value) {
 				vallen = (buf+i) - value;
-				uint16_t pktsize = proto_base_add_uwsgi_var(wsgi_req, key, keylen, value, vallen);
+				uint16_t pktsize = proto_base_add_upsgi_var(wsgi_req, key, keylen, value, vallen);
                 		if (pktsize == 0) return -1;
                 		wsgi_req->len += pktsize;
 				key = NULL;
@@ -67,71 +67,71 @@ keyval:
 	return -1;
 }
 
-int uwsgi_proto_scgi_parser(struct wsgi_request *wsgi_req) {
+int upsgi_proto_scgi_parser(struct wsgi_request *wsgi_req) {
 
 	// first round ? (wsgi_req->proto_parser_buf is freed at the end of the request)
         if (!wsgi_req->proto_parser_buf) {
-                wsgi_req->proto_parser_buf = uwsgi_malloc(uwsgi.buffer_size);
+                wsgi_req->proto_parser_buf = upsgi_malloc(upsgi.buffer_size);
         }
 
-	if (uwsgi.buffer_size - wsgi_req->proto_parser_pos == 0) {
-                uwsgi_log("invalid SCGI request size (max %u)...skip\n", uwsgi.buffer_size);
+	if (upsgi.buffer_size - wsgi_req->proto_parser_pos == 0) {
+                upsgi_log("invalid SCGI request size (max %u)...skip\n", upsgi.buffer_size);
                 return -1;
         }
 
 	char *ptr = wsgi_req->proto_parser_buf;
 
-	ssize_t len = read(wsgi_req->fd, ptr + wsgi_req->proto_parser_pos, uwsgi.buffer_size - wsgi_req->proto_parser_pos);
+	ssize_t len = read(wsgi_req->fd, ptr + wsgi_req->proto_parser_pos, upsgi.buffer_size - wsgi_req->proto_parser_pos);
 	if (len > 0) {
 		wsgi_req->proto_parser_pos += len;
 		int ret = scgi_parse(wsgi_req);
 		if (ret > 0) {
-			wsgi_req->uh->modifier1 = uwsgi.scgi_modifier1;
-                        wsgi_req->uh->modifier2 = uwsgi.scgi_modifier2;
-			return UWSGI_OK;
+			wsgi_req->uh->modifier1 = upsgi.scgi_modifier1;
+                        wsgi_req->uh->modifier2 = upsgi.scgi_modifier2;
+			return UPSGI_OK;
 		}
-		if (ret == 0) return UWSGI_AGAIN;
+		if (ret == 0) return UPSGI_AGAIN;
 		return -1;
 	}
 	if (len < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS) {
-			return UWSGI_AGAIN;
+			return UPSGI_AGAIN;
 		}
-		uwsgi_error("uwsgi_proto_scgi_parser()");	
+		upsgi_error("upsgi_proto_scgi_parser()");	
 		return -1;
 	}
 	// 0 len
 	if (wsgi_req->proto_parser_pos > 0) {
-		uwsgi_error("uwsgi_proto_scgi_parser()");	
+		upsgi_error("upsgi_proto_scgi_parser()");	
 	}
 	return -1;
 }
 
-void uwsgi_proto_scgi_setup(struct uwsgi_socket *uwsgi_sock) {
-                        uwsgi_sock->proto = uwsgi_proto_scgi_parser;
-                        uwsgi_sock->proto_accept = uwsgi_proto_base_accept;
-                        uwsgi_sock->proto_prepare_headers = uwsgi_proto_base_cgi_prepare_headers;
-                        uwsgi_sock->proto_add_header = uwsgi_proto_base_add_header;
-                        uwsgi_sock->proto_fix_headers = uwsgi_proto_base_fix_headers;
-                        uwsgi_sock->proto_read_body = uwsgi_proto_base_read_body;
-                        uwsgi_sock->proto_write = uwsgi_proto_base_write;
-                        uwsgi_sock->proto_writev = uwsgi_proto_base_writev;
-                        uwsgi_sock->proto_write_headers = uwsgi_proto_base_write;
-                        uwsgi_sock->proto_sendfile = uwsgi_proto_base_sendfile;
-                        uwsgi_sock->proto_close = uwsgi_proto_base_close;
+void upsgi_proto_scgi_setup(struct upsgi_socket *upsgi_sock) {
+                        upsgi_sock->proto = upsgi_proto_scgi_parser;
+                        upsgi_sock->proto_accept = upsgi_proto_base_accept;
+                        upsgi_sock->proto_prepare_headers = upsgi_proto_base_cgi_prepare_headers;
+                        upsgi_sock->proto_add_header = upsgi_proto_base_add_header;
+                        upsgi_sock->proto_fix_headers = upsgi_proto_base_fix_headers;
+                        upsgi_sock->proto_read_body = upsgi_proto_base_read_body;
+                        upsgi_sock->proto_write = upsgi_proto_base_write;
+                        upsgi_sock->proto_writev = upsgi_proto_base_writev;
+                        upsgi_sock->proto_write_headers = upsgi_proto_base_write;
+                        upsgi_sock->proto_sendfile = upsgi_proto_base_sendfile;
+                        upsgi_sock->proto_close = upsgi_proto_base_close;
 }
 
-void uwsgi_proto_scgi_nph_setup(struct uwsgi_socket *uwsgi_sock) {
-                        uwsgi_sock->proto = uwsgi_proto_scgi_parser;
-                        uwsgi_sock->proto_accept = uwsgi_proto_base_accept;
-                        uwsgi_sock->proto_prepare_headers = uwsgi_proto_base_prepare_headers;
-                        uwsgi_sock->proto_add_header = uwsgi_proto_base_add_header;
-                        uwsgi_sock->proto_fix_headers = uwsgi_proto_base_fix_headers;
-                        uwsgi_sock->proto_read_body = uwsgi_proto_base_read_body;
-                        uwsgi_sock->proto_write = uwsgi_proto_base_write;
-                        uwsgi_sock->proto_writev = uwsgi_proto_base_writev;
-                        uwsgi_sock->proto_write_headers = uwsgi_proto_base_write;
-                        uwsgi_sock->proto_sendfile = uwsgi_proto_base_sendfile;
-                        uwsgi_sock->proto_close = uwsgi_proto_base_close;
+void upsgi_proto_scgi_nph_setup(struct upsgi_socket *upsgi_sock) {
+                        upsgi_sock->proto = upsgi_proto_scgi_parser;
+                        upsgi_sock->proto_accept = upsgi_proto_base_accept;
+                        upsgi_sock->proto_prepare_headers = upsgi_proto_base_prepare_headers;
+                        upsgi_sock->proto_add_header = upsgi_proto_base_add_header;
+                        upsgi_sock->proto_fix_headers = upsgi_proto_base_fix_headers;
+                        upsgi_sock->proto_read_body = upsgi_proto_base_read_body;
+                        upsgi_sock->proto_write = upsgi_proto_base_write;
+                        upsgi_sock->proto_writev = upsgi_proto_base_writev;
+                        upsgi_sock->proto_write_headers = upsgi_proto_base_write;
+                        upsgi_sock->proto_sendfile = upsgi_proto_base_sendfile;
+                        upsgi_sock->proto_close = upsgi_proto_base_close;
 }
 

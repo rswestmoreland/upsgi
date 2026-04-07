@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #
-# This test suite runner runs some integration tests for uwsgi, that is
+# This test suite runner runs some integration tests for upsgi, that is
 # each test launches a test server with a specific configuration and
 # verifies (usually using a HTTP request) that this test server behaves as
 # expected.
@@ -20,19 +20,19 @@ import unittest
 
 
 TESTS_DIR = os.path.dirname(__file__)
-UWSGI_BINARY = os.getenv("UWSGI_BINARY", os.path.join(TESTS_DIR, "..", "uwsgi"))
-UWSGI_PLUGINS = os.getenv("UWSGI_PLUGINS_TEST", "all").split(" ")
-UWSGI_ADDR = "127.0.0.1"
-UWSGI_PORT = 8000
-UWSGI_HTTP = f"{UWSGI_ADDR}:{UWSGI_PORT}"
+UPSGI_BINARY = os.getenv("UPSGI_BINARY", os.path.join(TESTS_DIR, "..", "upsgi"))
+UPSGI_PLUGINS = os.getenv("UPSGI_PLUGINS_TEST", "all").split(" ")
+UPSGI_ADDR = "127.0.0.1"
+UPSGI_PORT = 8000
+UPSGI_HTTP = f"{UPSGI_ADDR}:{UPSGI_PORT}"
 
 
 def plugins_available(plugins):
     available = False
-    if "all" in UWSGI_PLUGINS:
+    if "all" in UPSGI_PLUGINS:
         available = True
     else:
-        available = all([plugin in UWSGI_PLUGINS for plugin in plugins])
+        available = all([plugin in UPSGI_PLUGINS for plugin in plugins])
     return available, f"{plugins} plugins not available but required for this test case"
 
 
@@ -40,19 +40,19 @@ class UwsgiTest(unittest.TestCase):
 
     def start_server(self, args):
         self.testserver = subprocess.Popen(
-            [UWSGI_BINARY] + args,
+            [UPSGI_BINARY] + args,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
         )
 
-    def uwsgi_ready(self):
+    def upsgi_ready(self):
         try:
             s = socket.socket()
             s.connect(
                 (
-                    UWSGI_ADDR,
-                    UWSGI_PORT,
+                    UPSGI_ADDR,
+                    UPSGI_PORT,
                 )
             )
         except socket.error:
@@ -63,15 +63,15 @@ class UwsgiTest(unittest.TestCase):
             s.close()
 
     def start_listen_server(self, args):
-        self.start_server(["--http-socket", UWSGI_HTTP] + args)
+        self.start_server(["--http-socket", UPSGI_HTTP] + args)
 
         # ensure server is ready
         retries = 10
-        while not self.uwsgi_ready() and retries > 0:
+        while not self.upsgi_ready() and retries > 0:
             time.sleep(0.1)
             retries = retries - 1
             if retries == 0:
-                raise RuntimeError("uwsgi test server is not available")
+                raise RuntimeError("upsgi test server is not available")
 
     def tearDown(self):
         if hasattr(self._outcome, "errors"):
@@ -92,7 +92,7 @@ class UwsgiTest(unittest.TestCase):
             self.testserver.stdout.close()
 
     def assert_GET_body(self, url_path, body_expected):
-        with requests.get(f"http://{UWSGI_HTTP}{url_path}") as r:
+        with requests.get(f"http://{UPSGI_HTTP}{url_path}") as r:
             self.assertEqual(r.text, body_expected)
 
     def test_static_expires(self):
@@ -104,7 +104,7 @@ class UwsgiTest(unittest.TestCase):
             ]
         )
 
-        with requests.get(f"http://{UWSGI_HTTP}/foobar/config.ini") as r:
+        with requests.get(f"http://{UPSGI_HTTP}/foobar/config.ini") as r:
             self.assertTrue("Expires" in r.headers)
 
     @unittest.skipUnless(*plugins_available(["python"]))
@@ -182,7 +182,7 @@ class UwsgiTest(unittest.TestCase):
     def test_jvm_hellworld(self):
         classpath = ":".join(
             [
-                "/usr/share/java/uwsgi.jar",
+                "/usr/share/java/upsgi.jar",
                 os.path.join(TESTS_DIR, "java"),
                 os.path.join(TESTS_DIR, "..", "plugins", "jvm"),
             ]

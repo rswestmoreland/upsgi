@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-UWSGI_BIN="${UWSGI_BIN:-${REPO_DIR}/upsgi}"
+UPSGI_BIN="${UPSGI_BIN:-${REPO_DIR}/upsgi}"
 HTTP_PROBE="$REPO_DIR/tests/upsgi/helpers/http_probe.py"
 CONFIG_DIR="$REPO_DIR/tests/fork/configs"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/upsgi-config-smoke.XXXXXX")"
@@ -19,8 +19,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ ! -x "$UWSGI_BIN" ]]; then
-    echo "missing executable upsgi binary: $UWSGI_BIN" >&2
+if [[ ! -x "$UPSGI_BIN" ]]; then
+    echo "missing executable upsgi binary: $UPSGI_BIN" >&2
     echo "build the fork first, then rerun this smoke harness" >&2
     exit 2
 fi
@@ -56,7 +56,7 @@ start_profile() {
     local cfg="$1"
     local pid_file="$2"
     local log_file="$3"
-    "$UWSGI_BIN" --ini "$cfg" --pidfile "$pid_file" >/dev/null 2>&1 &
+    "$UPSGI_BIN" --ini "$cfg" --pidfile "$pid_file" >/dev/null 2>&1 &
     for _ in $(seq 1 40); do
         if [[ -f "$pid_file" ]]; then
             break

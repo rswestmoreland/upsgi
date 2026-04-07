@@ -1,88 +1,88 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-#define UWSGI_BUILD_DIR ".uwsgi_plugins_builder"
+#define UPSGI_BUILD_DIR ".upsgi_plugins_builder"
 
 /*
 
 	steps:
 
-		mkdir(.uwsgi_plugin_builder)
-		generate .uwsgi_plugin_builder/uwsgi.h
-		generate .uwsgi_plugin_builder/upsgiconfig.py
-		setenv(UWSGI_PLUGINS_BUILDER_CFLAGS=uwsgi_cflags)
-		exec PYTHON .uwsgi_plugin_builder/upsgiconfig.py --extra-plugin <directory> [name]
+		mkdir(.upsgi_plugin_builder)
+		generate .upsgi_plugin_builder/upsgi.h
+		generate .upsgi_plugin_builder/upsgiconfig.py
+		setenv(UPSGI_PLUGINS_BUILDER_CFLAGS=upsgi_cflags)
+		exec PYTHON .upsgi_plugin_builder/upsgiconfig.py --extra-plugin <directory> [name]
 
 */
 
-void uwsgi_build_plugin(char *directory) {
+void upsgi_build_plugin(char *directory) {
 
-	if (!uwsgi_file_exists(UWSGI_BUILD_DIR)) {
-		if (mkdir(UWSGI_BUILD_DIR, S_IRWXU) < 0) {
-        		uwsgi_error("uwsgi_build_plugin()/mkdir() " UWSGI_BUILD_DIR "/");
+	if (!upsgi_file_exists(UPSGI_BUILD_DIR)) {
+		if (mkdir(UPSGI_BUILD_DIR, S_IRWXU) < 0) {
+        		upsgi_error("upsgi_build_plugin()/mkdir() " UPSGI_BUILD_DIR "/");
 			_exit(1);
 		}
 	}
 
-	char *dot_h = uwsgi_get_dot_h();
+	char *dot_h = upsgi_get_dot_h();
 	if (!dot_h) {
-		uwsgi_log("unable to generate uwsgi.h");
+		upsgi_log("unable to generate upsgi.h");
 		_exit(1);
 	}
 
 	if (strlen(dot_h) == 0) {
 		free(dot_h);
-		uwsgi_log("invalid uwsgi.h");
+		upsgi_log("invalid upsgi.h");
 		_exit(1);
 	}
 
-	int dot_h_fd = open(UWSGI_BUILD_DIR "/uwsgi.h", O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+	int dot_h_fd = open(UPSGI_BUILD_DIR "/upsgi.h", O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
 	if (dot_h_fd < 0) {
-		uwsgi_error_open(UWSGI_BUILD_DIR "/uwsgi.h");
+		upsgi_error_open(UPSGI_BUILD_DIR "/upsgi.h");
 		free(dot_h);
 		_exit(1);
 	}
 
 	ssize_t dot_h_len = (ssize_t) strlen(dot_h);
 	if (write(dot_h_fd, dot_h, dot_h_len) != dot_h_len) {
-		uwsgi_error("uwsgi_build_plugin()/write()");
+		upsgi_error("upsgi_build_plugin()/write()");
 		_exit(1);
 	}
 
-	char *config_py = uwsgi_get_config_py();
+	char *config_py = upsgi_get_config_py();
         if (!config_py) {
-                uwsgi_log("unable to generate upsgiconfig.py");
+                upsgi_log("unable to generate upsgiconfig.py");
                 _exit(1);
         }
 
         if (strlen(config_py) == 0) {
-                uwsgi_log("invalid upsgiconfig.py");
+                upsgi_log("invalid upsgiconfig.py");
                 _exit(1);
         }
 
-        int config_py_fd = open(UWSGI_BUILD_DIR "/upsgiconfig.py", O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+        int config_py_fd = open(UPSGI_BUILD_DIR "/upsgiconfig.py", O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
         if (config_py_fd < 0) {
-                uwsgi_error_open(UWSGI_BUILD_DIR "/upsgiconfig.py");
+                upsgi_error_open(UPSGI_BUILD_DIR "/upsgiconfig.py");
                 _exit(1);
         }
 
         ssize_t config_py_len = (ssize_t) strlen(config_py);
         if (write(config_py_fd, config_py, config_py_len) != config_py_len) {
-                uwsgi_error("uwsgi_build_plugin()/write()");
+                upsgi_error("upsgi_build_plugin()/write()");
                 _exit(1);
         }
 
-	char *cflags = uwsgi_get_cflags();
+	char *cflags = upsgi_get_cflags();
 	if (!cflags) {
-		uwsgi_log("unable to find cflags\n");
+		upsgi_log("unable to find cflags\n");
 		_exit(1);
 	}
 	if (strlen(cflags) == 0) {
-		uwsgi_log("invalid cflags\n");
+		upsgi_log("invalid cflags\n");
 		_exit(1);
 	}
 
-	if (setenv("UWSGI_PLUGINS_BUILDER_CFLAGS", cflags, 1)) {
-		uwsgi_error("uwsgi_build_plugin()/setenv()");
+	if (setenv("UPSGI_PLUGINS_BUILDER_CFLAGS", cflags, 1)) {
+		upsgi_error("upsgi_build_plugin()/setenv()");
 		_exit(1);
 	}
 	
@@ -92,7 +92,7 @@ void uwsgi_build_plugin(char *directory) {
 	argv[0] = getenv("PYTHON");
 	if (!argv[0]) argv[0] = "python3";
 
-	argv[1] = UWSGI_BUILD_DIR "/upsgiconfig.py";
+	argv[1] = UPSGI_BUILD_DIR "/upsgiconfig.py";
 	argv[2] = "--extra-plugin";
 	char *space = strchr(directory, ' ');
 	if (space) {

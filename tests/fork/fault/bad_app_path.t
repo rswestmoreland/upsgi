@@ -10,21 +10,23 @@ use UpSGITest qw(pick_port build_artifact_dir default_binary fixture_static_root
 
 my $binary = default_binary();
 my $artifact_dir = build_artifact_dir('fault_bad_app_path');
-my $config_ini = File::Spec->catfile($artifact_dir, 'bad_app.ini');
+my $config_yaml = File::Spec->catfile($artifact_dir, 'bad_app.yaml');
 my $server_log = File::Spec->catfile($artifact_dir, 'server.log');
 my $port = pick_port(8);
 my $missing_app = File::Spec->catfile($artifact_dir, 'missing_app.psgi');
 
 render_profile(
     profile => 'baseline',
-    output_ini => $config_ini,
+    output_yaml => $config_yaml,
     app => $missing_app,
     static_root => fixture_static_root(),
     log_file => $server_log,
     port => $port,
 );
 
-my $cmd = sprintf("%s --ini %s > %s 2>&1", quotemeta($binary), quotemeta($config_ini), quotemeta($server_log));
+local @ENV{qw(UPSGI_BIN UPSGI_TEST_PORT UPSGI_TEST_PORT_BASE UPTEST_BIN UPTEST_PORT UPTEST_PORT_BASE)};
+
+my $cmd = sprintf("%s --config %s > %s 2>&1", quotemeta($binary), quotemeta($config_yaml), quotemeta($server_log));
 my $rc = system('sh', '-c', $cmd);
 $rc = $rc >> 8;
 

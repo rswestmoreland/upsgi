@@ -7,7 +7,7 @@ use Test::More;
 use IO::Socket::INET;
 
 use lib File::Spec->catdir($FindBin::Bin, '..', 'lib');
-use UpSGITest qw(pick_port build_artifact_dir default_binary fixture_app fixture_static_root http_get render_profile slurp start_server stop_server wait_http);
+use UpSGITest qw(append_yaml_options pick_port build_artifact_dir default_binary fixture_app fixture_static_root http_get render_profile slurp start_server stop_server wait_http);
 
 sub fetch_stats {
     my ($port) = @_;
@@ -36,29 +36,30 @@ sub stat_value {
 
 my $binary = default_binary();
 my $artifact_dir = build_artifact_dir('logging_backpressure');
-my $config_ini = File::Spec->catfile($artifact_dir, 'baseline.ini');
+my $config_yaml = File::Spec->catfile($artifact_dir, 'baseline.yaml');
 my $server_log = File::Spec->catfile($artifact_dir, 'server.log');
 my $port = pick_port(40);
 my $stats_port = pick_port(41);
 
 render_profile(
     profile => 'baseline',
-    output_ini => $config_ini,
+    output_yaml => $config_yaml,
     app => fixture_app('app_log_burst.psgi'),
     static_root => fixture_static_root(),
     log_file => $server_log,
     port => $port,
 );
 
-open my $cfg, '>>', $config_ini or die "unable to append to $config_ini: $!\n";
-print {$cfg} "log-master = true\n";
-print {$cfg} "log-drain-burst = 1\n";
-print {$cfg} "stats = 127.0.0.1:$stats_port\n";
-close $cfg;
+append_yaml_options(
+    $config_yaml,
+    "log-master = true\n",
+    "log-drain-burst = 1\n",
+    "stats = 127.0.0.1:$stats_port\n",
+);
 
 start_server(
     binary => $binary,
-    config_ini => $config_ini,
+    config_yaml => $config_yaml,
     artifact_dir => $artifact_dir,
 );
 

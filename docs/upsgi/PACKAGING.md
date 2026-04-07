@@ -20,6 +20,7 @@ Required for a public release refresh:
 - `docs/upsgi/COMPATIBILITY.md`
 - `docs/upsgi/MIGRATION.md`
 - `docs/upsgi/REPO_LAYOUT.md`
+- `docs/upsgi/SYSTEMD.md`
 - `docs/upsgi/DEFERRED_SCOPE.md`
 - release notes and decision record under `docs/upsgi/releases/`
 - `examples/upsgi/`
@@ -35,7 +36,7 @@ Required for a public release refresh:
 - migration: `docs/upsgi/MIGRATION.md`
 - release notes: `docs/upsgi/releases/`
 - release helper scripts: `scripts/release/`
-- shipped examples: `examples/upsgi/`
+- shipped examples: `examples/upsgi/`, `examples/systemd/`
 - shipped regression harness: `tests/fork/`
 
 ## Packaging layout
@@ -78,10 +79,15 @@ upsgi/
   examples/
     upsgi/
       app.psgi
-      baseline.ini
-      debug_exceptions.ini
-      migration_legacy.ini
+      baseline.yaml
+      debug_exceptions.yaml
+      migration_legacy.yaml
+      upsgi.example.yaml
       public/
+    systemd/
+      upsgi.service
+      upsgi.env
+      upsgi.socket
         hello.txt
   tests/
     fork/
@@ -96,7 +102,7 @@ upsgi/
 ## Packaging exclusions
 Do not include transient local artifacts in a release archive:
 - `tests/fork/artifacts/`
-- local build logs such as `uwsgibuild.log`
+- local build logs such as `upsgibuild.log`
 - local workspace-only linker workarounds
 - temporary pidfiles, sockets, and log captures generated during testing
 

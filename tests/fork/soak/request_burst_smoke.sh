@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
-UWSGI_BIN="${UPSGI_BIN:-${REPO_DIR}/upsgi}"
+UPSGI_BIN="${UPSGI_BIN:-${REPO_DIR}/upsgi}"
 PORT="${UPSGI_SOAK_PORT:-19195}"
 BURST_COUNT="${UPSGI_SOAK_BURST_COUNT:-25}"
 APP="$REPO_DIR/tests/fork/fixtures/apps/app_simple.psgi"
@@ -51,12 +51,12 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ ! -x "$UWSGI_BIN" ]]; then
-    echo "missing executable upsgi binary: $UWSGI_BIN" >&2
+if [[ ! -x "$UPSGI_BIN" ]]; then
+    echo "missing executable upsgi binary: $UPSGI_BIN" >&2
     exit 2
 fi
 
-"$UWSGI_BIN" \
+"$UPSGI_BIN" \
     --master \
     --workers 1 \
     --need-app \

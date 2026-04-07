@@ -1,4 +1,4 @@
-import uwsgi
+import upsgi
 
 import random
 import string
@@ -20,12 +20,12 @@ for i in range(0, 1000):
     vl = gen_rand_n(10000)
     val = gen_rand_s(vl)
     items[key] = val
-    uwsgi.cache_set(key, val)
+    upsgi.cache_set(key, val)
 
 print('checking cache...')
 count = 0
 for key in items.keys():
-    val = uwsgi.cache_get(key)
+    val = upsgi.cache_get(key)
     count += 1
     if val != items[key]:
         print(len(val), val)

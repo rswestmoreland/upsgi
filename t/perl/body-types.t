@@ -3,7 +3,7 @@ use warnings;
 
 BEGIN {
     exec qw(
-        ./uwsgi
+        ./upsgi
         --disable-logging
         --http-socket :5000
         --perl-no-die-catch

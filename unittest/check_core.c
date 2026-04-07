@@ -1,69 +1,69 @@
 #include <check.h>
-#include "../uwsgi.h"
+#include "../upsgi.h"
 
 
-START_TEST(test_uwsgi_strncmp)
+START_TEST(test_upsgi_strncmp)
 {
 	int result;
-        result = uwsgi_strncmp("test", 4, "test", 4);
+        result = upsgi_strncmp("test", 4, "test", 4);
 	ck_assert(result == 0);
 
-	result = uwsgi_strncmp("test", 4, "tes", 3);
+	result = upsgi_strncmp("test", 4, "tes", 3);
 	ck_assert(result == 1);
 
-	result = uwsgi_strncmp("tes", 3, "test", 4);
+	result = upsgi_strncmp("tes", 3, "test", 4);
 	ck_assert(result == 1);
 
-	result = uwsgi_strncmp("aaa", 3, "bbb", 3);
+	result = upsgi_strncmp("aaa", 3, "bbb", 3);
 	ck_assert_msg(result < 0, "result: %d", result);
 
-	result = uwsgi_strncmp("bbb", 3, "aaa", 3);
+	result = upsgi_strncmp("bbb", 3, "aaa", 3);
 	ck_assert_msg(result > 0, "result: %d", result);
 }
 END_TEST
 
 Suite *check_core_strings(void)
 {
-	Suite *s = suite_create("uwsgi strings");
+	Suite *s = suite_create("upsgi strings");
 	TCase *tc = tcase_create("strings");
 
 	suite_add_tcase(s, tc);
-	tcase_add_test(tc, test_uwsgi_strncmp);
+	tcase_add_test(tc, test_upsgi_strncmp);
 	return s;
 }
 
-START_TEST(test_uwsgi_opt_set_int)
+START_TEST(test_upsgi_opt_set_int)
 {
 	int result;
-	uwsgi_opt_set_int("", "true", &result);
+	upsgi_opt_set_int("", "true", &result);
 	ck_assert(result == 0);
 
-	uwsgi_opt_set_int("", "false", &result);
+	upsgi_opt_set_int("", "false", &result);
 	ck_assert(result == 0);
 
-	uwsgi_opt_set_int("", "0", &result);
+	upsgi_opt_set_int("", "0", &result);
 	ck_assert(result == 0);
 
-	uwsgi_opt_set_int("", "60", &result);
+	upsgi_opt_set_int("", "60", &result);
 	ck_assert(result == 60);
 
 	// When used with "optional_argument", value will be passed as NULL
-	uwsgi_opt_set_int("", NULL, &result);
+	upsgi_opt_set_int("", NULL, &result);
 	ck_assert(result == 1);
 }
 END_TEST
 
 Suite *check_core_opt_parsing(void)
 {
-	Suite *s = suite_create("uwsgi opt parsing");
+	Suite *s = suite_create("upsgi opt parsing");
 	TCase *tc = tcase_create("opt_parsing");
 
 	suite_add_tcase(s, tc);
-	tcase_add_test(tc, test_uwsgi_opt_set_int);
+	tcase_add_test(tc, test_upsgi_opt_set_int);
 	return s;
 }
 
-START_TEST(test_uwsgi_cron_task_needs_execution_handles_weekday_7_as_sunday)
+START_TEST(test_upsgi_cron_task_needs_execution_handles_weekday_7_as_sunday)
 {
 	int result;
 	struct tm *t;
@@ -73,24 +73,24 @@ START_TEST(test_uwsgi_cron_task_needs_execution_handles_weekday_7_as_sunday)
 	t = localtime(&now);
 	t->tm_wday= 0;
 
-	result = uwsgi_cron_task_needs_execution(t, -1, -1, -1, -1, 0);
+	result = upsgi_cron_task_needs_execution(t, -1, -1, -1, -1, 0);
 	ck_assert(result == 1);
 
-	result = uwsgi_cron_task_needs_execution(t, -1, -1, -1, -1, 7);
+	result = upsgi_cron_task_needs_execution(t, -1, -1, -1, -1, 7);
 	ck_assert(result == 1);
 
-	result = uwsgi_cron_task_needs_execution(t, -1, -1, -1, -1, 1);
+	result = upsgi_cron_task_needs_execution(t, -1, -1, -1, -1, 1);
 	ck_assert(result == 0);
 }
 END_TEST
 
 Suite *check_core_cron(void)
 {
-	Suite *s = suite_create("uwsgi cron");
+	Suite *s = suite_create("upsgi cron");
 	TCase *tc = tcase_create("cron");
 
 	suite_add_tcase(s, tc);
-	tcase_add_test(tc, test_uwsgi_cron_task_needs_execution_handles_weekday_7_as_sunday);
+	tcase_add_test(tc, test_upsgi_cron_task_needs_execution_handles_weekday_7_as_sunday);
 	return s;
 }
 

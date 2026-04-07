@@ -6,32 +6,25 @@ use FindBin;
 use Test::More;
 
 use lib File::Spec->catdir($FindBin::Bin, '..', 'lib');
-use UpSGITest qw(build_artifact_dir default_binary fixture_app fixture_static_root http_get pick_port render_profile slurp start_server stop_server wait_http);
-
-sub append_config_lines {
-    my ($path, @lines) = @_;
-    open my $fh, '>>', $path or die "unable to append to $path: $!\n";
-    print {$fh} "\n", @lines;
-    close $fh;
-}
+use UpSGITest qw(append_yaml_options build_artifact_dir default_binary fixture_app fixture_static_root http_get pick_port render_profile slurp start_server stop_server wait_http);
 
 my $binary = default_binary();
 my $artifact_dir = build_artifact_dir('runtime_tunable_validation');
-my $config_ini = File::Spec->catfile($artifact_dir, 'baseline.ini');
+my $config_yaml = File::Spec->catfile($artifact_dir, 'baseline.yaml');
 my $server_log = File::Spec->catfile($artifact_dir, 'server.log');
 my $port = pick_port(64);
 
 render_profile(
     profile => 'baseline',
-    output_ini => $config_ini,
+    output_yaml => $config_yaml,
     app => fixture_app('app_header_echo.psgi'),
     static_root => fixture_static_root(),
     log_file => $server_log,
     port => $port,
 );
 
-append_config_lines(
-    $config_ini,
+append_yaml_options(
+    $config_yaml,
     "master = true\n",
     "log-master = true\n",
     "log-drain-burst = 0\n",
@@ -40,7 +33,7 @@ append_config_lines(
 
 start_server(
     binary => $binary,
-    config_ini => $config_ini,
+    config_yaml => $config_yaml,
     artifact_dir => $artifact_dir,
 );
 

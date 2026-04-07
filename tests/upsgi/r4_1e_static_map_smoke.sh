@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 PORT="${UPSGI_TEST_PORT:-9192}"
-UWSGI_BIN="${UWSGI_BIN:-${REPO_DIR}/upsgi}"
+UPSGI_BIN="${UPSGI_BIN:-${REPO_DIR}/upsgi}"
 APP_FILE="$REPO_DIR/tests/upsgi/apps/static_fallback.psgi"
 HTTP_PROBE="$REPO_DIR/tests/upsgi/helpers/http_probe.py"
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/upsgi-static-smoke.XXXXXX")"
@@ -25,13 +25,13 @@ mkdir -p "$STATIC_ROOT"
 printf 'hello from static-map\n' > "$STATIC_ROOT/hello.txt"
 printf 'TOP-SECRET outside static root\n' > "$SECRET_FILE"
 
-if [[ ! -x "$UWSGI_BIN" ]]; then
-    echo "missing executable upsgi binary: $UWSGI_BIN" >&2
+if [[ ! -x "$UPSGI_BIN" ]]; then
+    echo "missing executable upsgi binary: $UPSGI_BIN" >&2
     echo "build the fork first, then rerun this smoke harness" >&2
     exit 2
 fi
 
-"$UWSGI_BIN" \
+"$UPSGI_BIN" \
     --master \
     --workers 1 \
     --need-app \

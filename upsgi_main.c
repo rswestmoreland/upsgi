@@ -1,5 +1,5 @@
-int uwsgi_init(int, char **, char **);
+int upsgi_init(int, char **, char **);
 
 int main(int argc, char *argv[], char **environ) {
-	return uwsgi_init(argc, argv, environ);
+	return upsgi_init(argc, argv, environ);
 }

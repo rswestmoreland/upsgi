@@ -1,55 +1,55 @@
-/* async uwsgi protocol parser */
+/* async upsgi protocol parser */
 
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 /*
 
 perfect framing is required in persistent mode, so we need at least 2 syscall to assemble
-a uwsgi header: 4 bytes header + payload
+a upsgi header: 4 bytes header + payload
 
 increase write_errors on error to force socket close
 
 */
 
-int uwsgi_proto_puwsgi_parser(struct wsgi_request *wsgi_req) {
+int upsgi_proto_pupsgi_parser(struct wsgi_request *wsgi_req) {
 	char *ptr = (char *) wsgi_req->uh;
-        ssize_t len = read(wsgi_req->fd, ptr + wsgi_req->proto_parser_pos, (uwsgi.buffer_size + 4) - wsgi_req->proto_parser_pos);
+        ssize_t len = read(wsgi_req->fd, ptr + wsgi_req->proto_parser_pos, (upsgi.buffer_size + 4) - wsgi_req->proto_parser_pos);
         if (len > 0) {
                 wsgi_req->proto_parser_pos += len;
                 if (wsgi_req->proto_parser_pos >= 4) {
 #ifdef __BIG_ENDIAN__
-                        wsgi_req->uh->_pktsize = uwsgi_swap16(wsgi_req->uh->_pktsize);
+                        wsgi_req->uh->_pktsize = upsgi_swap16(wsgi_req->uh->_pktsize);
 #endif
                         wsgi_req->len = wsgi_req->uh->_pktsize;
                         if ((wsgi_req->proto_parser_pos - 4) == wsgi_req->uh->_pktsize) {
-                                return UWSGI_OK;
+                                return UPSGI_OK;
                         }
                         if ((wsgi_req->proto_parser_pos - 4) > wsgi_req->uh->_pktsize) {
                                 wsgi_req->proto_parser_remains = wsgi_req->proto_parser_pos - (4 + wsgi_req->uh->_pktsize);
                                 wsgi_req->proto_parser_remains_buf = wsgi_req->buffer + wsgi_req->uh->_pktsize;
-                                return UWSGI_OK;
+                                return UPSGI_OK;
                         }
-                        if (wsgi_req->uh->_pktsize > uwsgi.buffer_size) {
-                                uwsgi_log("invalid request block size: %u (max %u)...skip\n", wsgi_req->uh->_pktsize, uwsgi.buffer_size);
+                        if (wsgi_req->uh->_pktsize > upsgi.buffer_size) {
+                                upsgi_log("invalid request block size: %u (max %u)...skip\n", wsgi_req->uh->_pktsize, upsgi.buffer_size);
 				wsgi_req->write_errors++;
                                 return -1;
                         }
                 }
-                return UWSGI_AGAIN;
+                return UPSGI_AGAIN;
         }
 	if (len < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS) {
-			return UWSGI_AGAIN;
+			return UPSGI_AGAIN;
 		}
-		uwsgi_error("uwsgi_proto_uwsgi_parser()");	
+		upsgi_error("upsgi_proto_upsgi_parser()");	
 		wsgi_req->write_errors++;		
 		return -1;
 	}
 	// 0 len
 	if (wsgi_req->proto_parser_pos > 0) {
-		uwsgi_error("uwsgi_proto_uwsgi_parser()");	
+		upsgi_error("upsgi_proto_upsgi_parser()");	
 	}
 	wsgi_req->write_errors++;		
 	return -1;
@@ -58,7 +58,7 @@ int uwsgi_proto_puwsgi_parser(struct wsgi_request *wsgi_req) {
 /*
 close the connection on errors, otherwise force edge triggering
 */
-void uwsgi_proto_puwsgi_close(struct wsgi_request *wsgi_req) {
+void upsgi_proto_pupsgi_close(struct wsgi_request *wsgi_req) {
 	// check for errors or incomplete packets
 	if (wsgi_req->write_errors || (size_t) (wsgi_req->len + 4) != wsgi_req->proto_parser_pos) {
 		close(wsgi_req->fd);
@@ -71,10 +71,10 @@ void uwsgi_proto_puwsgi_close(struct wsgi_request *wsgi_req) {
 	}
 }
 
-int uwsgi_proto_puwsgi_accept(struct wsgi_request *wsgi_req, int fd) {
+int upsgi_proto_pupsgi_accept(struct wsgi_request *wsgi_req, int fd) {
 	if (wsgi_req->socket->retry[wsgi_req->async_id]) {
 		wsgi_req->fd = wsgi_req->socket->fd_threads[wsgi_req->async_id];
-		int ret = uwsgi_wait_read_req(wsgi_req);
+		int ret = upsgi_wait_read_req(wsgi_req);
                 if (ret <= 0) {
 			close(wsgi_req->fd);
 			wsgi_req->socket->retry[wsgi_req->async_id] = 0;
@@ -83,23 +83,23 @@ int uwsgi_proto_puwsgi_accept(struct wsgi_request *wsgi_req, int fd) {
 		}
 		return wsgi_req->socket->fd_threads[wsgi_req->async_id];	
 	}
-	return uwsgi_proto_base_accept(wsgi_req, fd);
+	return upsgi_proto_base_accept(wsgi_req, fd);
 }
 
-void uwsgi_proto_puwsgi_setup(struct uwsgi_socket *uwsgi_sock) {
-                        uwsgi_sock->proto = uwsgi_proto_puwsgi_parser;
-                        uwsgi_sock->proto_accept = uwsgi_proto_puwsgi_accept;
-                        uwsgi_sock->proto_prepare_headers = uwsgi_proto_base_prepare_headers;
-                        uwsgi_sock->proto_add_header = uwsgi_proto_base_add_header;
-                        uwsgi_sock->proto_fix_headers = uwsgi_proto_base_fix_headers;
-                        uwsgi_sock->proto_read_body = uwsgi_proto_noop_read_body;
-                        uwsgi_sock->proto_write = uwsgi_proto_base_write;
-                        uwsgi_sock->proto_writev = uwsgi_proto_base_writev;
-                        uwsgi_sock->proto_write_headers = uwsgi_proto_base_write;
-                        uwsgi_sock->proto_sendfile = uwsgi_proto_base_sendfile;
-                        uwsgi_sock->proto_close = uwsgi_proto_puwsgi_close;
-                        uwsgi_sock->fd_threads = uwsgi_malloc(sizeof(int) * uwsgi.cores);
-                        memset(uwsgi_sock->fd_threads, -1, sizeof(int) * uwsgi.cores);
-                        uwsgi_sock->retry = uwsgi_calloc(sizeof(int) * uwsgi.cores);
-                        uwsgi.is_et = 1;
+void upsgi_proto_pupsgi_setup(struct upsgi_socket *upsgi_sock) {
+                        upsgi_sock->proto = upsgi_proto_pupsgi_parser;
+                        upsgi_sock->proto_accept = upsgi_proto_pupsgi_accept;
+                        upsgi_sock->proto_prepare_headers = upsgi_proto_base_prepare_headers;
+                        upsgi_sock->proto_add_header = upsgi_proto_base_add_header;
+                        upsgi_sock->proto_fix_headers = upsgi_proto_base_fix_headers;
+                        upsgi_sock->proto_read_body = upsgi_proto_noop_read_body;
+                        upsgi_sock->proto_write = upsgi_proto_base_write;
+                        upsgi_sock->proto_writev = upsgi_proto_base_writev;
+                        upsgi_sock->proto_write_headers = upsgi_proto_base_write;
+                        upsgi_sock->proto_sendfile = upsgi_proto_base_sendfile;
+                        upsgi_sock->proto_close = upsgi_proto_pupsgi_close;
+                        upsgi_sock->fd_threads = upsgi_malloc(sizeof(int) * upsgi.cores);
+                        memset(upsgi_sock->fd_threads, -1, sizeof(int) * upsgi.cores);
+                        upsgi_sock->retry = upsgi_calloc(sizeof(int) * upsgi.cores);
+                        upsgi.is_et = 1;
                 }

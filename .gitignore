@@ -12,20 +12,20 @@
 *.rej
 
 /upsgi
-/uwsgi
-/bin/uwsgi
-/uwsgibuild.*
+/upsgi
+/bin/upsgi
+/upsgibuild.*
 /core/config_py.c
 /core/dot_h.c
 
 /t/ring/target
-/t/spooler/spooldir/uwsgi_*
+/t/spooler/spooldir/upsgi_*
 
 /cov-int/
-/uwsgi.tar.xz
+/upsgi.tar.xz
 /build/
 /dist/
-/uWSGI.egg-info/
+/upsgi.egg-info/
 check/check_*
 !check/*.c
 /.local-lib/

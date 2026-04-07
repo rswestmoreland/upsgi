@@ -1,6 +1,6 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-char *uwsgi_str_split_nget(char *str, size_t len, char what, size_t pos, size_t *rlen) {
+char *upsgi_str_split_nget(char *str, size_t len, char what, size_t pos, size_t *rlen) {
 	size_t i;
 	size_t current = 0;
 	char *chosen = str;
@@ -32,7 +32,7 @@ char *uwsgi_str_split_nget(char *str, size_t len, char what, size_t pos, size_t 
 	return NULL;
 }
 
-size_t uwsgi_str_occurence(char *str, size_t len, char what) {
+size_t upsgi_str_occurence(char *str, size_t len, char what) {
 	size_t count = 0;
 	size_t i;
 	for(i=0;i<len;i++) {
@@ -42,8 +42,8 @@ size_t uwsgi_str_occurence(char *str, size_t len, char what) {
 }
 
 // check if a string_list contains an item
-struct uwsgi_string_list *uwsgi_string_list_has_item(struct uwsgi_string_list *list, char *key, size_t keylen) {
-        struct uwsgi_string_list *usl = list;
+struct upsgi_string_list *upsgi_string_list_has_item(struct upsgi_string_list *list, char *key, size_t keylen) {
+        struct upsgi_string_list *usl = list;
         while (usl) {
                 if (keylen == usl->len) {
                         if (!memcmp(key, usl->value, keylen)) {
@@ -56,7 +56,7 @@ struct uwsgi_string_list *uwsgi_string_list_has_item(struct uwsgi_string_list *l
 }
 
 // lower a string
-char *uwsgi_lower(char *str, size_t size) {
+char *upsgi_lower(char *str, size_t size) {
         size_t i;
         for (i = 0; i < size; i++) {
                 str[i] = tolower((int) str[i]);
@@ -66,11 +66,11 @@ char *uwsgi_lower(char *str, size_t size) {
 }
 
 // check if a char is contained in a string
-char *uwsgi_str_contains(char *str, int slen, char what) {
+char *upsgi_str_contains(char *str, int slen, char what) {
         return memchr(str, what, slen);
 }
 
-int uwsgi_contains_n(char *s1, size_t s1_len, char *s2, size_t s2_len) {
+int upsgi_contains_n(char *s1, size_t s1_len, char *s2, size_t s2_len) {
         size_t i;
         char *ptr = s2;
         for (i = 0; i < s1_len; i++) {
@@ -88,7 +88,7 @@ int uwsgi_contains_n(char *s1, size_t s1_len, char *s2, size_t s2_len) {
 }
 
 // fast compare 2 sized strings
-int uwsgi_strncmp(char *src, int slen, char *dst, int dlen) {
+int upsgi_strncmp(char *src, int slen, char *dst, int dlen) {
 
         if (slen != dlen)
                 return 1;
@@ -98,7 +98,7 @@ int uwsgi_strncmp(char *src, int slen, char *dst, int dlen) {
 }
 
 // fast compare 2 sized strings (case insensitive)
-int uwsgi_strnicmp(char *src, int slen, char *dst, int dlen) {
+int upsgi_strnicmp(char *src, int slen, char *dst, int dlen) {
 
         if (slen != dlen)
                 return 1;
@@ -108,7 +108,7 @@ int uwsgi_strnicmp(char *src, int slen, char *dst, int dlen) {
 }
 
 // fast sized check of initial part of a string
-int uwsgi_starts_with(char *src, int slen, char *dst, int dlen) {
+int upsgi_starts_with(char *src, int slen, char *dst, int dlen) {
 
         if (slen < dlen)
                 return -1;
@@ -118,12 +118,12 @@ int uwsgi_starts_with(char *src, int slen, char *dst, int dlen) {
 
 
 // unsized check
-int uwsgi_startswith(char *src, char *what, int wlen) {
+int upsgi_startswith(char *src, char *what, int wlen) {
         return memcmp(what, src, wlen);
 }
 
 // concatenate strings
-char *uwsgi_concatn(int c, ...) {
+char *upsgi_concatn(int c, ...) {
 
         va_list s;
         char *item;
@@ -144,7 +144,7 @@ char *uwsgi_concatn(int c, ...) {
         va_end(s);
 
 
-        buf = uwsgi_malloc(len);
+        buf = upsgi_malloc(len);
         memset(buf, 0, len);
 
         j = c;
@@ -169,13 +169,13 @@ char *uwsgi_concatn(int c, ...) {
 
 }
 
-char *uwsgi_concat2(char *one, char *two) {
+char *upsgi_concat2(char *one, char *two) {
 
         char *buf;
         size_t len = strlen(one) + strlen(two) + 1;
 
 
-        buf = uwsgi_malloc(len);
+        buf = upsgi_malloc(len);
         buf[len - 1] = 0;
 
         memcpy(buf, one, strlen(one));
@@ -185,13 +185,13 @@ char *uwsgi_concat2(char *one, char *two) {
 
 }
 
-char *uwsgi_concat4(char *one, char *two, char *three, char *four) {
+char *upsgi_concat4(char *one, char *two, char *three, char *four) {
 
         char *buf;
         size_t len = strlen(one) + strlen(two) + strlen(three) + strlen(four) + 1;
 
 
-        buf = uwsgi_malloc(len);
+        buf = upsgi_malloc(len);
         buf[len - 1] = 0;
 
         memcpy(buf, one, strlen(one));
@@ -204,13 +204,13 @@ char *uwsgi_concat4(char *one, char *two, char *three, char *four) {
 }
 
 
-char *uwsgi_concat3(char *one, char *two, char *three) {
+char *upsgi_concat3(char *one, char *two, char *three) {
 
         char *buf;
         size_t len = strlen(one) + strlen(two) + strlen(three) + 1;
 
 
-        buf = uwsgi_malloc(len);
+        buf = upsgi_malloc(len);
         buf[len - 1] = 0;
 
         memcpy(buf, one, strlen(one));
@@ -221,13 +221,13 @@ char *uwsgi_concat3(char *one, char *two, char *three) {
 
 }
 
-char *uwsgi_concat2n(char *one, int s1, char *two, int s2) {
+char *upsgi_concat2n(char *one, int s1, char *two, int s2) {
 
         char *buf;
         size_t len = s1 + s2 + 1;
 
 
-        buf = uwsgi_malloc(len);
+        buf = upsgi_malloc(len);
         buf[len - 1] = 0;
 
         memcpy(buf, one, s1);
@@ -237,13 +237,13 @@ char *uwsgi_concat2n(char *one, int s1, char *two, int s2) {
 
 }
 
-char *uwsgi_concat2nn(char *one, int s1, char *two, int s2, int *len) {
+char *upsgi_concat2nn(char *one, int s1, char *two, int s2, int *len) {
 
         char *buf;
         *len = s1 + s2 + 1;
 
 
-        buf = uwsgi_malloc(*len);
+        buf = upsgi_malloc(*len);
         buf[*len - 1] = 0;
 
         memcpy(buf, one, s1);
@@ -254,13 +254,13 @@ char *uwsgi_concat2nn(char *one, int s1, char *two, int s2, int *len) {
 }
 
 
-char *uwsgi_concat3n(char *one, int s1, char *two, int s2, char *three, int s3) {
+char *upsgi_concat3n(char *one, int s1, char *two, int s2, char *three, int s3) {
 
         char *buf;
         size_t len = s1 + s2 + s3 + 1;
 
 
-        buf = uwsgi_malloc(len);
+        buf = upsgi_malloc(len);
         buf[len - 1] = 0;
 
         memcpy(buf, one, s1);
@@ -271,13 +271,13 @@ char *uwsgi_concat3n(char *one, int s1, char *two, int s2, char *three, int s3) 
 
 }
 
-char *uwsgi_concat4n(char *one, int s1, char *two, int s2, char *three, int s3, char *four, int s4) {
+char *upsgi_concat4n(char *one, int s1, char *two, int s2, char *three, int s3, char *four, int s4) {
 
         char *buf;
         size_t len = s1 + s2 + s3 + s4 + 1;
 
 
-        buf = uwsgi_malloc(len);
+        buf = upsgi_malloc(len);
         buf[len - 1] = 0;
 
         memcpy(buf, one, s1);
@@ -290,7 +290,7 @@ char *uwsgi_concat4n(char *one, int s1, char *two, int s2, char *three, int s3, 
 }
 
 // concat unsized strings
-char *uwsgi_concat(int c, ...) {
+char *upsgi_concat(int c, ...) {
 
         va_list s;
         char *item;
@@ -310,7 +310,7 @@ char *uwsgi_concat(int c, ...) {
         va_end(s);
 
 
-        buf = uwsgi_malloc(len);
+        buf = upsgi_malloc(len);
         memset(buf, 0, len);
 
         j = c;
@@ -334,11 +334,11 @@ char *uwsgi_concat(int c, ...) {
 
 }
 
-char *uwsgi_strncopy(char *s, int len) {
+char *upsgi_strncopy(char *s, int len) {
 
         char *buf;
 
-        buf = uwsgi_malloc(len + 1);
+        buf = upsgi_malloc(len + 1);
         buf[len] = 0;
 
         memcpy(buf, s, len);
@@ -347,8 +347,8 @@ char *uwsgi_strncopy(char *s, int len) {
 
 }
 
-// this move a string back of one char and put a 0 at the end (used in uwsgi parsers for buffer reusing)
-char *uwsgi_cheap_string(char *buf, int len) {
+// this move a string back of one char and put a 0 at the end (used in upsgi parsers for buffer reusing)
+char *upsgi_cheap_string(char *buf, int len) {
 
         int i;
         char *cheap_buf = buf - 1;
@@ -373,18 +373,18 @@ char *uwsgi_cheap_string(char *buf, int len) {
 	status 5: backslash found (on 2)
 	
 */
-char ** uwsgi_split_quoted(char *what, size_t what_len, char *sep, size_t *rlen) {
+char ** upsgi_split_quoted(char *what, size_t what_len, char *sep, size_t *rlen) {
 	size_t i;
 	int status = 0;
-	char *base = uwsgi_concat2n(what, what_len, "", 0);
+	char *base = upsgi_concat2n(what, what_len, "", 0);
 	char *item = NULL;
 	char *ptr = NULL;
 	*rlen = 0;
-	char **ret = (char **) uwsgi_malloc(sizeof(char *) * (what_len+1));
+	char **ret = (char **) upsgi_malloc(sizeof(char *) * (what_len+1));
 
 	for(i=0;i<what_len;i++) {
 		if (!item) {
-			item = uwsgi_malloc((what_len - i)+1);
+			item = upsgi_malloc((what_len - i)+1);
 			ptr = item;
 		}
 
@@ -469,13 +469,13 @@ char ** uwsgi_split_quoted(char *what, size_t what_len, char *sep, size_t *rlen)
 	return ret;
 }
 
-char *uwsgi_get_last_char(char *what, char c) {
+char *upsgi_get_last_char(char *what, char c) {
 	return strrchr(what, c);
 }
 
 // Note by Mathieu Dupuy: memrchr here is better, unfortunately it is not supported
 // everywhere. The only safe option looks checking for Linux :(
-char *uwsgi_get_last_charn(char *what, size_t len, char c) {
+char *upsgi_get_last_charn(char *what, size_t len, char c) {
 #if defined(__linux__)
 	return memrchr(what, c, len);
 #else

@@ -7,7 +7,7 @@ use Test::More;
 use Time::HiRes qw(sleep time);
 
 use lib File::Spec->catdir($FindBin::Bin, '..', 'lib');
-use UpSGITest qw(build_artifact_dir default_binary fixture_app fixture_static_root http_get pick_port render_profile start_server stop_server wait_http slurp);
+use UpSGITest qw(append_yaml_options build_artifact_dir default_binary fixture_app fixture_static_root http_get pick_port render_profile start_server stop_server wait_http slurp);
 
 sub wait_for_log_pattern {
     my ($path, $pattern, $attempts, $sleep_seconds) = @_;
@@ -27,29 +27,30 @@ sub wait_for_log_pattern {
 
 my $binary = default_binary();
 my $artifact_dir = build_artifact_dir('worker_lifecycle');
-my $config_ini = File::Spec->catfile($artifact_dir, 'worker_lifecycle.ini');
+my $config_yaml = File::Spec->catfile($artifact_dir, 'worker_lifecycle.yaml');
 my $server_log = File::Spec->catfile($artifact_dir, 'server.log');
 my $fifo_path = File::Spec->catfile($artifact_dir, 'master.fifo');
 my $port = pick_port(14);
 
 render_profile(
     profile => 'baseline',
-    output_ini => $config_ini,
+    output_yaml => $config_yaml,
     app => fixture_app('app_simple.psgi'),
     static_root => fixture_static_root(),
     log_file => $server_log,
     port => $port,
 );
 
-open my $append_fh, '>>', $config_ini or die "unable to append lifecycle config: $!\n";
-print {$append_fh} "workers = 2\n";
-print {$append_fh} "master-fifo = $fifo_path\n";
-print {$append_fh} "chain-reload-delay = 1\n";
-close $append_fh;
+append_yaml_options(
+    $config_yaml,
+    "workers = 2\n",
+    "master-fifo = $fifo_path\n",
+    "chain-reload-delay = 1\n",
+);
 
 start_server(
     binary => $binary,
-    config_ini => $config_ini,
+    config_yaml => $config_yaml,
     artifact_dir => $artifact_dir,
 );
 

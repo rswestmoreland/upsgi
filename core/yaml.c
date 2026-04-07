@@ -1,11 +1,11 @@
-#ifdef UWSGI_YAML
+#ifdef UPSGI_YAML
 
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 
-#ifndef UWSGI_LIBYAML
+#ifndef UPSGI_LIBYAML
 /*
    yaml file must be read ALL into memory.
    This memory must not be freed for all the server lifecycle
@@ -94,25 +94,25 @@ char *yaml_get_line(char *yaml, size_t size) {
 #include <yaml.h>
 #endif
 
-void uwsgi_yaml_config(char *file, char *magic_table[]) {
+void upsgi_yaml_config(char *file, char *magic_table[]) {
 
 	size_t len = 0;
 	char *yaml;
 
-	int in_uwsgi_section = 0;
+	int in_upsgi_section = 0;
 
 	char *key = NULL;
 	char *val = NULL;
 
-	char *section_asked = "uwsgi";
+	char *section_asked = "upsgi";
 	char *colon;
 
-	if (uwsgi_check_scheme(file)) {
-		colon = uwsgi_get_last_char(file, '/');
-		colon = uwsgi_get_last_char(colon, ':');
+	if (upsgi_check_scheme(file)) {
+		colon = upsgi_get_last_char(file, '/');
+		colon = upsgi_get_last_char(colon, ':');
 	}
 	else {
-		colon = uwsgi_get_last_char(file, ':');
+		colon = upsgi_get_last_char(file, ':');
 	}
 
 	if (colon) {
@@ -122,18 +122,18 @@ void uwsgi_yaml_config(char *file, char *magic_table[]) {
 		}
 	}
 
-	uwsgi_log_initial("[uWSGI] getting YAML configuration from %s\n", file);
+	upsgi_log_initial("[upsgi] getting YAML configuration from %s\n", file);
 
-	yaml = uwsgi_open_and_read(file, &len, 1, magic_table);
+	yaml = upsgi_open_and_read(file, &len, 1, magic_table);
 
-#ifdef UWSGI_LIBYAML
+#ifdef UPSGI_LIBYAML
 	yaml_parser_t parser;
 	yaml_token_t token;
 	int status = 0;
 	int parsing = 1;
 
 	if (!yaml_parser_initialize(&parser)) {
-		uwsgi_log("unable to initialize YAML parser (libyaml)\n");
+		upsgi_log("unable to initialize YAML parser (libyaml)\n");
 		exit(1);
 	}
 
@@ -141,7 +141,7 @@ void uwsgi_yaml_config(char *file, char *magic_table[]) {
 
 	while (parsing) {
 		if (!yaml_parser_scan(&parser, &token)) {
-			uwsgi_log("error parsing YAML file: %s (%c)\n", parser.problem, yaml[parser.problem_offset]);
+			upsgi_log("error parsing YAML file: %s (%c)\n", parser.problem, yaml[parser.problem_offset]);
 			exit(1);
 		}
 		switch (token.type) {
@@ -156,28 +156,28 @@ void uwsgi_yaml_config(char *file, char *magic_table[]) {
 			break;
 		case YAML_FLOW_SEQUENCE_START_TOKEN:
 		case YAML_BLOCK_SEQUENCE_START_TOKEN:
-			if (in_uwsgi_section)
-				in_uwsgi_section++;
+			if (in_upsgi_section)
+				in_upsgi_section++;
 			// fallthrough
 		case YAML_FLOW_ENTRY_TOKEN:
 		case YAML_BLOCK_ENTRY_TOKEN:
 			status = 3;  // inside a sequence
 			break;
 		case YAML_BLOCK_MAPPING_START_TOKEN:
-			if (in_uwsgi_section) {
-				in_uwsgi_section++;
+			if (in_upsgi_section) {
+				in_upsgi_section++;
 				break;
 			}
 			if (key) {
 				if (!strcmp(section_asked, key)) {
-					in_uwsgi_section = 1;
+					in_upsgi_section = 1;
 				}
 			}
 			break;
 		case YAML_BLOCK_END_TOKEN:
 		case YAML_FLOW_SEQUENCE_END_TOKEN:
-			if (in_uwsgi_section)
-				parsing = !!(--in_uwsgi_section);
+			if (in_upsgi_section)
+				parsing = !!(--in_upsgi_section);
 			key = NULL;
 			status = 0;
 			break;
@@ -187,7 +187,7 @@ void uwsgi_yaml_config(char *file, char *magic_table[]) {
 			}
 			else if (status == 2 || status == 3) {
 				val = (char *) token.data.scalar.value;
-				if (key && val && in_uwsgi_section) {
+				if (key && val && in_upsgi_section) {
 					add_exported_option(key, val, 0);
 				}
 
@@ -198,7 +198,7 @@ void uwsgi_yaml_config(char *file, char *magic_table[]) {
 				}
 			}
 			else {
-				uwsgi_log("unsupported YAML token %d in %s block\n", token.type, section_asked);
+				upsgi_log("unsupported YAML token %d in %s block\n", token.type, section_asked);
 				parsing = 0;
 				break;
 			}
@@ -228,10 +228,10 @@ void uwsgi_yaml_config(char *file, char *magic_table[]) {
 		if (depth <= current_depth) {
 			current_depth = depth;
 			// end the parsing cycle
-			if (in_uwsgi_section)
+			if (in_upsgi_section)
 				return;
 		}
-		else if (depth > current_depth && !in_uwsgi_section) {
+		else if (depth > current_depth && !in_upsgi_section) {
 			goto next;
 		}
 
@@ -242,18 +242,18 @@ void uwsgi_yaml_config(char *file, char *magic_table[]) {
 
 		// skip list and {} defined dict
 		if (key[0] == '-' || key[0] == '[' || key[0] == '{') {
-			if (in_uwsgi_section)
+			if (in_upsgi_section)
 				return;
 			goto next;
 		}
 
-		if (!in_uwsgi_section) {
+		if (!in_upsgi_section) {
 			section = strchr(key, ':');
 			if (!section)
 				goto next;
 			section[0] = 0;
 			if (!strcmp(key, section_asked)) {
-				in_uwsgi_section = 1;
+				in_upsgi_section = 1;
 			}
 		}
 		else {
@@ -272,7 +272,7 @@ void uwsgi_yaml_config(char *file, char *magic_table[]) {
 			val = yaml_lstrip(val + 2);
 			yaml_rstrip(val);
 
-			//uwsgi_log("YAML: %s = %s\n", key, val);
+			//upsgi_log("YAML: %s = %s\n", key, val);
 
 			add_exported_option((char *) key, val, 0);
 		}

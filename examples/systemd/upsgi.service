@@ -1,0 +1,25 @@
+[Unit]
+Description=upsgi PSGI application server
+After=network.target
+Wants=network.target
+
+[Service]
+Type=notify
+User=upsgi
+Group=upsgi
+WorkingDirectory=/srv/myapp/current
+EnvironmentFile=-/etc/default/upsgi-app
+RuntimeDirectory=upsgi
+RuntimeDirectoryMode=0755
+ExecStart=/usr/local/bin/upsgi --config /etc/upsgi/app.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=30
+LimitNOFILE=65535
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

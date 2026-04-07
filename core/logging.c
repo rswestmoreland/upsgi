@@ -1,5 +1,5 @@
 #ifndef __DragonFly__
-#include "uwsgi.h"
+#include "upsgi.h"
 #endif
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__DragonFly__) || defined(__OpenBSD__)
 #include <sys/user.h>
@@ -15,7 +15,7 @@
 #endif
 
 #ifdef __DragonFly__
-#include "uwsgi.h"
+#include "upsgi.h"
 #endif
 
 /*
@@ -29,10 +29,10 @@
  * - PSGI exception visibility is controlled in the PSGI layer via
  *   --log-exceptions and is intentionally outside this generic core
  */
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 //use this instead of fprintf to avoid buffering mess with udp logging
-void uwsgi_log(const char *fmt, ...) {
+void upsgi_log(const char *fmt, ...) {
 	va_list ap;
 	char logpkt[4096];
 	int rlen = 0;
@@ -43,10 +43,10 @@ void uwsgi_log(const char *fmt, ...) {
 	char ctime_storage[26];
 	time_t now;
 
-	if (uwsgi.logdate) {
-		if (uwsgi.log_strftime) {
-			now = uwsgi_now();
-			rlen = strftime(sftime, 64, uwsgi.log_strftime, localtime(&now));
+	if (upsgi.logdate) {
+		if (upsgi.log_strftime) {
+			now = upsgi_now();
+			rlen = strftime(sftime, 64, upsgi.log_strftime, localtime(&now));
 			memcpy(logpkt, sftime, rlen);
 			memcpy(logpkt + rlen, " - ", 3);
 			rlen += 3;
@@ -70,7 +70,7 @@ void uwsgi_log(const char *fmt, ...) {
 	va_end(ap);
 
 	if (ret >= 4096) {
-		char *tmp_buf = uwsgi_malloc(rlen + ret + 1);
+		char *tmp_buf = upsgi_malloc(rlen + ret + 1);
 		memcpy(tmp_buf, logpkt, rlen);
 		va_start(ap, fmt);
 		ret = vsnprintf(tmp_buf + rlen, ret + 1, fmt, ap);
@@ -85,7 +85,7 @@ void uwsgi_log(const char *fmt, ...) {
 	rlen = write(2, logpkt, rlen);
 }
 
-void uwsgi_log_verbose(const char *fmt, ...) {
+void upsgi_log_verbose(const char *fmt, ...) {
 
 	va_list ap;
 	char logpkt[4096];
@@ -96,9 +96,9 @@ void uwsgi_log_verbose(const char *fmt, ...) {
 	time_t now;
 	char ctime_storage[26];
 
-	if (uwsgi.log_strftime) {
-		now = uwsgi_now();
-		rlen = strftime(sftime, 64, uwsgi.log_strftime, localtime(&now));
+	if (upsgi.log_strftime) {
+		now = upsgi_now();
+		rlen = strftime(sftime, 64, upsgi.log_strftime, localtime(&now));
 		memcpy(logpkt, sftime, rlen);
 		memcpy(logpkt + rlen, " - ", 3);
 		rlen += 3;
@@ -130,7 +130,7 @@ void uwsgi_log_verbose(const char *fmt, ...) {
 /*
 	commodity function mainly useful in log rotation
 */
-void uwsgi_logfile_write(const char *fmt, ...) {
+void upsgi_logfile_write(const char *fmt, ...) {
 	va_list ap;
         char logpkt[4096];
 
@@ -153,7 +153,7 @@ void uwsgi_logfile_write(const char *fmt, ...) {
         va_end(ap);
 
         // do not check for errors
-        rlen = write(uwsgi.original_log_fd, logpkt, rlen);
+        rlen = write(upsgi.original_log_fd, logpkt, rlen);
 }
 
 
@@ -163,26 +163,26 @@ static void fix_logpipe_buf(int *fd) {
         socklen_t so_bufsize_len = sizeof(int);
 
         if (getsockopt(fd[0], SOL_SOCKET, SO_RCVBUF, &so_bufsize, &so_bufsize_len)) {
-                uwsgi_error("fix_logpipe_buf()/getsockopt()");
+                upsgi_error("fix_logpipe_buf()/getsockopt()");
 		return;
         }
 
-	if ((size_t)so_bufsize < uwsgi.log_master_bufsize) {
-		so_bufsize = uwsgi.log_master_bufsize;
+	if ((size_t)so_bufsize < upsgi.log_master_bufsize) {
+		so_bufsize = upsgi.log_master_bufsize;
 		if (setsockopt(fd[0], SOL_SOCKET, SO_RCVBUF, &so_bufsize, so_bufsize_len)) {
-                        uwsgi_error("fix_logpipe_buf()/setsockopt()");
+                        upsgi_error("fix_logpipe_buf()/setsockopt()");
         	}
 	}
 
 	if (getsockopt(fd[1], SOL_SOCKET, SO_SNDBUF, &so_bufsize, &so_bufsize_len)) {
-                uwsgi_error("fix_logpipe_buf()/getsockopt()");
+                upsgi_error("fix_logpipe_buf()/getsockopt()");
                 return;
         }
 
-        if ((size_t)so_bufsize < uwsgi.log_master_bufsize) {
-                so_bufsize = uwsgi.log_master_bufsize;
+        if ((size_t)so_bufsize < upsgi.log_master_bufsize) {
+                so_bufsize = upsgi.log_master_bufsize;
                 if (setsockopt(fd[1], SOL_SOCKET, SO_SNDBUF, &so_bufsize, so_bufsize_len)) {
-                        uwsgi_error("fix_logpipe_buf()/setsockopt()");
+                        upsgi_error("fix_logpipe_buf()/setsockopt()");
                 }
         }
 }
@@ -190,61 +190,61 @@ static void fix_logpipe_buf(int *fd) {
 // create the logpipe
 void create_logpipe(void) {
 
-	if (uwsgi.log_master_stream) {
-		if (socketpair(AF_UNIX, SOCK_STREAM, 0, uwsgi.shared->worker_log_pipe)) {
-			uwsgi_error("create_logpipe()/socketpair()\n");
+	if (upsgi.log_master_stream) {
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, upsgi.shared->worker_log_pipe)) {
+			upsgi_error("create_logpipe()/socketpair()\n");
 			exit(1);
 		}
 	}
 	else {
 #if defined(SOCK_SEQPACKET) && defined(__linux__)
-		if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, uwsgi.shared->worker_log_pipe)) {
+		if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, upsgi.shared->worker_log_pipe)) {
 #else
-		if (socketpair(AF_UNIX, SOCK_DGRAM, 0, uwsgi.shared->worker_log_pipe)) {
+		if (socketpair(AF_UNIX, SOCK_DGRAM, 0, upsgi.shared->worker_log_pipe)) {
 #endif
-			uwsgi_error("create_logpipe()/socketpair()\n");
+			upsgi_error("create_logpipe()/socketpair()\n");
 			exit(1);
 		}
-		fix_logpipe_buf(uwsgi.shared->worker_log_pipe);
+		fix_logpipe_buf(upsgi.shared->worker_log_pipe);
 	}
 
-	uwsgi_socket_nb(uwsgi.shared->worker_log_pipe[0]);
-	uwsgi_socket_nb(uwsgi.shared->worker_log_pipe[1]);
+	upsgi_socket_nb(upsgi.shared->worker_log_pipe[0]);
+	upsgi_socket_nb(upsgi.shared->worker_log_pipe[1]);
 
-	if (uwsgi.shared->worker_log_pipe[1] != 1) {
-		if (dup2(uwsgi.shared->worker_log_pipe[1], 1) < 0) {
-			uwsgi_error("dup2()");
+	if (upsgi.shared->worker_log_pipe[1] != 1) {
+		if (dup2(upsgi.shared->worker_log_pipe[1], 1) < 0) {
+			upsgi_error("dup2()");
 			exit(1);
 		}
 	}
 
 	if (dup2(1, 2) < 0) {
-		uwsgi_error("dup2()");
+		upsgi_error("dup2()");
 		exit(1);
 	}
 
-	if (uwsgi.req_log_master) {
-		if (uwsgi.log_master_req_stream) {
-			if (socketpair(AF_UNIX, SOCK_STREAM, 0, uwsgi.shared->worker_req_log_pipe)) {
-				uwsgi_error("create_logpipe()/socketpair()\n");
+	if (upsgi.req_log_master) {
+		if (upsgi.log_master_req_stream) {
+			if (socketpair(AF_UNIX, SOCK_STREAM, 0, upsgi.shared->worker_req_log_pipe)) {
+				upsgi_error("create_logpipe()/socketpair()\n");
 				exit(1);
 			}
 		}
 		else {
 #if defined(SOCK_SEQPACKET) && defined(__linux__)
-			if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, uwsgi.shared->worker_req_log_pipe)) {
+			if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, upsgi.shared->worker_req_log_pipe)) {
 #else
-			if (socketpair(AF_UNIX, SOCK_DGRAM, 0, uwsgi.shared->worker_req_log_pipe)) {
+			if (socketpair(AF_UNIX, SOCK_DGRAM, 0, upsgi.shared->worker_req_log_pipe)) {
 #endif
-				uwsgi_error("create_logpipe()/socketpair()\n");
+				upsgi_error("create_logpipe()/socketpair()\n");
 				exit(1);
 			}
-			fix_logpipe_buf(uwsgi.shared->worker_req_log_pipe);
+			fix_logpipe_buf(upsgi.shared->worker_req_log_pipe);
 		}
 
-		uwsgi_socket_nb(uwsgi.shared->worker_req_log_pipe[0]);
-		uwsgi_socket_nb(uwsgi.shared->worker_req_log_pipe[1]);
-		uwsgi.req_log_fd = uwsgi.shared->worker_req_log_pipe[1];
+		upsgi_socket_nb(upsgi.shared->worker_req_log_pipe[0]);
+		upsgi_socket_nb(upsgi.shared->worker_req_log_pipe[1]);
+		upsgi.req_log_fd = upsgi.shared->worker_req_log_pipe[1];
 	}
 
 }
@@ -261,13 +261,13 @@ void logto(char *logfile) {
 	if (udp_port) {
 		udp_port[0] = 0;
 		if (!udp_port[1] || !logfile[0]) {
-			uwsgi_log("invalid udp address\n");
+			upsgi_log("invalid udp address\n");
 			exit(1);
 		}
 
 		fd = socket(AF_INET, SOCK_DGRAM, 0);
 		if (fd < 0) {
-			uwsgi_error("socket()");
+			upsgi_error("socket()");
 			exit(1);
 		}
 
@@ -275,7 +275,7 @@ void logto(char *logfile) {
 
 		udp_addr.sin_family = AF_INET;
 		udp_addr.sin_port = htons(atoi(udp_port + 1));
-		char *resolved = uwsgi_resolve_ip(logfile);
+		char *resolved = upsgi_resolve_ip(logfile);
 		if (resolved) {
 			udp_addr.sin_addr.s_addr = inet_addr(resolved);
 		}
@@ -284,37 +284,37 @@ void logto(char *logfile) {
 		}
 
 		if (connect(fd, (const struct sockaddr *) &udp_addr, sizeof(struct sockaddr_in)) < 0) {
-			uwsgi_error("connect()");
+			upsgi_error("connect()");
 			exit(1);
 		}
 	}
 	else {
-		if (uwsgi.log_truncate) {
+		if (upsgi.log_truncate) {
 			fd = open(logfile, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP);
 		}
 		else {
 			fd = open(logfile, O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP);
 		}
 		if (fd < 0) {
-			uwsgi_error_open(logfile);
+			upsgi_error_open(logfile);
 			exit(1);
 		}
-		uwsgi.logfile = logfile;
+		upsgi.logfile = logfile;
 
-		if (uwsgi.chmod_logfile_value) {
-			if (fchmod(fd, uwsgi.chmod_logfile_value)) {
-				uwsgi_error("fchmod()");
+		if (upsgi.chmod_logfile_value) {
+			if (fchmod(fd, upsgi.chmod_logfile_value)) {
+				upsgi_error("fchmod()");
 			}
 		}
 	}
 
 
 	// if the log-master is already active, just re-set the original_log_fd
-	if (uwsgi.shared->worker_log_pipe[0] == -1) {
+	if (upsgi.shared->worker_log_pipe[0] == -1) {
 		/* stdout */
 		if (fd != 1) {
 			if (dup2(fd, 1) < 0) {
-				uwsgi_error("dup2()");
+				upsgi_error("dup2()");
 				exit(1);
 			}
 			close(fd);
@@ -322,14 +322,14 @@ void logto(char *logfile) {
 
 		/* stderr */
 		if (dup2(1, 2) < 0) {
-			uwsgi_error("dup2()");
+			upsgi_error("dup2()");
 			exit(1);
 		}
 
-		 uwsgi.original_log_fd = 2;
+		 upsgi.original_log_fd = 2;
 	}
 	else {
-		uwsgi.original_log_fd = fd;
+		upsgi.original_log_fd = fd;
 	}
 }
 
@@ -339,26 +339,26 @@ void logto(char *logfile) {
  * Core startup/reopen handling for the active log destination.
  * Sink implementation details are owned by logger plugins.
  */
-void uwsgi_setup_log() {
+void upsgi_setup_log() {
 
-	uwsgi_setup_log_encoders();
+	upsgi_setup_log_encoders();
 
-	if (uwsgi.daemonize) {
-		if (uwsgi.has_emperor) {
-			logto(uwsgi.daemonize);
+	if (upsgi.daemonize) {
+		if (upsgi.has_emperor) {
+			logto(upsgi.daemonize);
 		}
 		else {
-			if (!uwsgi.is_a_reload) {
-				daemonize(uwsgi.daemonize);
+			if (!upsgi.is_a_reload) {
+				daemonize(upsgi.daemonize);
 			}
-			else if (uwsgi.log_reopen) {
-				logto(uwsgi.daemonize);
+			else if (upsgi.log_reopen) {
+				logto(upsgi.daemonize);
 			}
 		}
 	}
-	else if (uwsgi.logfile) {
-		if (!uwsgi.is_a_reload || uwsgi.log_reopen) {
-			logto(uwsgi.logfile);
+	else if (upsgi.logfile) {
+		if (!upsgi.is_a_reload || upsgi.log_reopen) {
+			logto(upsgi.logfile);
 		}
 	}
 
@@ -370,7 +370,7 @@ void uwsgi_setup_log() {
  * upsgi keeps advanced routing and encoder support available, but that broader
  * operator surface remains outside the narrow default build story.
  */
-static struct uwsgi_logger *setup_chosen_logger(struct uwsgi_string_list *usl) {
+static struct upsgi_logger *setup_chosen_logger(struct upsgi_string_list *usl) {
 	char *id = NULL;
 	char *name = usl->value;
 
@@ -385,7 +385,7 @@ static struct uwsgi_logger *setup_chosen_logger(struct uwsgi_string_list *usl) {
 			}
 		}
 		if (is_id) {
-			id = uwsgi_concat2n(name, space - name, "", 0);
+			id = upsgi_concat2n(name, space - name, "", 0);
 			name = space + 1;
 		}
 	}
@@ -395,15 +395,15 @@ static struct uwsgi_logger *setup_chosen_logger(struct uwsgi_string_list *usl) {
 		*colon = 0;
 	}
 
-	struct uwsgi_logger *chosen_logger = uwsgi_get_logger(name);
+	struct upsgi_logger *chosen_logger = upsgi_get_logger(name);
 	if (!chosen_logger) {
-		uwsgi_log("unable to find logger '%s'\n", name);
+		upsgi_log("unable to find logger '%s'\n", name);
 		exit(1);
 	}
 
 	// make a copy of the logger
-	struct uwsgi_logger *copy_of_chosen_logger = uwsgi_malloc(sizeof(struct uwsgi_logger));
-	memcpy(copy_of_chosen_logger, chosen_logger, sizeof(struct uwsgi_logger));
+	struct upsgi_logger *copy_of_chosen_logger = upsgi_malloc(sizeof(struct upsgi_logger));
+	memcpy(copy_of_chosen_logger, chosen_logger, sizeof(struct upsgi_logger));
 	chosen_logger = copy_of_chosen_logger;
 	chosen_logger->id = id;
 	chosen_logger->next = NULL;
@@ -423,44 +423,44 @@ static struct uwsgi_logger *setup_chosen_logger(struct uwsgi_string_list *usl) {
  * Master-side logger wiring. This binds configured logger names to the sink
  * backends registered by plugins and prepares the worker-to-master log pipe.
  */
-void uwsgi_setup_log_master(void) {
+void upsgi_setup_log_master(void) {
 
-	struct uwsgi_string_list *usl = uwsgi.requested_logger;
+	struct upsgi_string_list *usl = upsgi.requested_logger;
 	while (usl) {
-		struct uwsgi_logger *chosen_logger = setup_chosen_logger(usl);
-		uwsgi_append_logger(chosen_logger);
+		struct upsgi_logger *chosen_logger = setup_chosen_logger(usl);
+		upsgi_append_logger(chosen_logger);
 		usl = usl->next;
 	}
 
-	usl = uwsgi.requested_req_logger;
+	usl = upsgi.requested_req_logger;
 	while (usl) {
-                struct uwsgi_logger *chosen_logger = setup_chosen_logger(usl);
-                uwsgi_append_req_logger(chosen_logger);
+                struct upsgi_logger *chosen_logger = setup_chosen_logger(usl);
+                upsgi_append_req_logger(chosen_logger);
                 usl = usl->next;
         }
 
-#if defined(UWSGI_PCRE) || defined(UWSGI_PCRE2)
+#if defined(UPSGI_PCRE) || defined(UPSGI_PCRE2)
 	// set logger by its id
-	struct uwsgi_regexp_list *url = uwsgi.log_route;
+	struct upsgi_regexp_list *url = upsgi.log_route;
 	while (url) {
-		url->custom_ptr = uwsgi_get_logger_from_id(url->custom_str);
+		url->custom_ptr = upsgi_get_logger_from_id(url->custom_str);
 		url = url->next;
 	}
-	url = uwsgi.log_req_route;
+	url = upsgi.log_req_route;
 	while (url) {
-		url->custom_ptr = uwsgi_get_logger_from_id(url->custom_str);
+		url->custom_ptr = upsgi_get_logger_from_id(url->custom_str);
 		url = url->next;
 	}
 #endif
 
-	uwsgi.original_log_fd = dup(1);
+	upsgi.original_log_fd = dup(1);
 	create_logpipe();
 }
 
-struct uwsgi_logvar *uwsgi_logvar_get(struct wsgi_request *wsgi_req, char *key, uint8_t keylen) {
-	struct uwsgi_logvar *lv = wsgi_req->logvars;
+struct upsgi_logvar *upsgi_logvar_get(struct wsgi_request *wsgi_req, char *key, uint8_t keylen) {
+	struct upsgi_logvar *lv = wsgi_req->logvars;
 	while (lv) {
-		if (!uwsgi_strncmp(key, keylen, lv->key, lv->keylen)) {
+		if (!upsgi_strncmp(key, keylen, lv->key, lv->keylen)) {
 			return lv;
 		}
 		lv = lv->next;
@@ -468,9 +468,9 @@ struct uwsgi_logvar *uwsgi_logvar_get(struct wsgi_request *wsgi_req, char *key, 
 	return NULL;
 }
 
-void uwsgi_logvar_add(struct wsgi_request *wsgi_req, char *key, uint8_t keylen, char *val, uint8_t vallen) {
+void upsgi_logvar_add(struct wsgi_request *wsgi_req, char *key, uint8_t keylen, char *val, uint8_t vallen) {
 
-	struct uwsgi_logvar *lv = uwsgi_logvar_get(wsgi_req, key, keylen);
+	struct upsgi_logvar *lv = upsgi_logvar_get(wsgi_req, key, keylen);
 	if (lv) {
 		memcpy(lv->val, val, vallen);
 		lv->vallen = vallen;
@@ -483,7 +483,7 @@ void uwsgi_logvar_add(struct wsgi_request *wsgi_req, char *key, uint8_t keylen, 
 	if (lv) {
 		while (lv) {
 			if (!lv->next) {
-				lv->next = uwsgi_malloc(sizeof(struct uwsgi_logvar));
+				lv->next = upsgi_malloc(sizeof(struct upsgi_logvar));
 				lv = lv->next;
 				break;
 			}
@@ -491,7 +491,7 @@ void uwsgi_logvar_add(struct wsgi_request *wsgi_req, char *key, uint8_t keylen, 
 		}
 	}
 	else {
-		lv = uwsgi_malloc(sizeof(struct uwsgi_logvar));
+		lv = upsgi_malloc(sizeof(struct upsgi_logvar));
 		wsgi_req->logvars = lv;
 	}
 
@@ -503,7 +503,7 @@ void uwsgi_logvar_add(struct wsgi_request *wsgi_req, char *key, uint8_t keylen, 
 
 }
 
-void uwsgi_check_logrotate(void) {
+void upsgi_check_logrotate(void) {
 
 	int need_rotation = 0;
 	int need_reopen = 0;
@@ -511,15 +511,15 @@ void uwsgi_check_logrotate(void) {
 	int logfd;
 	struct stat logstat;
 
-	if (uwsgi.log_master) {
-		logfd = uwsgi.original_log_fd;
+	if (upsgi.log_master) {
+		logfd = upsgi.original_log_fd;
 	}
 	else {
 		logfd = 2;
 	}
 
 	if (fstat(logfd, &logstat) < 0) {
-		uwsgi_error("uwsgi_check_logrotate()/fstat()");
+		upsgi_error("upsgi_check_logrotate()/fstat()");
 		return;
 	}
 
@@ -529,106 +529,106 @@ void uwsgi_check_logrotate(void) {
 
 	logsize = lseek(logfd, 0, SEEK_CUR);
 	if (logsize < 0) {
-		uwsgi_error("uwsgi_check_logrotate()/lseek()");
+		upsgi_error("upsgi_check_logrotate()/lseek()");
 		return;
 	}
-	uwsgi.shared->logsize = logsize;
+	upsgi.shared->logsize = logsize;
 
-	if (uwsgi.log_maxsize > 0 && (uint64_t) uwsgi.shared->logsize > uwsgi.log_maxsize) {
+	if (upsgi.log_maxsize > 0 && (uint64_t) upsgi.shared->logsize > upsgi.log_maxsize) {
 		need_rotation = 1;
 	}
 
-	if (uwsgi_check_touches(uwsgi.touch_logrotate)) {
+	if (upsgi_check_touches(upsgi.touch_logrotate)) {
 		need_rotation = 1;
 	}
 
-	if (uwsgi_check_touches(uwsgi.touch_logreopen)) {
+	if (upsgi_check_touches(upsgi.touch_logreopen)) {
 		need_reopen = 1;
 	}
 
 	if (need_rotation) {
-		uwsgi_log_rotate();
+		upsgi_log_rotate();
 	}
 	else if (need_reopen) {
-		uwsgi_log_reopen();
+		upsgi_log_reopen();
 	}
 }
 
-void uwsgi_log_do_rotate(char *logfile, char *rotatedfile, off_t logsize, int log_fd) {
+void upsgi_log_do_rotate(char *logfile, char *rotatedfile, off_t logsize, int log_fd) {
 	int need_free = 0;
 	char *rot_name = rotatedfile;
 
 	if (rot_name == NULL) {
-		char *ts_str = uwsgi_num2str((int) uwsgi_now());
-		rot_name = uwsgi_concat3(logfile, ".", ts_str);
+		char *ts_str = upsgi_num2str((int) upsgi_now());
+		rot_name = upsgi_concat3(logfile, ".", ts_str);
 		free(ts_str);
 		need_free = 1;
 	}
 	// this will be rawly written to the logfile
-	uwsgi_logfile_write("logsize: %llu, triggering rotation to %s...\n", (unsigned long long) logsize, rot_name);
+	upsgi_logfile_write("logsize: %llu, triggering rotation to %s...\n", (unsigned long long) logsize, rot_name);
 	if (rename(logfile, rot_name) == 0) {
 		// reopen logfile and dup'it, on dup2 error, exit(1)
 		int fd = open(logfile, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP);
 		if (fd < 0) {
 			// this will be written to the original file
-			uwsgi_error_open(logfile);
+			upsgi_error_open(logfile);
 			exit(1);
 		}
 		else {
 			if (dup2(fd, log_fd) < 0) {
 				// this could be lost :(
-				uwsgi_error("uwsgi_log_do_rotate()/dup2()");
+				upsgi_error("upsgi_log_do_rotate()/dup2()");
 				exit(1);
 			}
 			close(fd);
 		}
 	}
 	else {
-		uwsgi_error("unable to rotate log: rename()");
+		upsgi_error("unable to rotate log: rename()");
 	}
 	if (need_free)
 		free(rot_name);
 }
 
-void uwsgi_log_rotate() {
-	if (!uwsgi.logfile)
+void upsgi_log_rotate() {
+	if (!upsgi.logfile)
 		return;
-	uwsgi_log_do_rotate(uwsgi.logfile, uwsgi.log_backupname, uwsgi.shared->logsize, uwsgi.original_log_fd);
+	upsgi_log_do_rotate(upsgi.logfile, upsgi.log_backupname, upsgi.shared->logsize, upsgi.original_log_fd);
 }
 
-void uwsgi_log_reopen() {
+void upsgi_log_reopen() {
 	char message[1024];
-	if (!uwsgi.logfile) return;
-	int ret = snprintf(message, 1024, "[%d] logsize: %llu, triggering log-reopen...\n", (int) uwsgi_now(), (unsigned long long) uwsgi.shared->logsize);
+	if (!upsgi.logfile) return;
+	int ret = snprintf(message, 1024, "[%d] logsize: %llu, triggering log-reopen...\n", (int) upsgi_now(), (unsigned long long) upsgi.shared->logsize);
         if (ret > 0 && ret < 1024) {
-                        if (write(uwsgi.original_log_fd, message, ret) != ret) {
+                        if (write(upsgi.original_log_fd, message, ret) != ret) {
                                 // very probably this will never be printed
-                                uwsgi_error("write()");
+                                upsgi_error("write()");
                         }
                 }
 
                 // reopen logfile;
-                close(uwsgi.original_log_fd);
-                uwsgi.original_log_fd = open(uwsgi.logfile, O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP);
-                if (uwsgi.original_log_fd < 0) {
-                        uwsgi_error_open(uwsgi.logfile);
+                close(upsgi.original_log_fd);
+                upsgi.original_log_fd = open(upsgi.logfile, O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP);
+                if (upsgi.original_log_fd < 0) {
+                        upsgi_error_open(upsgi.logfile);
                         grace_them_all(0);
 			return;
                 }
-                ret = snprintf(message, 1024, "[%d] %s reopened.\n", (int) uwsgi_now(), uwsgi.logfile);
+                ret = snprintf(message, 1024, "[%d] %s reopened.\n", (int) upsgi_now(), upsgi.logfile);
                 if (ret > 0 && ret < 1024) {
-                        if (write(uwsgi.original_log_fd, message, ret) != ret) {
+                        if (write(upsgi.original_log_fd, message, ret) != ret) {
                                 // very probably this will never be printed
-                                uwsgi_error("write()");
+                                upsgi_error("write()");
                         }
                 }
-                uwsgi.shared->logsize = lseek(uwsgi.original_log_fd, 0, SEEK_CUR);
+                upsgi.shared->logsize = lseek(upsgi.original_log_fd, 0, SEEK_CUR);
 }
 
 
 void log_request(struct wsgi_request *wsgi_req) {
 
-	int log_it = uwsgi.logging_options.enabled;
+	int log_it = upsgi.logging_options.enabled;
 
 	if (wsgi_req->do_not_log)
 		return;
@@ -638,25 +638,25 @@ void log_request(struct wsgi_request *wsgi_req) {
 	}
 
 /* conditional logging */
-	if (uwsgi.logging_options.zero && wsgi_req->response_size == 0) {
+	if (upsgi.logging_options.zero && wsgi_req->response_size == 0) {
 		goto logit;
 	}
-	if (uwsgi.logging_options.slow && (uint32_t) wsgi_req_time >= uwsgi.logging_options.slow) {
+	if (upsgi.logging_options.slow && (uint32_t) wsgi_req_time >= upsgi.logging_options.slow) {
 		goto logit;
 	}
-	if (uwsgi.logging_options._4xx && (wsgi_req->status >= 400 && wsgi_req->status <= 499)) {
+	if (upsgi.logging_options._4xx && (wsgi_req->status >= 400 && wsgi_req->status <= 499)) {
 		goto logit;
 	}
-	if (uwsgi.logging_options._5xx && (wsgi_req->status >= 500 && wsgi_req->status <= 599)) {
+	if (upsgi.logging_options._5xx && (wsgi_req->status >= 500 && wsgi_req->status <= 599)) {
 		goto logit;
 	}
-	if (uwsgi.logging_options.big && (wsgi_req->response_size >= uwsgi.logging_options.big)) {
+	if (upsgi.logging_options.big && (wsgi_req->response_size >= upsgi.logging_options.big)) {
 		goto logit;
 	}
-	if (uwsgi.logging_options.sendfile && wsgi_req->via == UWSGI_VIA_SENDFILE) {
+	if (upsgi.logging_options.sendfile && wsgi_req->via == UPSGI_VIA_SENDFILE) {
 		goto logit;
 	}
-	if (uwsgi.logging_options.ioerror && wsgi_req->read_errors > 0 && wsgi_req->write_errors > 0) {
+	if (upsgi.logging_options.ioerror && wsgi_req->read_errors > 0 && wsgi_req->write_errors > 0) {
 		goto logit;
 	}
 
@@ -665,10 +665,10 @@ void log_request(struct wsgi_request *wsgi_req) {
 
 logit:
 
-	uwsgi.logit(wsgi_req);
+	upsgi.logit(wsgi_req);
 }
 
-void uwsgi_logit_simple(struct wsgi_request *wsgi_req) {
+void upsgi_logit_simple(struct wsgi_request *wsgi_req) {
 
 	static uint64_t cached_simple_log_sec = (uint64_t) -1;
 	static char cached_simple_log_time[26];
@@ -694,10 +694,10 @@ void uwsgi_logit_simple(struct wsgi_request *wsgi_req) {
 	char *msg3 = " via route() ";
 	char *msg4 = " via offload() ";
 
-	struct uwsgi_app *wi;
+	struct upsgi_app *wi;
 
 	if (wsgi_req->app_id >= 0) {
-		wi = &uwsgi_apps[wsgi_req->app_id];
+		wi = &upsgi_apps[wsgi_req->app_id];
 		if (wi->requests > 0) {
 			app_req = wi->requests;
 		}
@@ -705,20 +705,20 @@ void uwsgi_logit_simple(struct wsgi_request *wsgi_req) {
 
 	// mark requests via (sendfile, route, offload...)
 	switch(wsgi_req->via) {
-		case UWSGI_VIA_SENDFILE:
+		case UPSGI_VIA_SENDFILE:
 			via = msg1;
 			break;
-		case UWSGI_VIA_ROUTE:
+		case UPSGI_VIA_ROUTE:
 			via = msg3;
 			break;
-		case UWSGI_VIA_OFFLOAD:
+		case UPSGI_VIA_OFFLOAD:
 			via = msg4;
 			break;
 		default:
 			break;
 	}
 
-	if (uwsgi.threads > 1) {
+	if (upsgi.threads > 1) {
 #if defined(__sun__) && !defined(__clang__)
 		ctime_r(&request_sec, time_request, 26);
 #else
@@ -743,14 +743,14 @@ void uwsgi_logit_simple(struct wsgi_request *wsgi_req) {
 	if (wsgi_req->end_of_request > wsgi_req->start_of_request)
 		rt = wsgi_req->end_of_request - wsgi_req->start_of_request;
 
-	if (uwsgi.log_micros) {
+	if (upsgi.log_micros) {
 		tsize = (char *) micros;
 	}
 	else {
 		rt /= 1000;
 	}
 
-	if (uwsgi.vhost) {
+	if (upsgi.vhost) {
 		logvec[logvecpos].iov_base = wsgi_req->host;
 		logvec[logvecpos].iov_len = wsgi_req->host_len;
 		logvecpos++;
@@ -760,18 +760,18 @@ void uwsgi_logit_simple(struct wsgi_request *wsgi_req) {
 		logvecpos++;
 	}
 
-	if (uwsgi.logging_options.memory_report) {
+	if (upsgi.logging_options.memory_report) {
 		rlen = snprintf(mempkt, 4096, "{address space usage: %llu bytes/%lluMB} {rss usage: %llu bytes/%lluMB} ",
-						(unsigned long long) uwsgi.workers[uwsgi.mywid].vsz_size,
-						(unsigned long long) uwsgi.workers[uwsgi.mywid].vsz_size / 1024 / 1024,
-						(unsigned long long) uwsgi.workers[uwsgi.mywid].rss_size,
-						(unsigned long long) uwsgi.workers[uwsgi.mywid].rss_size / 1024 / 1024);
-		if (uwsgi.logging_options.memory_report == 2) {
+						(unsigned long long) upsgi.workers[upsgi.mywid].vsz_size,
+						(unsigned long long) upsgi.workers[upsgi.mywid].vsz_size / 1024 / 1024,
+						(unsigned long long) upsgi.workers[upsgi.mywid].rss_size,
+						(unsigned long long) upsgi.workers[upsgi.mywid].rss_size / 1024 / 1024);
+		if (upsgi.logging_options.memory_report == 2) {
 			rlen += snprintf(mempkt + rlen, 4096 - rlen, "{uss usage: %llu bytes/%lluMB} {pss usage: %llu bytes/%lluMB} ",
-							(unsigned long long) uwsgi.workers[uwsgi.mywid].uss_size,
-							(unsigned long long) uwsgi.workers[uwsgi.mywid].uss_size / 1024 / 1024,
-							(unsigned long long) uwsgi.workers[uwsgi.mywid].pss_size,
-							(unsigned long long) uwsgi.workers[uwsgi.mywid].pss_size / 1024 / 1024);
+							(unsigned long long) upsgi.workers[upsgi.mywid].uss_size,
+							(unsigned long long) upsgi.workers[upsgi.mywid].uss_size / 1024 / 1024,
+							(unsigned long long) upsgi.workers[upsgi.mywid].pss_size,
+							(unsigned long long) upsgi.workers[upsgi.mywid].pss_size / 1024 / 1024);
 		}
 		logvec[logvecpos].iov_base = mempkt;
 		logvec[logvecpos].iov_len = rlen;
@@ -780,12 +780,12 @@ void uwsgi_logit_simple(struct wsgi_request *wsgi_req) {
 	}
 
 	char *remote_user = wsgi_req->remote_user == NULL ? "" : wsgi_req->remote_user;
-	rlen = snprintf(logpkt, 4096, "[pid: %d|app: %d|req: %d/%llu] %.*s (%.*s) {%d vars in %llu bytes} [%.*s] %.*s %.*s => generated %llu bytes in %llu %s%s(%.*s %d) %d headers in %llu bytes (%d switches on core %d)\n", (int) uwsgi.mypid, wsgi_req->app_id, app_req, (unsigned long long) uwsgi.workers[0].requests, wsgi_req->remote_addr_len, wsgi_req->remote_addr, wsgi_req->remote_user_len, remote_user, wsgi_req->var_cnt, (unsigned long long) wsgi_req->len,
+	rlen = snprintf(logpkt, 4096, "[pid: %d|app: %d|req: %d/%llu] %.*s (%.*s) {%d vars in %llu bytes} [%.*s] %.*s %.*s => generated %llu bytes in %llu %s%s(%.*s %d) %d headers in %llu bytes (%d switches on core %d)\n", (int) upsgi.mypid, wsgi_req->app_id, app_req, (unsigned long long) upsgi.workers[0].requests, wsgi_req->remote_addr_len, wsgi_req->remote_addr, wsgi_req->remote_user_len, remote_user, wsgi_req->var_cnt, (unsigned long long) wsgi_req->len,
 			24, time_request, wsgi_req->method_len, wsgi_req->method, wsgi_req->uri_len, wsgi_req->uri, (unsigned long long) wsgi_req->response_size, (unsigned long long) rt, tsize, via, wsgi_req->protocol_len, wsgi_req->protocol, wsgi_req->status, wsgi_req->header_cnt, (unsigned long long) wsgi_req->headers_size, wsgi_req->switches, wsgi_req->async_id);
 
 	// not enough space for logging the request, just log a (safe) minimal message
 	if (rlen > 4096) {
-		rlen = snprintf(logpkt, 4096, "[pid: %d|app: %d|req: %d/%llu] 0.0.0.0 () {%d vars in %llu bytes} [%.*s] - - => generated %llu bytes in %llu %s%s(- %d) %d headers in %llu bytes (%d switches on core %d)\n", (int) uwsgi.mypid, wsgi_req->app_id, app_req, (unsigned long long) uwsgi.workers[0].requests, wsgi_req->var_cnt, (unsigned long long) wsgi_req->len,
+		rlen = snprintf(logpkt, 4096, "[pid: %d|app: %d|req: %d/%llu] 0.0.0.0 () {%d vars in %llu bytes} [%.*s] - - => generated %llu bytes in %llu %s%s(- %d) %d headers in %llu bytes (%d switches on core %d)\n", (int) upsgi.mypid, wsgi_req->app_id, app_req, (unsigned long long) upsgi.workers[0].requests, wsgi_req->var_cnt, (unsigned long long) wsgi_req->len,
 		24, time_request, (unsigned long long) wsgi_req->response_size, (unsigned long long) rt, tsize, via, wsgi_req->status, wsgi_req->header_cnt, (unsigned long long) wsgi_req->headers_size, wsgi_req->switches, wsgi_req->async_id);
 		// argh, last resort, truncate it
 		if (rlen > 4096) {
@@ -797,7 +797,7 @@ void uwsgi_logit_simple(struct wsgi_request *wsgi_req) {
 	logvec[logvecpos].iov_len = rlen;
 
 	// do not check for errors
-	rlen = writev(uwsgi.req_log_fd, logvec, logvecpos + 1);
+	rlen = writev(upsgi.req_log_fd, logvec, logvecpos + 1);
 }
 
 void get_memusage(uint64_t * rss, uint64_t * vsz) {
@@ -807,7 +807,7 @@ void get_memusage(uint64_t * rss, uint64_t * vsz) {
 	ret[0] = 0; ret[1] = 0;
 	syscall(358, ret);
 	*vsz = ret[0];
-	*rss = ret[1] * uwsgi.page_size;
+	*rss = ret[1] * upsgi.page_size;
 #elif defined(__linux__)
 	FILE *procfile;
 	int i;
@@ -815,9 +815,9 @@ void get_memusage(uint64_t * rss, uint64_t * vsz) {
 	if (procfile) {
 		i = fscanf(procfile, "%*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %llu %llu", (unsigned long long *) vsz, (unsigned long long *) rss);
 		if (i != 2) {
-			uwsgi_log("warning: invalid record in /proc/self/stat\n");
+			upsgi_log("warning: invalid record in /proc/self/stat\n");
 		} else {
-			*rss = *rss * uwsgi.page_size;
+			*rss = *rss * upsgi.page_size;
 		}
 		fclose(procfile);
 	}
@@ -829,7 +829,7 @@ void get_memusage(uint64_t * rss, uint64_t * vsz) {
         if (procfile) {
                 i = fscanf(procfile, "%*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %llu %llu", (unsigned long long *) vsz, (unsigned long long *) rss);
                 if (i != 2) {
-                        uwsgi_log("warning: invalid record in /proc/self/stat\n");
+                        upsgi_log("warning: invalid record in /proc/self/stat\n");
                 }
                 fclose(procfile);
         }
@@ -870,34 +870,34 @@ void get_memusage(uint64_t * rss, uint64_t * vsz) {
 #if defined(__FreeBSD__) || defined(__DragonFly__)
 
 		struct kinfo_proc *kproc;
-		kproc = kvm_getprocs(kv, KERN_PROC_PID, uwsgi.mypid, &cnt);
+		kproc = kvm_getprocs(kv, KERN_PROC_PID, upsgi.mypid, &cnt);
 		if (kproc && cnt > 0) {
 #if defined(__FreeBSD__)
 			*vsz = kproc->ki_size;
-			*rss = kproc->ki_rssize * uwsgi.page_size;
+			*rss = kproc->ki_rssize * upsgi.page_size;
 #elif defined(__DragonFly__)
 			*vsz = kproc->kp_vm_map_size;
-			*rss = kproc->kp_vm_rssize * uwsgi.page_size;
+			*rss = kproc->kp_vm_rssize * upsgi.page_size;
 #endif
 		}
-#elif defined(UWSGI_NEW_OPENBSD)
+#elif defined(UPSGI_NEW_OPENBSD)
 		struct kinfo_proc *kproc;
-		kproc = kvm_getprocs(kv, KERN_PROC_PID, uwsgi.mypid, sizeof(struct kinfo_proc), &cnt);
+		kproc = kvm_getprocs(kv, KERN_PROC_PID, upsgi.mypid, sizeof(struct kinfo_proc), &cnt);
 		if (kproc && cnt > 0) {
-			*vsz = (kproc->p_vm_dsize + kproc->p_vm_ssize + kproc->p_vm_tsize) * uwsgi.page_size;
-			*rss = kproc->p_vm_rssize * uwsgi.page_size;
+			*vsz = (kproc->p_vm_dsize + kproc->p_vm_ssize + kproc->p_vm_tsize) * upsgi.page_size;
+			*rss = kproc->p_vm_rssize * upsgi.page_size;
 		}
 #elif defined(__NetBSD__) || defined(__OpenBSD__)
 		struct kinfo_proc2 *kproc2;
 
-		kproc2 = kvm_getproc2(kv, KERN_PROC_PID, uwsgi.mypid, sizeof(struct kinfo_proc2), &cnt);
+		kproc2 = kvm_getproc2(kv, KERN_PROC_PID, upsgi.mypid, sizeof(struct kinfo_proc2), &cnt);
 		if (kproc2 && cnt > 0) {
 #ifdef __OpenBSD__
-			*vsz = (kproc2->p_vm_dsize + kproc2->p_vm_ssize + kproc2->p_vm_tsize) * uwsgi.page_size;
+			*vsz = (kproc2->p_vm_dsize + kproc2->p_vm_ssize + kproc2->p_vm_tsize) * upsgi.page_size;
 #else
-			*vsz = kproc2->p_vm_msize * uwsgi.page_size;
+			*vsz = kproc2->p_vm_msize * upsgi.page_size;
 #endif
-			*rss = kproc2->p_vm_rssize * uwsgi.page_size;
+			*rss = kproc2->p_vm_rssize * upsgi.page_size;
 		}
 #endif
 
@@ -946,13 +946,13 @@ void get_memusage_extra(uint64_t * uss, uint64_t * pss) {
  * rsyslog first-class in the default build, while other logger plugins remain
  * optional or non-baseline.
  */
-void uwsgi_register_logger(char *name, ssize_t(*func) (struct uwsgi_logger *, char *, size_t)) {
+void upsgi_register_logger(char *name, ssize_t(*func) (struct upsgi_logger *, char *, size_t)) {
 
-	struct uwsgi_logger *ul = uwsgi.loggers, *old_ul;
+	struct upsgi_logger *ul = upsgi.loggers, *old_ul;
 
 	if (!ul) {
-		uwsgi.loggers = uwsgi_malloc(sizeof(struct uwsgi_logger));
-		ul = uwsgi.loggers;
+		upsgi.loggers = upsgi_malloc(sizeof(struct upsgi_logger));
+		ul = upsgi.loggers;
 	}
 	else {
 		while (ul) {
@@ -960,7 +960,7 @@ void uwsgi_register_logger(char *name, ssize_t(*func) (struct uwsgi_logger *, ch
 			ul = ul->next;
 		}
 
-		ul = uwsgi_malloc(sizeof(struct uwsgi_logger));
+		ul = upsgi_malloc(sizeof(struct upsgi_logger));
 		old_ul->next = ul;
 	}
 
@@ -973,19 +973,19 @@ void uwsgi_register_logger(char *name, ssize_t(*func) (struct uwsgi_logger *, ch
 	ul->buf = NULL;
 
 
-#ifdef UWSGI_DEBUG
-	uwsgi_log("[uwsgi-logger] registered \"%s\"\n", ul->name);
+#ifdef UPSGI_DEBUG
+	upsgi_log("[upsgi-logger] registered \"%s\"\n", ul->name);
 #endif
 }
 
-void uwsgi_append_logger(struct uwsgi_logger *ul) {
+void upsgi_append_logger(struct upsgi_logger *ul) {
 
-	if (!uwsgi.choosen_logger) {
-		uwsgi.choosen_logger = ul;
+	if (!upsgi.choosen_logger) {
+		upsgi.choosen_logger = ul;
 		return;
 	}
 
-	struct uwsgi_logger *ucl = uwsgi.choosen_logger;
+	struct upsgi_logger *ucl = upsgi.choosen_logger;
 	while (ucl) {
 		if (!ucl->next) {
 			ucl->next = ul;
@@ -995,14 +995,14 @@ void uwsgi_append_logger(struct uwsgi_logger *ul) {
 	}
 }
 
-void uwsgi_append_req_logger(struct uwsgi_logger *ul) {
+void upsgi_append_req_logger(struct upsgi_logger *ul) {
 
-        if (!uwsgi.choosen_req_logger) {
-                uwsgi.choosen_req_logger = ul;
+        if (!upsgi.choosen_req_logger) {
+                upsgi.choosen_req_logger = ul;
                 return;
         }
 
-        struct uwsgi_logger *ucl = uwsgi.choosen_req_logger;
+        struct upsgi_logger *ucl = upsgi.choosen_req_logger;
         while (ucl) {
                 if (!ucl->next) {
                         ucl->next = ul;
@@ -1013,8 +1013,8 @@ void uwsgi_append_req_logger(struct uwsgi_logger *ul) {
 }
 
 
-struct uwsgi_logger *uwsgi_get_logger(char *name) {
-	struct uwsgi_logger *ul = uwsgi.loggers;
+struct upsgi_logger *upsgi_get_logger(char *name) {
+	struct upsgi_logger *ul = upsgi.loggers;
 
 	while (ul) {
 		if (!strcmp(ul->name, name)) {
@@ -1026,8 +1026,8 @@ struct uwsgi_logger *uwsgi_get_logger(char *name) {
 	return NULL;
 }
 
-struct uwsgi_logger *uwsgi_get_logger_from_id(char *id) {
-	struct uwsgi_logger *ul = uwsgi.choosen_logger;
+struct upsgi_logger *upsgi_get_logger_from_id(char *id) {
+	struct upsgi_logger *ul = upsgi.choosen_logger;
 
 	while (ul) {
 		if (ul->id && !strcmp(ul->id, id)) {
@@ -1040,78 +1040,78 @@ struct uwsgi_logger *uwsgi_get_logger_from_id(char *id) {
 }
 
 
-void uwsgi_logit_lf(struct wsgi_request *wsgi_req) {
-	struct uwsgi_logchunk *logchunk = uwsgi.logchunks;
+void upsgi_logit_lf(struct wsgi_request *wsgi_req) {
+	struct upsgi_logchunk *logchunk = upsgi.logchunks;
 	ssize_t rlen = 0;
 	const char *empty_var = "-";
 	while (logchunk) {
 		int pos = logchunk->vec;
 		// raw string
 		if (logchunk->type == 0) {
-			uwsgi.logvectors[wsgi_req->async_id][pos].iov_base = logchunk->ptr;
-			uwsgi.logvectors[wsgi_req->async_id][pos].iov_len = logchunk->len;
+			upsgi.logvectors[wsgi_req->async_id][pos].iov_base = logchunk->ptr;
+			upsgi.logvectors[wsgi_req->async_id][pos].iov_len = logchunk->len;
 		}
 		// offsetof
 		else if (logchunk->type == 1) {
 			char **var = (char **) (((char *) wsgi_req) + logchunk->pos);
 			uint16_t *varlen = (uint16_t *) (((char *) wsgi_req) + logchunk->pos_len);
-			uwsgi.logvectors[wsgi_req->async_id][pos].iov_base = *var;
-			uwsgi.logvectors[wsgi_req->async_id][pos].iov_len = *varlen;
+			upsgi.logvectors[wsgi_req->async_id][pos].iov_base = *var;
+			upsgi.logvectors[wsgi_req->async_id][pos].iov_len = *varlen;
 		}
 		// logvar
 		else if (logchunk->type == 2) {
-			struct uwsgi_logvar *lv = uwsgi_logvar_get(wsgi_req, logchunk->ptr, logchunk->len);
+			struct upsgi_logvar *lv = upsgi_logvar_get(wsgi_req, logchunk->ptr, logchunk->len);
 			if (lv) {
-				uwsgi.logvectors[wsgi_req->async_id][pos].iov_base = lv->val;
-				uwsgi.logvectors[wsgi_req->async_id][pos].iov_len = lv->vallen;
+				upsgi.logvectors[wsgi_req->async_id][pos].iov_base = lv->val;
+				upsgi.logvectors[wsgi_req->async_id][pos].iov_len = lv->vallen;
 			}
 			else {
-				uwsgi.logvectors[wsgi_req->async_id][pos].iov_base = NULL;
-				uwsgi.logvectors[wsgi_req->async_id][pos].iov_len = 0;
+				upsgi.logvectors[wsgi_req->async_id][pos].iov_base = NULL;
+				upsgi.logvectors[wsgi_req->async_id][pos].iov_len = 0;
 			}
 		}
 		// func
 		else if (logchunk->type == 3) {
-			rlen = logchunk->func(wsgi_req, (char **) &uwsgi.logvectors[wsgi_req->async_id][pos].iov_base);
+			rlen = logchunk->func(wsgi_req, (char **) &upsgi.logvectors[wsgi_req->async_id][pos].iov_base);
 			if (rlen > 0) {
-				uwsgi.logvectors[wsgi_req->async_id][pos].iov_len = rlen;
+				upsgi.logvectors[wsgi_req->async_id][pos].iov_len = rlen;
 			}
 			else {
-				uwsgi.logvectors[wsgi_req->async_id][pos].iov_len = 0;
+				upsgi.logvectors[wsgi_req->async_id][pos].iov_len = 0;
 			}
 		}
 		// var
 		else if (logchunk->type == 5) {
 			uint16_t value_len = 0;
-			char *value = uwsgi_get_var(wsgi_req, logchunk->ptr, logchunk->len, &value_len);
+			char *value = upsgi_get_var(wsgi_req, logchunk->ptr, logchunk->len, &value_len);
 			// could be NULL
-                        uwsgi.logvectors[wsgi_req->async_id][pos].iov_base = value;
-                        uwsgi.logvectors[wsgi_req->async_id][pos].iov_len = (size_t) value_len;
+                        upsgi.logvectors[wsgi_req->async_id][pos].iov_base = value;
+                        upsgi.logvectors[wsgi_req->async_id][pos].iov_len = (size_t) value_len;
                 }
 		// metric
 		else if (logchunk->type == 4) {
-			int64_t metric = uwsgi_metric_get(logchunk->ptr, NULL);
-			uwsgi.logvectors[wsgi_req->async_id][pos].iov_base = uwsgi_64bit2str(metric);
-			uwsgi.logvectors[wsgi_req->async_id][pos].iov_len = strlen(uwsgi.logvectors[wsgi_req->async_id][pos].iov_base);
+			int64_t metric = upsgi_metric_get(logchunk->ptr, NULL);
+			upsgi.logvectors[wsgi_req->async_id][pos].iov_base = upsgi_64bit2str(metric);
+			upsgi.logvectors[wsgi_req->async_id][pos].iov_len = strlen(upsgi.logvectors[wsgi_req->async_id][pos].iov_base);
 		}
 
-		if (uwsgi.logvectors[wsgi_req->async_id][pos].iov_len == 0 && logchunk->type != 0) {
-			uwsgi.logvectors[wsgi_req->async_id][pos].iov_base = (char *) empty_var;
-			uwsgi.logvectors[wsgi_req->async_id][pos].iov_len = 1;
+		if (upsgi.logvectors[wsgi_req->async_id][pos].iov_len == 0 && logchunk->type != 0) {
+			upsgi.logvectors[wsgi_req->async_id][pos].iov_base = (char *) empty_var;
+			upsgi.logvectors[wsgi_req->async_id][pos].iov_len = 1;
 		}
 		logchunk = logchunk->next;
 	}
 
 	// do not check for errors
-	rlen = writev(uwsgi.req_log_fd, uwsgi.logvectors[wsgi_req->async_id], uwsgi.logformat_vectors);
+	rlen = writev(upsgi.req_log_fd, upsgi.logvectors[wsgi_req->async_id], upsgi.logformat_vectors);
 
 	// free allocated memory
-	logchunk = uwsgi.logchunks;
+	logchunk = upsgi.logchunks;
 	while (logchunk) {
 		if (logchunk->free) {
-			if (uwsgi.logvectors[wsgi_req->async_id][logchunk->vec].iov_len > 0) {
-				if (uwsgi.logvectors[wsgi_req->async_id][logchunk->vec].iov_base != empty_var) {
-					free(uwsgi.logvectors[wsgi_req->async_id][logchunk->vec].iov_base);
+			if (upsgi.logvectors[wsgi_req->async_id][logchunk->vec].iov_len > 0) {
+				if (upsgi.logvectors[wsgi_req->async_id][logchunk->vec].iov_base != empty_var) {
+					free(upsgi.logvectors[wsgi_req->async_id][logchunk->vec].iov_base);
 				}
 			}
 		}
@@ -1119,7 +1119,7 @@ void uwsgi_logit_lf(struct wsgi_request *wsgi_req) {
 	}
 }
 
-void uwsgi_build_log_format(char *format) {
+void upsgi_build_log_format(char *format) {
 	int state = 0;
 	char *ptr = format;
 	char *current = ptr;
@@ -1140,8 +1140,8 @@ void uwsgi_build_log_format(char *format) {
 		// end of the variable
 		else if (*ptr == ')') {
 			if (logvar) {
-				uwsgi_add_logchunk(1, uwsgi.logformat_vectors, logvar, ptr - logvar);
-				uwsgi.logformat_vectors++;
+				upsgi_add_logchunk(1, upsgi.logformat_vectors, logvar, ptr - logvar);
+				upsgi.logformat_vectors++;
 				state = 0;
 				logvar = NULL;
 				current = ptr + 1;
@@ -1149,8 +1149,8 @@ void uwsgi_build_log_format(char *format) {
 		}
 		else {
 			if (state == 2) {
-				uwsgi_add_logchunk(0, uwsgi.logformat_vectors, current, (ptr - current) - 2);
-				uwsgi.logformat_vectors++;
+				upsgi_add_logchunk(0, upsgi.logformat_vectors, current, (ptr - current) - 2);
+				upsgi.logformat_vectors++;
 				logvar = ptr;
 			}
 			state = 0;
@@ -1159,49 +1159,49 @@ void uwsgi_build_log_format(char *format) {
 	}
 
 	if (ptr - current > 0) {
-		uwsgi_add_logchunk(0, uwsgi.logformat_vectors, current, ptr - current);
-		uwsgi.logformat_vectors++;
+		upsgi_add_logchunk(0, upsgi.logformat_vectors, current, ptr - current);
+		upsgi.logformat_vectors++;
 	}
 
 	// +1 for "\n"
 
-	uwsgi.logformat_vectors++;
+	upsgi.logformat_vectors++;
 
 }
 
-static ssize_t uwsgi_lf_status(struct wsgi_request *wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(wsgi_req->status);
+static ssize_t upsgi_lf_status(struct wsgi_request *wsgi_req, char **buf) {
+	*buf = upsgi_num2str(wsgi_req->status);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_rsize(struct wsgi_request *wsgi_req, char **buf) {
-	*buf = uwsgi_size2str(wsgi_req->response_size);
+static ssize_t upsgi_lf_rsize(struct wsgi_request *wsgi_req, char **buf) {
+	*buf = upsgi_size2str(wsgi_req->response_size);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_hsize(struct wsgi_request *wsgi_req, char **buf) {
-	*buf = uwsgi_size2str(wsgi_req->headers_size);
+static ssize_t upsgi_lf_hsize(struct wsgi_request *wsgi_req, char **buf) {
+	*buf = upsgi_size2str(wsgi_req->headers_size);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_size(struct wsgi_request *wsgi_req, char **buf) {
-	*buf = uwsgi_size2str(wsgi_req->headers_size+wsgi_req->response_size);
+static ssize_t upsgi_lf_size(struct wsgi_request *wsgi_req, char **buf) {
+	*buf = upsgi_size2str(wsgi_req->headers_size+wsgi_req->response_size);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_cl(struct wsgi_request *wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(wsgi_req->post_cl);
+static ssize_t upsgi_lf_cl(struct wsgi_request *wsgi_req, char **buf) {
+	*buf = upsgi_num2str(wsgi_req->post_cl);
 	return strlen(*buf);
 }
 
 
-static ssize_t uwsgi_lf_epoch(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(uwsgi_now());
+static ssize_t upsgi_lf_epoch(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(upsgi_now());
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_ctime(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_malloc(26);
+static ssize_t upsgi_lf_ctime(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_malloc(26);
 #if defined(__sun__) && !defined(__clang__)
 	ctime_r((const time_t *) &wsgi_req->start_of_request_in_sec, *buf, 26);
 #else
@@ -1210,14 +1210,14 @@ static ssize_t uwsgi_lf_ctime(struct wsgi_request * wsgi_req, char **buf) {
 	return 24;
 }
 
-static ssize_t uwsgi_lf_time(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(wsgi_req->start_of_request / 1000000);
+static ssize_t upsgi_lf_time(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(wsgi_req->start_of_request / 1000000);
 	return strlen(*buf);
 }
 
 
-static ssize_t uwsgi_lf_ltime(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_malloc(64);
+static ssize_t upsgi_lf_ltime(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_malloc(64);
 	time_t now = wsgi_req->start_of_request / 1000000;
 	size_t ret = strftime(*buf, 64, "%d/%b/%Y:%H:%M:%S %z", localtime(&now));
 	if (ret == 0) {
@@ -1227,13 +1227,13 @@ static ssize_t uwsgi_lf_ltime(struct wsgi_request * wsgi_req, char **buf) {
 	return ret;
 }
 
-static ssize_t uwsgi_lf_ftime(struct wsgi_request * wsgi_req, char **buf) {
-	if (!uwsgi.logformat_strftime || !uwsgi.log_strftime) {
-		return uwsgi_lf_ltime(wsgi_req, buf);
+static ssize_t upsgi_lf_ftime(struct wsgi_request * wsgi_req, char **buf) {
+	if (!upsgi.logformat_strftime || !upsgi.log_strftime) {
+		return upsgi_lf_ltime(wsgi_req, buf);
 	}
-	*buf = uwsgi_malloc(64);
+	*buf = upsgi_malloc(64);
 	time_t now = wsgi_req->start_of_request / 1000000;
-	size_t ret = strftime(*buf, 64, uwsgi.log_strftime, localtime(&now));
+	size_t ret = strftime(*buf, 64, upsgi.log_strftime, localtime(&now));
 	if (ret == 0) {
 		*buf[0] = 0;
 		return 0;
@@ -1241,125 +1241,125 @@ static ssize_t uwsgi_lf_ftime(struct wsgi_request * wsgi_req, char **buf) {
 	return ret;
 }
 
-static ssize_t uwsgi_lf_tmsecs(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_64bit2str(wsgi_req->start_of_request / (int64_t) 1000);
+static ssize_t upsgi_lf_tmsecs(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_64bit2str(wsgi_req->start_of_request / (int64_t) 1000);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_tmicros(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_64bit2str(wsgi_req->start_of_request);
+static ssize_t upsgi_lf_tmicros(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_64bit2str(wsgi_req->start_of_request);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_micros(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(wsgi_req->end_of_request - wsgi_req->start_of_request);
+static ssize_t upsgi_lf_micros(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(wsgi_req->end_of_request - wsgi_req->start_of_request);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_msecs(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str((wsgi_req->end_of_request - wsgi_req->start_of_request) / 1000);
+static ssize_t upsgi_lf_msecs(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str((wsgi_req->end_of_request - wsgi_req->start_of_request) / 1000);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_secs(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_float2str((wsgi_req->end_of_request - wsgi_req->start_of_request) / 1000000.0);
+static ssize_t upsgi_lf_secs(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_float2str((wsgi_req->end_of_request - wsgi_req->start_of_request) / 1000000.0);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_pid(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(uwsgi.mypid);
+static ssize_t upsgi_lf_pid(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(upsgi.mypid);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_wid(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(uwsgi.mywid);
+static ssize_t upsgi_lf_wid(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(upsgi.mywid);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_switches(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(wsgi_req->switches);
+static ssize_t upsgi_lf_switches(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(wsgi_req->switches);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_vars(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(wsgi_req->var_cnt);
+static ssize_t upsgi_lf_vars(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(wsgi_req->var_cnt);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_core(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(wsgi_req->async_id);
+static ssize_t upsgi_lf_core(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(wsgi_req->async_id);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_vsz(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(uwsgi.workers[uwsgi.mywid].vsz_size);
+static ssize_t upsgi_lf_vsz(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(upsgi.workers[upsgi.mywid].vsz_size);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_rss(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(uwsgi.workers[uwsgi.mywid].rss_size);
+static ssize_t upsgi_lf_rss(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(upsgi.workers[upsgi.mywid].rss_size);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_vszM(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(uwsgi.workers[uwsgi.mywid].vsz_size / 1024 / 1024);
+static ssize_t upsgi_lf_vszM(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(upsgi.workers[upsgi.mywid].vsz_size / 1024 / 1024);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_rssM(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(uwsgi.workers[uwsgi.mywid].rss_size / 1024 / 1024);
+static ssize_t upsgi_lf_rssM(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(upsgi.workers[upsgi.mywid].rss_size / 1024 / 1024);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_pktsize(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(wsgi_req->len);
+static ssize_t upsgi_lf_pktsize(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(wsgi_req->len);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_modifier1(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(wsgi_req->uh->modifier1);
+static ssize_t upsgi_lf_modifier1(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(wsgi_req->uh->modifier1);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_modifier2(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(wsgi_req->uh->modifier2);
+static ssize_t upsgi_lf_modifier2(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(wsgi_req->uh->modifier2);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_headers(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str(wsgi_req->header_cnt);
+static ssize_t upsgi_lf_headers(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str(wsgi_req->header_cnt);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_werr(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str((int) wsgi_req->write_errors);
+static ssize_t upsgi_lf_werr(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str((int) wsgi_req->write_errors);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_rerr(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str((int) wsgi_req->read_errors);
+static ssize_t upsgi_lf_rerr(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str((int) wsgi_req->read_errors);
 	return strlen(*buf);
 }
 
-static ssize_t uwsgi_lf_ioerr(struct wsgi_request * wsgi_req, char **buf) {
-	*buf = uwsgi_num2str((int) (wsgi_req->write_errors + wsgi_req->read_errors));
+static ssize_t upsgi_lf_ioerr(struct wsgi_request * wsgi_req, char **buf) {
+	*buf = upsgi_num2str((int) (wsgi_req->write_errors + wsgi_req->read_errors));
 	return strlen(*buf);
 }
 
-struct uwsgi_logchunk *uwsgi_register_logchunk(char *name, ssize_t (*func)(struct wsgi_request *, char **), int need_free) {
-	struct uwsgi_logchunk *old_logchunk = NULL, *logchunk = uwsgi.registered_logchunks;
+struct upsgi_logchunk *upsgi_register_logchunk(char *name, ssize_t (*func)(struct wsgi_request *, char **), int need_free) {
+	struct upsgi_logchunk *old_logchunk = NULL, *logchunk = upsgi.registered_logchunks;
 	while(logchunk) {
 		if (!strcmp(logchunk->name, name)) goto found;
 		old_logchunk = logchunk;
 		logchunk = logchunk->next;
 	}
-	logchunk = uwsgi_calloc(sizeof(struct uwsgi_logchunk));
+	logchunk = upsgi_calloc(sizeof(struct upsgi_logchunk));
 	logchunk->name = name;
 	if (old_logchunk) {
 		old_logchunk->next = logchunk;
 	}
 	else {
-		uwsgi.registered_logchunks = logchunk;
+		upsgi.registered_logchunks = logchunk;
 	}
 found:
 	logchunk->func = func;
@@ -1368,10 +1368,10 @@ found:
 	return logchunk;
 }
 
-struct uwsgi_logchunk *uwsgi_get_logchunk_by_name(char *name, size_t name_len) {
-	struct uwsgi_logchunk *logchunk = uwsgi.registered_logchunks;
+struct upsgi_logchunk *upsgi_get_logchunk_by_name(char *name, size_t name_len) {
+	struct upsgi_logchunk *logchunk = upsgi.registered_logchunks;
 	while(logchunk) {
-		if (!uwsgi_strncmp(name, name_len, logchunk->name, strlen(logchunk->name))) {
+		if (!upsgi_strncmp(name, name_len, logchunk->name, strlen(logchunk->name))) {
 			return logchunk;
 		}
 		logchunk = logchunk->next;
@@ -1379,14 +1379,14 @@ struct uwsgi_logchunk *uwsgi_get_logchunk_by_name(char *name, size_t name_len) {
 	return NULL;
 }
 
-void uwsgi_add_logchunk(int variable, int pos, char *ptr, size_t len) {
+void upsgi_add_logchunk(int variable, int pos, char *ptr, size_t len) {
 
-	struct uwsgi_logchunk *logchunk = uwsgi.logchunks;
+	struct upsgi_logchunk *logchunk = upsgi.logchunks;
 
 	if (logchunk) {
 		while (logchunk) {
 			if (!logchunk->next) {
-				logchunk->next = uwsgi_calloc(sizeof(struct uwsgi_logchunk));
+				logchunk->next = upsgi_calloc(sizeof(struct upsgi_logchunk));
 				logchunk = logchunk->next;
 				break;
 			}
@@ -1394,8 +1394,8 @@ void uwsgi_add_logchunk(int variable, int pos, char *ptr, size_t len) {
 		}
 	}
 	else {
-		uwsgi.logchunks = uwsgi_calloc(sizeof(struct uwsgi_logchunk));
-		logchunk = uwsgi.logchunks;
+		upsgi.logchunks = upsgi_calloc(sizeof(struct upsgi_logchunk));
+		logchunk = upsgi.logchunks;
 	}
 
 	/*
@@ -1414,7 +1414,7 @@ void uwsgi_add_logchunk(int variable, int pos, char *ptr, size_t len) {
 	logchunk->len = len;
 	// variable
 	if (variable) {
-		struct uwsgi_logchunk *rlc = uwsgi_get_logchunk_by_name(ptr, len);
+		struct upsgi_logchunk *rlc = upsgi_get_logchunk_by_name(ptr, len);
 		if (rlc) {
 			if (rlc->type == 1) {
 				logchunk->pos = rlc->pos;
@@ -1427,16 +1427,16 @@ void uwsgi_add_logchunk(int variable, int pos, char *ptr, size_t len) {
 			}
 		}
 		// var
-		else if (!uwsgi_starts_with(ptr, len, "var.", 4)) {
+		else if (!upsgi_starts_with(ptr, len, "var.", 4)) {
 			logchunk->type = 5;
 			logchunk->ptr = ptr+4;
 			logchunk->len = len-4;
 			logchunk->free = 0;
 		}
 		// metric
-		else if (!uwsgi_starts_with(ptr, len, "metric.", 7)) {
+		else if (!upsgi_starts_with(ptr, len, "metric.", 7)) {
 			logchunk->type = 4;
-			logchunk->ptr = uwsgi_concat2n(ptr+7, len - 7, "", 0);
+			logchunk->ptr = upsgi_concat2n(ptr+7, len - 7, "", 0);
 			logchunk->free = 1;
 		}
 		// logvar
@@ -1446,18 +1446,18 @@ void uwsgi_add_logchunk(int variable, int pos, char *ptr, size_t len) {
 	}
 }
 
-static void uwsgi_log_record_counter(int is_req_log) {
+static void upsgi_log_record_counter(int is_req_log) {
 	if (is_req_log) {
-		uwsgi.shared->req_log_records++;
+		upsgi.shared->req_log_records++;
 	}
 	else {
-		uwsgi.shared->log_records++;
+		upsgi.shared->log_records++;
 	}
 }
 
-static void uwsgi_log_record_sink_issue(int is_req_log, ssize_t written, size_t len) {
-	uint64_t *stall_events = is_req_log ? &uwsgi.shared->req_log_sink_stall_events : &uwsgi.shared->log_sink_stall_events;
-	uint64_t *dropped_messages = is_req_log ? &uwsgi.shared->req_log_dropped_messages : &uwsgi.shared->log_dropped_messages;
+static void upsgi_log_record_sink_issue(int is_req_log, ssize_t written, size_t len) {
+	uint64_t *stall_events = is_req_log ? &upsgi.shared->req_log_sink_stall_events : &upsgi.shared->log_sink_stall_events;
+	uint64_t *dropped_messages = is_req_log ? &upsgi.shared->req_log_dropped_messages : &upsgi.shared->log_dropped_messages;
 
 	if (written >= 0 && (size_t) written == len) {
 		return;
@@ -1475,7 +1475,7 @@ static void uwsgi_log_record_sink_issue(int is_req_log, ssize_t written, size_t 
 	(*dropped_messages)++;
 }
 
-static int uwsgi_log_fd_has_pending(int fd) {
+static int upsgi_log_fd_has_pending(int fd) {
 	struct pollfd pfd;
 	pfd.fd = fd;
 	pfd.events = POLLIN;
@@ -1488,13 +1488,13 @@ static int uwsgi_log_fd_has_pending(int fd) {
 	return 0;
 }
 
-static void uwsgi_log_func_do(struct uwsgi_string_list *encoders, struct uwsgi_logger *ul, char *msg, size_t len, int is_req_log) {
-	struct uwsgi_string_list *usl = encoders;
+static void upsgi_log_func_do(struct upsgi_string_list *encoders, struct upsgi_logger *ul, char *msg, size_t len, int is_req_log) {
+	struct upsgi_string_list *usl = encoders;
 	// note: msg must not be freed !!!
 	char *new_msg = msg;
 	size_t new_msg_len = len;
 	while(usl) {
-		struct uwsgi_log_encoder *ule = (struct uwsgi_log_encoder *) usl->custom_ptr;
+		struct upsgi_log_encoder *ule = (struct upsgi_log_encoder *) usl->custom_ptr;
 		if (ule->use_for) {
 			if (ul && ul->id) {
 				if (strcmp(ule->use_for, ul->id)) {
@@ -1520,9 +1520,9 @@ next:
 		written = ul->func(ul, new_msg, new_msg_len);
 	}
 	else {
-		written = write(uwsgi.original_log_fd, new_msg, new_msg_len);
+		written = write(upsgi.original_log_fd, new_msg, new_msg_len);
 	}
-	uwsgi_log_record_sink_issue(is_req_log, written, new_msg_len);
+	upsgi_log_record_sink_issue(is_req_log, written, new_msg_len);
 	if (new_msg != msg) {
 		free(new_msg);
 	}
@@ -1534,25 +1534,25 @@ next:
  * encoder features stay here in the generic logging core, not in the PSGI
  * adapter.
  */
-int uwsgi_master_log(void) {
+int upsgi_master_log(void) {
 
-        ssize_t rlen = read(uwsgi.shared->worker_log_pipe[0], uwsgi.log_master_buf, uwsgi.log_master_bufsize);
+        ssize_t rlen = read(upsgi.shared->worker_log_pipe[0], upsgi.log_master_buf, upsgi.log_master_bufsize);
         if (rlen > 0) {
-		uwsgi_log_record_counter(0);
-#if defined(UWSGI_PCRE) || defined(UWSGI_PCRE2)
-                uwsgi_alarm_log_check(uwsgi.log_master_buf, rlen);
-                struct uwsgi_regexp_list *url = uwsgi.log_drain_rules;
+		upsgi_log_record_counter(0);
+#if defined(UPSGI_PCRE) || defined(UPSGI_PCRE2)
+                upsgi_alarm_log_check(upsgi.log_master_buf, rlen);
+                struct upsgi_regexp_list *url = upsgi.log_drain_rules;
                 while (url) {
-                        if (uwsgi_regexp_match(url->pattern, uwsgi.log_master_buf, rlen) >= 0) {
+                        if (upsgi_regexp_match(url->pattern, upsgi.log_master_buf, rlen) >= 0) {
                                 return 0;
                         }
                         url = url->next;
                 }
-                if (uwsgi.log_filter_rules) {
+                if (upsgi.log_filter_rules) {
                         int show = 0;
-                        url = uwsgi.log_filter_rules;
+                        url = upsgi.log_filter_rules;
                         while (url) {
-                                if (uwsgi_regexp_match(url->pattern, uwsgi.log_master_buf, rlen) >= 0) {
+                                if (upsgi_regexp_match(url->pattern, upsgi.log_master_buf, rlen) >= 0) {
                                         show = 1;
                                         break;
                                 }
@@ -1562,13 +1562,13 @@ int uwsgi_master_log(void) {
                                 return 0;
                 }
 
-                url = uwsgi.log_route;
+                url = upsgi.log_route;
                 int finish = 0;
                 while (url) {
-                        if (uwsgi_regexp_match(url->pattern, uwsgi.log_master_buf, rlen) >= 0) {
-                                struct uwsgi_logger *ul_route = (struct uwsgi_logger *) url->custom_ptr;
+                        if (upsgi_regexp_match(url->pattern, upsgi.log_master_buf, rlen) >= 0) {
+                                struct upsgi_logger *ul_route = (struct upsgi_logger *) url->custom_ptr;
                                 if (ul_route) {
-					uwsgi_log_func_do(uwsgi.requested_log_encoders, ul_route, uwsgi.log_master_buf, rlen, 0);
+					upsgi_log_func_do(upsgi.requested_log_encoders, ul_route, upsgi.log_master_buf, rlen, 0);
                                         finish = 1;
                                 }
                         }
@@ -1580,20 +1580,20 @@ int uwsgi_master_log(void) {
 
                 int raw_log = 1;
 
-                struct uwsgi_logger *ul = uwsgi.choosen_logger;
+                struct upsgi_logger *ul = upsgi.choosen_logger;
                 while (ul) {
                         // check for named logger
                         if (ul->id) {
                                 goto next;
                         }
-                        uwsgi_log_func_do(uwsgi.requested_log_encoders, ul, uwsgi.log_master_buf, rlen, 0);
+                        upsgi_log_func_do(upsgi.requested_log_encoders, ul, upsgi.log_master_buf, rlen, 0);
                         raw_log = 0;
 next:
                         ul = ul->next;
                 }
 
                 if (raw_log) {
-			uwsgi_log_func_do(uwsgi.requested_log_encoders, NULL, uwsgi.log_master_buf, rlen, 0);
+			upsgi_log_func_do(upsgi.requested_log_encoders, NULL, upsgi.log_master_buf, rlen, 0);
                 }
                 return 0;
         }
@@ -1605,19 +1605,19 @@ next:
  * Dispatch request-log records after protocol/request preprocessing already
  * decided which client identity fields should be logged.
  */
-int uwsgi_master_req_log(void) {
+int upsgi_master_req_log(void) {
 
-        ssize_t rlen = read(uwsgi.shared->worker_req_log_pipe[0], uwsgi.log_master_buf, uwsgi.log_master_bufsize);
+        ssize_t rlen = read(upsgi.shared->worker_req_log_pipe[0], upsgi.log_master_buf, upsgi.log_master_bufsize);
         if (rlen > 0) {
-		uwsgi_log_record_counter(1);
-#if defined(UWSGI_PCRE) || defined(UWSGI_PCRE2)
-                struct uwsgi_regexp_list *url = uwsgi.log_req_route;
+		upsgi_log_record_counter(1);
+#if defined(UPSGI_PCRE) || defined(UPSGI_PCRE2)
+                struct upsgi_regexp_list *url = upsgi.log_req_route;
                 int finish = 0;
                 while (url) {
-                        if (uwsgi_regexp_match(url->pattern, uwsgi.log_master_buf, rlen) >= 0) {
-                                struct uwsgi_logger *ul_route = (struct uwsgi_logger *) url->custom_ptr;
+                        if (upsgi_regexp_match(url->pattern, upsgi.log_master_buf, rlen) >= 0) {
+                                struct upsgi_logger *ul_route = (struct upsgi_logger *) url->custom_ptr;
                                 if (ul_route) {
-                                        uwsgi_log_func_do(uwsgi.requested_log_req_encoders, ul_route, uwsgi.log_master_buf, rlen, 1);
+                                        upsgi_log_func_do(upsgi.requested_log_req_encoders, ul_route, upsgi.log_master_buf, rlen, 1);
                                         finish = 1;
                                 }
                         }
@@ -1629,20 +1629,20 @@ int uwsgi_master_req_log(void) {
 
                 int raw_log = 1;
 
-                struct uwsgi_logger *ul = uwsgi.choosen_req_logger;
+                struct upsgi_logger *ul = upsgi.choosen_req_logger;
                 while (ul) {
                         // check for named logger
                         if (ul->id) {
                                 goto next;
                         }
-                        uwsgi_log_func_do(uwsgi.requested_log_req_encoders, ul, uwsgi.log_master_buf, rlen, 1);
+                        upsgi_log_func_do(upsgi.requested_log_req_encoders, ul, upsgi.log_master_buf, rlen, 1);
                         raw_log = 0;
 next:
                         ul = ul->next;
                 }
 
                 if (raw_log) {
-			uwsgi_log_func_do(uwsgi.requested_log_req_encoders, NULL, uwsgi.log_master_buf, rlen, 1);
+			upsgi_log_func_do(upsgi.requested_log_req_encoders, NULL, upsgi.log_master_buf, rlen, 1);
                 }
                 return 0;
         }
@@ -1650,36 +1650,36 @@ next:
         return -1;
 }
 
-int uwsgi_master_log_drain(int max_records) {
+int upsgi_master_log_drain(int max_records) {
 	int drained = 0;
 	if (max_records < 1) {
 		max_records = 1;
 	}
 	while (drained < max_records) {
-		if (uwsgi_master_log()) {
+		if (upsgi_master_log()) {
 			break;
 		}
 		drained++;
 	}
-	if (drained >= max_records && uwsgi_log_fd_has_pending(uwsgi.shared->worker_log_pipe[0])) {
-		uwsgi.shared->log_backpressure_events++;
+	if (drained >= max_records && upsgi_log_fd_has_pending(upsgi.shared->worker_log_pipe[0])) {
+		upsgi.shared->log_backpressure_events++;
 	}
 	return drained;
 }
 
-int uwsgi_master_req_log_drain(int max_records) {
+int upsgi_master_req_log_drain(int max_records) {
 	int drained = 0;
 	if (max_records < 1) {
 		max_records = 1;
 	}
 	while (drained < max_records) {
-		if (uwsgi_master_req_log()) {
+		if (upsgi_master_req_log()) {
 			break;
 		}
 		drained++;
 	}
-	if (drained >= max_records && uwsgi_log_fd_has_pending(uwsgi.shared->worker_req_log_pipe[0])) {
-		uwsgi.shared->req_log_backpressure_events++;
+	if (drained >= max_records && upsgi_log_fd_has_pending(upsgi.shared->worker_req_log_pipe[0])) {
+		upsgi.shared->req_log_backpressure_events++;
 	}
 	return drained;
 }
@@ -1693,13 +1693,13 @@ static void *logger_thread_loop(void *noarg) {
         pthread_sigmask(SIG_BLOCK, &smask, NULL);
 
         logpoll[0].events = POLLIN;
-        logpoll[0].fd = uwsgi.shared->worker_log_pipe[0];
+        logpoll[0].fd = upsgi.shared->worker_log_pipe[0];
 
         int logpolls = 1;
 
-        if (uwsgi.req_log_master) {
+        if (upsgi.req_log_master) {
                 logpoll[1].events = POLLIN;
-                logpoll[1].fd = uwsgi.shared->worker_req_log_pipe[0];
+                logpoll[1].fd = upsgi.shared->worker_req_log_pipe[0];
 		logpolls++;
         }
 
@@ -1708,14 +1708,14 @@ static void *logger_thread_loop(void *noarg) {
                 int ret = poll(logpoll, logpolls, -1);
                 if (ret > 0) {
                         if (logpoll[0].revents & POLLIN) {
-                                pthread_mutex_lock(&uwsgi.threaded_logger_lock);
-                                uwsgi_master_log_drain(uwsgi.log_drain_burst);
-                                pthread_mutex_unlock(&uwsgi.threaded_logger_lock);
+                                pthread_mutex_lock(&upsgi.threaded_logger_lock);
+                                upsgi_master_log_drain(upsgi.log_drain_burst);
+                                pthread_mutex_unlock(&upsgi.threaded_logger_lock);
                         }
                         if (logpolls > 1 && logpoll[1].revents & POLLIN) {
-                                pthread_mutex_lock(&uwsgi.threaded_logger_lock);
-                                uwsgi_master_req_log_drain(uwsgi.log_drain_burst);
-                                pthread_mutex_unlock(&uwsgi.threaded_logger_lock);
+                                pthread_mutex_lock(&upsgi.threaded_logger_lock);
+                                upsgi_master_req_log_drain(upsgi.log_drain_burst);
+                                pthread_mutex_unlock(&upsgi.threaded_logger_lock);
                         }
 
                 }
@@ -1726,35 +1726,35 @@ static void *logger_thread_loop(void *noarg) {
 
 
 
-void uwsgi_threaded_logger_spawn() {
+void upsgi_threaded_logger_spawn() {
 	pthread_t logger_thread;
 
 	if (pthread_create(&logger_thread, NULL, logger_thread_loop, NULL)) {
-        	uwsgi_error("pthread_create()");
-                uwsgi_log("falling back to non-threaded logger...\n");
-                event_queue_add_fd_read(uwsgi.master_queue, uwsgi.shared->worker_log_pipe[0]);
-                if (uwsgi.req_log_master) {
-                	event_queue_add_fd_read(uwsgi.master_queue, uwsgi.shared->worker_req_log_pipe[0]);
+        	upsgi_error("pthread_create()");
+                upsgi_log("falling back to non-threaded logger...\n");
+                event_queue_add_fd_read(upsgi.master_queue, upsgi.shared->worker_log_pipe[0]);
+                if (upsgi.req_log_master) {
+                	event_queue_add_fd_read(upsgi.master_queue, upsgi.shared->worker_req_log_pipe[0]);
                 }
-                uwsgi.threaded_logger = 0;
+                upsgi.threaded_logger = 0;
 	}
 }
 
-void uwsgi_threaded_logger_worker_spawn() {
+void upsgi_threaded_logger_worker_spawn() {
 	pthread_t logger_thread;
 
-        pthread_mutex_init(&uwsgi.threaded_logger_lock, NULL);
+        pthread_mutex_init(&upsgi.threaded_logger_lock, NULL);
 
-	uwsgi.log_master_buf = uwsgi_malloc(uwsgi.log_master_bufsize);
+	upsgi.log_master_buf = upsgi_malloc(upsgi.log_master_bufsize);
 
         if (pthread_create(&logger_thread, NULL, logger_thread_loop, NULL)) {
-                uwsgi_error_safe("uwsgi_threaded_logger_worker_spawn()/pthread_create()");
+                upsgi_error_safe("upsgi_threaded_logger_worker_spawn()/pthread_create()");
 		exit(1);
 	}
 }
 
-void uwsgi_register_log_encoder(char *name, char *(*func)(struct uwsgi_log_encoder *, char *, size_t, size_t *)) {
-	struct uwsgi_log_encoder *old_ule = NULL, *ule = uwsgi.log_encoders;
+void upsgi_register_log_encoder(char *name, char *(*func)(struct upsgi_log_encoder *, char *, size_t, size_t *)) {
+	struct upsgi_log_encoder *old_ule = NULL, *ule = upsgi.log_encoders;
 
 	while(ule) {
 		if (!strcmp(ule->name, name)) {
@@ -1765,7 +1765,7 @@ void uwsgi_register_log_encoder(char *name, char *(*func)(struct uwsgi_log_encod
 		ule = ule->next;
 	}
 
-	ule = uwsgi_calloc(sizeof(struct uwsgi_log_encoder));
+	ule = upsgi_calloc(sizeof(struct upsgi_log_encoder));
 	ule->name = name;
 	ule->func = func;
 
@@ -1773,12 +1773,12 @@ void uwsgi_register_log_encoder(char *name, char *(*func)(struct uwsgi_log_encod
 		old_ule->next = ule;
 	}
 	else {
-		uwsgi.log_encoders = ule;
+		upsgi.log_encoders = ule;
 	}
 }
 
-struct uwsgi_log_encoder *uwsgi_log_encoder_by_name(char *name) {
-	struct uwsgi_log_encoder *ule = uwsgi.log_encoders;
+struct upsgi_log_encoder *upsgi_log_encoder_by_name(char *name) {
+	struct upsgi_log_encoder *ule = upsgi.log_encoders;
 	while(ule) {
 		if (!strcmp(name, ule->name)) return ule;
 		ule = ule->next;
@@ -1786,82 +1786,82 @@ struct uwsgi_log_encoder *uwsgi_log_encoder_by_name(char *name) {
 	return NULL;
 }
 
-void uwsgi_setup_log_encoders() {
-	struct uwsgi_string_list *usl = NULL;
-	uwsgi_foreach(usl, uwsgi.requested_log_encoders) {
+void upsgi_setup_log_encoders() {
+	struct upsgi_string_list *usl = NULL;
+	upsgi_foreach(usl, upsgi.requested_log_encoders) {
 		char *space = strchr(usl->value, ' ');
 		if (space) *space = 0;
 		char *use_for = strchr(usl->value, ':');
 		if (use_for) *use_for = 0;
-		struct uwsgi_log_encoder *ule = uwsgi_log_encoder_by_name(usl->value);
+		struct upsgi_log_encoder *ule = upsgi_log_encoder_by_name(usl->value);
 		if (!ule) {
-			uwsgi_log("log encoder \"%s\" not found\n", usl->value);
+			upsgi_log("log encoder \"%s\" not found\n", usl->value);
 			exit(1);
 		}
-		struct uwsgi_log_encoder *ule2 = uwsgi_malloc(sizeof(struct uwsgi_log_encoder));
-		memcpy(ule2, ule, sizeof(struct uwsgi_log_encoder));
+		struct upsgi_log_encoder *ule2 = upsgi_malloc(sizeof(struct upsgi_log_encoder));
+		memcpy(ule2, ule, sizeof(struct upsgi_log_encoder));
 		if (use_for) {
-			ule2->use_for = uwsgi_str(use_for+1);
+			ule2->use_for = upsgi_str(use_for+1);
 			*use_for = ':';
 		}
 		// we use a copy
 		if (space) {
 			*space = ' ';
-			ule2->args = uwsgi_str(space+1);
+			ule2->args = upsgi_str(space+1);
 		}
 		else {
-			ule2->args = uwsgi_str("");
+			ule2->args = upsgi_str("");
 		}
 
 		usl->custom_ptr = ule2;
-		uwsgi_log("[log-encoder] registered %s\n", usl->value);
+		upsgi_log("[log-encoder] registered %s\n", usl->value);
 	}
 
-	uwsgi_foreach(usl, uwsgi.requested_log_req_encoders) {
+	upsgi_foreach(usl, upsgi.requested_log_req_encoders) {
                 char *space = strchr(usl->value, ' ');
                 if (space) *space = 0;
 		char *use_for = strchr(usl->value, ':');
 		if (use_for) *use_for = 0;
-                struct uwsgi_log_encoder *ule = uwsgi_log_encoder_by_name(usl->value);
+                struct upsgi_log_encoder *ule = upsgi_log_encoder_by_name(usl->value);
                 if (!ule) {
-                        uwsgi_log("log encoder \"%s\" not found\n", usl->value);
+                        upsgi_log("log encoder \"%s\" not found\n", usl->value);
                         exit(1);
                 }
-		struct uwsgi_log_encoder *ule2 = uwsgi_malloc(sizeof(struct uwsgi_log_encoder));
-                memcpy(ule2, ule, sizeof(struct uwsgi_log_encoder));
+		struct upsgi_log_encoder *ule2 = upsgi_malloc(sizeof(struct upsgi_log_encoder));
+                memcpy(ule2, ule, sizeof(struct upsgi_log_encoder));
                 if (use_for) {
-			ule2->use_for = uwsgi_str(use_for+1);
+			ule2->use_for = upsgi_str(use_for+1);
                         *use_for = ':';
                 }
                 // we use a copy
                 if (space) {
                         *space = ' ';
-                        ule2->args = uwsgi_str(space+1);
+                        ule2->args = upsgi_str(space+1);
                 }
                 else {
-                        ule2->args = uwsgi_str("");
+                        ule2->args = upsgi_str("");
                 }
                 usl->custom_ptr = ule2;
-		uwsgi_log("[log-req-encoder] registered %s\n", usl->value);
+		upsgi_log("[log-req-encoder] registered %s\n", usl->value);
         }
 }
 
-#ifdef UWSGI_ZLIB
-static char *uwsgi_log_encoder_gzip(struct uwsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
-	struct uwsgi_buffer *ub = uwsgi_gzip(msg, len);
+#ifdef UPSGI_ZLIB
+static char *upsgi_log_encoder_gzip(struct upsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
+	struct upsgi_buffer *ub = upsgi_gzip(msg, len);
 	if (!ub) return NULL;
 	*rlen = ub->pos;
 	// avoid destruction
 	char *buf = ub->buf;
 	ub->buf = NULL;
-	uwsgi_buffer_destroy(ub);
+	upsgi_buffer_destroy(ub);
 	return buf;
 }
 
-static char *uwsgi_log_encoder_compress(struct uwsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
+static char *upsgi_log_encoder_compress(struct upsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
 	size_t c_len = (size_t) compressBound(len);
 	uLongf destLen = c_len;
-	char *buf = uwsgi_malloc(c_len);
+	char *buf = upsgi_malloc(c_len);
 	if (compress((Bytef *) buf, &destLen, (Bytef *)msg, (uLong) len) == Z_OK) {
 		*rlen = destLen;
 		return buf;
@@ -1876,16 +1876,16 @@ static char *uwsgi_log_encoder_compress(struct uwsgi_log_encoder *ule, char *msg
 really fast encoder adding only a prefix
 
 */
-static char *uwsgi_log_encoder_prefix(struct uwsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
+static char *upsgi_log_encoder_prefix(struct upsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
 	char *buf = NULL;
-	struct uwsgi_buffer *ub = uwsgi_buffer_new(len + strlen(ule->args));
-	if (uwsgi_buffer_append(ub, ule->args, strlen(ule->args))) goto end;
-	if (uwsgi_buffer_append(ub, msg, len)) goto end;
+	struct upsgi_buffer *ub = upsgi_buffer_new(len + strlen(ule->args));
+	if (upsgi_buffer_append(ub, ule->args, strlen(ule->args))) goto end;
+	if (upsgi_buffer_append(ub, msg, len)) goto end;
 	*rlen = ub->pos;
 	buf = ub->buf;
 	ub->buf = NULL;
 end:
-	uwsgi_buffer_destroy(ub);
+	upsgi_buffer_destroy(ub);
 	return buf;
 }
 
@@ -1894,16 +1894,16 @@ end:
 really fast encoder adding only a newline
 
 */
-static char *uwsgi_log_encoder_nl(struct uwsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
+static char *upsgi_log_encoder_nl(struct upsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
         char *buf = NULL;
-        struct uwsgi_buffer *ub = uwsgi_buffer_new(len + 1);
-        if (uwsgi_buffer_append(ub, msg, len)) goto end;
-        if (uwsgi_buffer_byte(ub, '\n')) goto end;
+        struct upsgi_buffer *ub = upsgi_buffer_new(len + 1);
+        if (upsgi_buffer_append(ub, msg, len)) goto end;
+        if (upsgi_buffer_byte(ub, '\n')) goto end;
         *rlen = ub->pos;
         buf = ub->buf;
         ub->buf = NULL;
 end:
-        uwsgi_buffer_destroy(ub);
+        upsgi_buffer_destroy(ub);
         return buf;
 }
 
@@ -1912,22 +1912,22 @@ end:
 really fast encoder adding only a suffix
 
 */
-static char *uwsgi_log_encoder_suffix(struct uwsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
+static char *upsgi_log_encoder_suffix(struct upsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
         char *buf = NULL;
-        struct uwsgi_buffer *ub = uwsgi_buffer_new(len + strlen(ule->args));
-        if (uwsgi_buffer_append(ub, msg, len)) goto end;
-        if (uwsgi_buffer_append(ub, ule->args, strlen(ule->args))) goto end;
+        struct upsgi_buffer *ub = upsgi_buffer_new(len + strlen(ule->args));
+        if (upsgi_buffer_append(ub, msg, len)) goto end;
+        if (upsgi_buffer_append(ub, ule->args, strlen(ule->args))) goto end;
         *rlen = ub->pos;
         buf = ub->buf;
         ub->buf = NULL;
 end:
-        uwsgi_buffer_destroy(ub);
+        upsgi_buffer_destroy(ub);
         return buf;
 }
 
 
 
-void uwsgi_log_encoder_parse_vars(struct uwsgi_log_encoder *ule) {
+void upsgi_log_encoder_parse_vars(struct upsgi_log_encoder *ule) {
 		char *ptr = ule->args;
 		size_t remains = strlen(ptr);
 		char *base = ptr;
@@ -1949,8 +1949,8 @@ void uwsgi_log_encoder_parse_vars(struct uwsgi_log_encoder *ule) {
 			else if (status == 2) {
 				if (b == '}') {
 					status = 0;
-					uwsgi_string_new_list((struct uwsgi_string_list **) &ule->data, uwsgi_concat2n(base, base_len, "", 0));
-					struct uwsgi_string_list *usl = uwsgi_string_new_list((struct uwsgi_string_list **) &ule->data, uwsgi_concat2n(var, var_len, "", 0));
+					upsgi_string_new_list((struct upsgi_string_list **) &ule->data, upsgi_concat2n(base, base_len, "", 0));
+					struct upsgi_string_list *usl = upsgi_string_new_list((struct upsgi_string_list **) &ule->data, upsgi_concat2n(var, var_len, "", 0));
 					usl->custom = 1;
 					var = NULL;
 					var_len = 0;
@@ -1979,7 +1979,7 @@ void uwsgi_log_encoder_parse_vars(struct uwsgi_log_encoder *ule) {
 			else if (status == 2) {
 				base_len+=3;
 			}
-			uwsgi_string_new_list((struct uwsgi_string_list **) &ule->data, uwsgi_concat2n(base, base_len, "", 0));
+			upsgi_string_new_list((struct upsgi_string_list **) &ule->data, upsgi_concat2n(base, base_len, "", 0));
 		}
 }
 
@@ -1991,51 +1991,51 @@ void uwsgi_log_encoder_parse_vars(struct uwsgi_log_encoder *ule) {
         micros (current microseconds)
         strftime (strftime)
 */
-static char *uwsgi_log_encoder_format(struct uwsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
+static char *upsgi_log_encoder_format(struct upsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
 
 	if (!ule->configured) {
-		uwsgi_log_encoder_parse_vars(ule);
+		upsgi_log_encoder_parse_vars(ule);
 		ule->configured = 1;
 	}
 
-	struct uwsgi_buffer *ub = uwsgi_buffer_new(strlen(ule->args) + len);
-	struct uwsgi_string_list *usl = (struct uwsgi_string_list *) ule->data;
+	struct upsgi_buffer *ub = upsgi_buffer_new(strlen(ule->args) + len);
+	struct upsgi_string_list *usl = (struct upsgi_string_list *) ule->data;
 	char *buf = NULL;
 	while(usl) {
 		if (usl->custom) {
-			if (!uwsgi_strncmp(usl->value, usl->len, "msg", 3)) {
+			if (!upsgi_strncmp(usl->value, usl->len, "msg", 3)) {
 				if (msg[len-1] == '\n') {
-					if (uwsgi_buffer_append(ub, msg, len-1)) goto end;
+					if (upsgi_buffer_append(ub, msg, len-1)) goto end;
 				}
 				else {
-					if (uwsgi_buffer_append(ub, msg, len)) goto end;
+					if (upsgi_buffer_append(ub, msg, len)) goto end;
 				}
 			}
-			else if (!uwsgi_strncmp(usl->value, usl->len, "msgnl", 5)) {
-				if (uwsgi_buffer_append(ub, msg, len)) goto end;
+			else if (!upsgi_strncmp(usl->value, usl->len, "msgnl", 5)) {
+				if (upsgi_buffer_append(ub, msg, len)) goto end;
 			}
-			else if (!uwsgi_strncmp(usl->value, usl->len, "unix", 4)) {
-				if (uwsgi_buffer_num64(ub, uwsgi_now())) goto end;
+			else if (!upsgi_strncmp(usl->value, usl->len, "unix", 4)) {
+				if (upsgi_buffer_num64(ub, upsgi_now())) goto end;
 			}
-			else if (!uwsgi_strncmp(usl->value, usl->len, "micros", 6)) {
-				if (uwsgi_buffer_num64(ub, uwsgi_micros())) goto end;
+			else if (!upsgi_strncmp(usl->value, usl->len, "micros", 6)) {
+				if (upsgi_buffer_num64(ub, upsgi_micros())) goto end;
 			}
-			else if (!uwsgi_strncmp(usl->value, usl->len, "millis", 6)) {
-				if (uwsgi_buffer_num64(ub, uwsgi_millis())) goto end;
+			else if (!upsgi_strncmp(usl->value, usl->len, "millis", 6)) {
+				if (upsgi_buffer_num64(ub, upsgi_millis())) goto end;
 			}
-			else if (!uwsgi_starts_with(usl->value, usl->len, "strftime:", 9)) {
+			else if (!upsgi_starts_with(usl->value, usl->len, "strftime:", 9)) {
 				char sftime[64];
-                                time_t now = uwsgi_now();
-				char *buf = uwsgi_concat2n(usl->value+9, usl->len-9,"", 0);
+                                time_t now = upsgi_now();
+				char *buf = upsgi_concat2n(usl->value+9, usl->len-9,"", 0);
                                 int strftime_len = strftime(sftime, 64, buf, localtime(&now));
 				free(buf);
 				if (strftime_len > 0) {
-					if (uwsgi_buffer_append(ub, sftime, strftime_len)) goto end;
+					if (upsgi_buffer_append(ub, sftime, strftime_len)) goto end;
 				}
 			}
 		}
 		else {
-			if (uwsgi_buffer_append(ub, usl->value, usl->len)) goto end;
+			if (upsgi_buffer_append(ub, usl->value, usl->len)) goto end;
 		}
 		usl = usl->next;
 	}
@@ -2043,61 +2043,61 @@ static char *uwsgi_log_encoder_format(struct uwsgi_log_encoder *ule, char *msg, 
 	*rlen = ub->pos;
 	ub->buf = NULL;
 end:
-	uwsgi_buffer_destroy(ub);
+	upsgi_buffer_destroy(ub);
 	return buf;
 }
 
-static char *uwsgi_log_encoder_json(struct uwsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
+static char *upsgi_log_encoder_json(struct upsgi_log_encoder *ule, char *msg, size_t len, size_t *rlen) {
 
         if (!ule->configured) {
-                uwsgi_log_encoder_parse_vars(ule);
+                upsgi_log_encoder_parse_vars(ule);
                 ule->configured = 1;
         }
 
-        struct uwsgi_buffer *ub = uwsgi_buffer_new(strlen(ule->args) + len);
-        struct uwsgi_string_list *usl = (struct uwsgi_string_list *) ule->data;
+        struct upsgi_buffer *ub = upsgi_buffer_new(strlen(ule->args) + len);
+        struct upsgi_string_list *usl = (struct upsgi_string_list *) ule->data;
         char *buf = NULL;
         while(usl) {
                 if (usl->custom) {
-                        if (!uwsgi_strncmp(usl->value, usl->len, "msg", 3)) {
+                        if (!upsgi_strncmp(usl->value, usl->len, "msg", 3)) {
 				size_t msg_len = len;
                                 if (msg[len-1] == '\n') msg_len--;
-				char *e_json = uwsgi_malloc((msg_len * 2)+1);
+				char *e_json = upsgi_malloc((msg_len * 2)+1);
 				escape_json(msg, msg_len, e_json);
-				if (uwsgi_buffer_append(ub, e_json, strlen(e_json))){
+				if (upsgi_buffer_append(ub, e_json, strlen(e_json))){
                                 	free(e_json);
                                         goto end;
                                 }
                                 free(e_json);
                         }
-                        else if (!uwsgi_strncmp(usl->value, usl->len, "msgnl", 5)) {
-				char *e_json = uwsgi_malloc((len * 2)+1);
+                        else if (!upsgi_strncmp(usl->value, usl->len, "msgnl", 5)) {
+				char *e_json = upsgi_malloc((len * 2)+1);
                                 escape_json(msg, len, e_json);
-                                if (uwsgi_buffer_append(ub, e_json, strlen(e_json))){
+                                if (upsgi_buffer_append(ub, e_json, strlen(e_json))){
                                         free(e_json);
                                         goto end;
                                 }
                                 free(e_json);
                         }
-                        else if (!uwsgi_strncmp(usl->value, usl->len, "unix", 4)) {
-                                if (uwsgi_buffer_num64(ub, uwsgi_now())) goto end;
+                        else if (!upsgi_strncmp(usl->value, usl->len, "unix", 4)) {
+                                if (upsgi_buffer_num64(ub, upsgi_now())) goto end;
                         }
-                        else if (!uwsgi_strncmp(usl->value, usl->len, "micros", 6)) {
-                                if (uwsgi_buffer_num64(ub, uwsgi_micros())) goto end;
+                        else if (!upsgi_strncmp(usl->value, usl->len, "micros", 6)) {
+                                if (upsgi_buffer_num64(ub, upsgi_micros())) goto end;
                         }
-                        else if (!uwsgi_strncmp(usl->value, usl->len, "millis", 6)) {
-                                if (uwsgi_buffer_num64(ub, uwsgi_millis())) goto end;
+                        else if (!upsgi_strncmp(usl->value, usl->len, "millis", 6)) {
+                                if (upsgi_buffer_num64(ub, upsgi_millis())) goto end;
                         }
-                        else if (!uwsgi_starts_with(usl->value, usl->len, "strftime:", 9)) {
+                        else if (!upsgi_starts_with(usl->value, usl->len, "strftime:", 9)) {
                                 char sftime[64];
-                                time_t now = uwsgi_now();
-                                char *buf = uwsgi_concat2n(usl->value+9, usl->len-9, "", 0);
+                                time_t now = upsgi_now();
+                                char *buf = upsgi_concat2n(usl->value+9, usl->len-9, "", 0);
                                 int strftime_len = strftime(sftime, 64, buf, localtime(&now));
                                 free(buf);
                                 if (strftime_len > 0) {
-					char *e_json = uwsgi_malloc((strftime_len * 2)+1);
+					char *e_json = upsgi_malloc((strftime_len * 2)+1);
 					escape_json(sftime, strftime_len, e_json);
-                                        if (uwsgi_buffer_append(ub, e_json, strlen(e_json))){
+                                        if (upsgi_buffer_append(ub, e_json, strlen(e_json))){
 						free(e_json);
 						goto end;
 					}
@@ -2106,7 +2106,7 @@ static char *uwsgi_log_encoder_json(struct uwsgi_log_encoder *ule, char *msg, si
                         }
                 }
                 else {
-                        if (uwsgi_buffer_append(ub, usl->value, usl->len)) goto end;
+                        if (upsgi_buffer_append(ub, usl->value, usl->len)) goto end;
                 }
                 usl = usl->next;
         }
@@ -2114,13 +2114,13 @@ static char *uwsgi_log_encoder_json(struct uwsgi_log_encoder *ule, char *msg, si
         *rlen = ub->pos;
         ub->buf = NULL;
 end:
-        uwsgi_buffer_destroy(ub);
+        upsgi_buffer_destroy(ub);
         return buf;
 }
 
-#define r_logchunk(x) uwsgi_register_logchunk(#x, uwsgi_lf_ ## x, 1)
-#define r_logchunk_offset(x, y) { struct uwsgi_logchunk *lc = uwsgi_register_logchunk(#x, NULL, 0); lc->pos = offsetof(struct wsgi_request, y); lc->pos_len = offsetof(struct wsgi_request, y ## _len); lc->type = 1; lc->free=0;}
-void uwsgi_register_logchunks() {
+#define r_logchunk(x) upsgi_register_logchunk(#x, upsgi_lf_ ## x, 1)
+#define r_logchunk_offset(x, y) { struct upsgi_logchunk *lc = upsgi_register_logchunk(#x, NULL, 0); lc->pos = offsetof(struct wsgi_request, y); lc->pos_len = offsetof(struct wsgi_request, y ## _len); lc->type = 1; lc->free=0;}
+void upsgi_register_logchunks() {
 	// offsets
 	r_logchunk_offset(uri, uri);
 	r_logchunk_offset(method, method);
@@ -2165,14 +2165,14 @@ void uwsgi_register_logchunks() {
 	r_logchunk(ioerr);
 }
 
-void uwsgi_log_encoders_register_embedded() {
-	uwsgi_register_log_encoder("prefix", uwsgi_log_encoder_prefix);
-	uwsgi_register_log_encoder("suffix", uwsgi_log_encoder_suffix);
-	uwsgi_register_log_encoder("nl", uwsgi_log_encoder_nl);
-	uwsgi_register_log_encoder("format", uwsgi_log_encoder_format);
-	uwsgi_register_log_encoder("json", uwsgi_log_encoder_json);
-#ifdef UWSGI_ZLIB
-	uwsgi_register_log_encoder("gzip", uwsgi_log_encoder_gzip);
-	uwsgi_register_log_encoder("compress", uwsgi_log_encoder_compress);
+void upsgi_log_encoders_register_embedded() {
+	upsgi_register_log_encoder("prefix", upsgi_log_encoder_prefix);
+	upsgi_register_log_encoder("suffix", upsgi_log_encoder_suffix);
+	upsgi_register_log_encoder("nl", upsgi_log_encoder_nl);
+	upsgi_register_log_encoder("format", upsgi_log_encoder_format);
+	upsgi_register_log_encoder("json", upsgi_log_encoder_json);
+#ifdef UPSGI_ZLIB
+	upsgi_register_log_encoder("gzip", upsgi_log_encoder_gzip);
+	upsgi_register_log_encoder("compress", upsgi_log_encoder_compress);
 #endif
 }

@@ -9,7 +9,7 @@ import time
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 REPO_DIR = SCRIPT_DIR.parent.parent.parent
-UWSGI_BIN = pathlib.Path(os.environ.get('UPSGI_BIN', str(REPO_DIR / 'upsgi')))
+UPSGI_BIN = pathlib.Path(os.environ.get('UPSGI_BIN', str(REPO_DIR / 'upsgi')))
 ARTIFACT_DIR = pathlib.Path(os.environ.get('UPSGI_BENCH_ARTIFACT_DIR', str(REPO_DIR / 'tests/fork/artifacts/bench_y1_baseline')))
 STATIC_ROOT = REPO_DIR / 'tests/fork/fixtures/static'
 APP_SIMPLE = REPO_DIR / 'tests/fork/fixtures/apps/app_simple.psgi'
@@ -126,7 +126,7 @@ def write_environment():
     lines = [
         f"date_utc={time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}",
         f"python3={sys.version.split()[0]}",
-        f"upsgi_version={subprocess.check_output([str(UWSGI_BIN), '--version'], text=True).strip()}",
+        f"upsgi_version={subprocess.check_output([str(UPSGI_BIN), '--version'], text=True).strip()}",
         f"requests_get={REQUESTS_GET}",
         f"warmup_get={WARMUP_GET}",
         f"requests_upload_small={REQUESTS_UPLOAD_SMALL}",
@@ -159,7 +159,7 @@ def start_case(case, port):
     log_file = case_dir / 'server.log'
     stdout_file = case_dir / 'stdout.log'
     cmd = [
-        str(UWSGI_BIN),
+        str(UPSGI_BIN),
         '--master',
         '--workers', '1',
         '--need-app',
@@ -224,8 +224,8 @@ def run_case(case):
 
 
 def main():
-    if not UWSGI_BIN.exists():
-        raise SystemExit(f'missing executable upsgi binary: {UWSGI_BIN}')
+    if not UPSGI_BIN.exists():
+        raise SystemExit(f'missing executable upsgi binary: {UPSGI_BIN}')
     write_environment()
     for case in CASES:
         run_case(case)

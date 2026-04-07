@@ -1,4 +1,4 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
 /*
 
@@ -35,7 +35,7 @@ static char *check_cookie(char *cookie, uint16_t cookie_len, char *key, uint16_t
 	char *equal = memchr(cookie, '=', cookie_len);
 	if (!equal) return NULL;
 	
-	if (uwsgi_strncmp(key, keylen, cookie, equal-cookie)) {
+	if (upsgi_strncmp(key, keylen, cookie, equal-cookie)) {
 		return NULL;
 	}
 
@@ -46,7 +46,7 @@ static char *check_cookie(char *cookie, uint16_t cookie_len, char *key, uint16_t
 	return equal+1;
 }
 
-char *uwsgi_get_cookie(struct wsgi_request *wsgi_req, char *key, uint16_t keylen, uint16_t *vallen) {
+char *upsgi_get_cookie(struct wsgi_request *wsgi_req, char *key, uint16_t keylen, uint16_t *vallen) {
 	uint16_t i;
 
 	char *cookie = wsgi_req->cookie;

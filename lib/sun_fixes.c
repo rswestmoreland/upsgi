@@ -1,6 +1,6 @@
 /* function written by Ben Taylor (found in the qemu-devel list) */
 
-#include "../uwsgi.h"
+#include "../upsgi.h"
 
 time_t timegm(struct tm *t) {
 	time_t tl, tb;

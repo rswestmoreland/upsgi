@@ -1,12 +1,12 @@
-#include "../../uwsgi.h"
+#include "../../upsgi.h"
 
 /*
  * Datagram socket logging sink kept in the default upsgi logging bundle.
  * Core logger routing chooses when this backend receives records.
  */
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
-ssize_t uwsgi_socket_logger(struct uwsgi_logger *ul, char *message, size_t len) {
+ssize_t upsgi_socket_logger(struct upsgi_logger *ul, char *message, size_t len) {
 
 	int family = AF_UNIX;
 
@@ -29,7 +29,7 @@ ssize_t uwsgi_socket_logger(struct uwsgi_logger *ul, char *message, size_t len) 
 
         	ul->fd = socket(family, SOCK_DGRAM, 0);
         	if (ul->fd < 0) {
-                	uwsgi_error_safe("socket()");
+                	upsgi_error_safe("socket()");
 			exit(1);
         	}
 
@@ -38,14 +38,14 @@ ssize_t uwsgi_socket_logger(struct uwsgi_logger *ul, char *message, size_t len) 
 		ul->msg.msg_name = &ul->addr;
 		ul->msg.msg_namelen = ul->addr_len;
 		if (ul->data) {
-			ul->msg.msg_iov = uwsgi_malloc(sizeof(struct iovec) * 2);
+			ul->msg.msg_iov = upsgi_malloc(sizeof(struct iovec) * 2);
 			ul->msg.msg_iov[0].iov_base = ul->data;
 			ul->msg.msg_iov[0].iov_len = strlen(ul->data);
 			ul->msg.msg_iovlen = 2;
 			ul->count = 1;
 		}
 		else {
-			ul->msg.msg_iov = uwsgi_malloc(sizeof(struct iovec));
+			ul->msg.msg_iov = upsgi_malloc(sizeof(struct iovec));
 			ul->msg.msg_iovlen = 1;
 			ul->count = 0;
 		}
@@ -66,14 +66,14 @@ ssize_t uwsgi_socket_logger(struct uwsgi_logger *ul, char *message, size_t len) 
 }
 
 /* Register the socket logger backend used by --logger socket:... */
-void uwsgi_logsocket_register() {
-	uwsgi_register_logger("socket", uwsgi_socket_logger);
+void upsgi_logsocket_register() {
+	upsgi_register_logger("socket", upsgi_socket_logger);
 }
 
-struct uwsgi_plugin logsocket_plugin = {
+struct upsgi_plugin logsocket_plugin = {
 
         .name = "logsocket",
-        .on_load = uwsgi_logsocket_register,
+        .on_load = upsgi_logsocket_register,
 
 };
 

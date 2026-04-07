@@ -1,22 +1,22 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
 /*
 
-	uWSGI metrics subsystem
+	upsgi metrics subsystem
 
 	a metric is a node in a linked list reachable via a numeric id (OID, in SNMP way) or a simple string:
 
-	uwsgi.worker.1.requests
-	uwsgi.custom.foo.bar
+	upsgi.worker.1.requests
+	upsgi.custom.foo.bar
 
 	the oid representation:
 
-		1.3.6.1.4.1.35156.17 = iso.org.dod.internet.private.enterprise.unbit.uwsgi
-		1.3.6.1.4.1.35156.17.3.1.1 = iso.org.dod.internet.private.enterprise.unbit.uwsgi.worker.1.requests
-		1.3.6.1.4.1.35156.17.3.1.1 = iso.org.dod.internet.private.enterprise.unbit.uwsgi.worker.1.requests
-		1.3.6.1.4.1.35156.17.3.1.2.1.1 = iso.org.dod.internet.private.enterprise.unbit.uwsgi.worker.1.core.1.requests
+		1.3.6.1.4.1.35156.17 = iso.org.dod.internet.private.enterprise.unbit.upsgi
+		1.3.6.1.4.1.35156.17.3.1.1 = iso.org.dod.internet.private.enterprise.unbit.upsgi.worker.1.requests
+		1.3.6.1.4.1.35156.17.3.1.1 = iso.org.dod.internet.private.enterprise.unbit.upsgi.worker.1.requests
+		1.3.6.1.4.1.35156.17.3.1.2.1.1 = iso.org.dod.internet.private.enterprise.unbit.upsgi.worker.1.core.1.requests
 		...
 
 	each metric is a collected value with a specific frequency
@@ -27,13 +27,13 @@ extern struct uwsgi_server uwsgi;
 	absolute
 
 	metrics are managed by a dedicated thread (in the master) holding a linked list of all the items. For few metrics it is a good (read: simple) approach,
-	but you can cache lookups in a uWSGI cache for really big list. (TODO)
+	but you can cache lookups in a upsgi cache for really big list. (TODO)
 
-	struct uwsgi_metric *um = uwsgi_register_metric("worker.1.requests", "3.1.1", UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[1].requests, 0, NULL);
-	prototype: struct uwsgi_metric *uwsgi_register_metric(char *name, char *oid, uint8_t value_type, char *collector, void *ptr, uint32_t freq, void *custom);
+	struct upsgi_metric *um = upsgi_register_metric("worker.1.requests", "3.1.1", UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[1].requests, 0, NULL);
+	prototype: struct upsgi_metric *upsgi_register_metric(char *name, char *oid, uint8_t value_type, char *collector, void *ptr, uint32_t freq, void *custom);
 
-	value_type = UWSGI_METRIC_COUNTER/UWSGI_METRIC_GAUGE/UWSGI_METRIC_ABSOLUTE
-	collect_way = "ptr" -> get from a pointer / UWSGI_METRIC_FUNC -> get from a func with the prototype int64_t func(struct uwsgi_metric *); / UWSGI_METRIC_FILE -> get the value from a file, ptr is the filename
+	value_type = UPSGI_METRIC_COUNTER/UPSGI_METRIC_GAUGE/UPSGI_METRIC_ABSOLUTE
+	collect_way = "ptr" -> get from a pointer / UPSGI_METRIC_FUNC -> get from a func with the prototype int64_t func(struct upsgi_metric *); / UPSGI_METRIC_FILE -> get the value from a file, ptr is the filename
 
 	For some metric (or all ?) you may want to hold a value even after a server reload. For such a reason you can specify a directory in which the server (on startup/restart) will look for
 	a file named like the metric and will read the initial value from it. It may look an old-fashioned and quite inefficient way, but it is the most versatile for a sysadmin (allowing him/her
@@ -43,17 +43,17 @@ extern struct uwsgi_server uwsgi;
 
 	Applications are allowed to update metrics (but they cannot register new ones), with simple api funcs:
 
-	uwsgi.metric_set("worker.1.requests", N)
-	uwsgi.metric_inc("worker.1.requests", N=1)
-	uwsgi.metric_dec("worker.1.requests", N=1)
-	uwsgi.metric_mul("worker.1.requests", N=1)
-	uwsgi.metric_div("worker.1.requests", N=1)
+	upsgi.metric_set("worker.1.requests", N)
+	upsgi.metric_inc("worker.1.requests", N=1)
+	upsgi.metric_dec("worker.1.requests", N=1)
+	upsgi.metric_mul("worker.1.requests", N=1)
+	upsgi.metric_div("worker.1.requests", N=1)
 
 	and obviously they can get values:
 
-	uwsgi.metric_get("worker.1.requests")
+	upsgi.metric_get("worker.1.requests")
 
-	Updating metrics from your app MUST BE ATOMIC, for such a reason a uWSGI rwlock is initialized on startup and used for each operation (simple reading from a metric does not require locking)
+	Updating metrics from your app MUST BE ATOMIC, for such a reason a upsgi rwlock is initialized on startup and used for each operation (simple reading from a metric does not require locking)
 
 	Metrics can be updated from the internal routing subsystem too:
 
@@ -66,7 +66,7 @@ extern struct uwsgi_server uwsgi;
 */
 
 
-int64_t uwsgi_metric_collector_file(struct uwsgi_metric *metric) {
+int64_t upsgi_metric_collector_file(struct upsgi_metric *metric) {
 	char *filename = metric->arg1;
 	if (!filename) return 0;
 	int split_pos = metric->arg1n;
@@ -75,7 +75,7 @@ int64_t uwsgi_metric_collector_file(struct uwsgi_metric *metric) {
 	int64_t ret = 0;
 	int fd = open(filename, O_RDONLY);
 	if (fd < 0) {
-		uwsgi_error_open(filename);
+		upsgi_error_open(filename);
 		return 0;
 	}
 
@@ -127,7 +127,7 @@ end:
 
 */
 
-static int uwsgi_validate_metric_name(char *buf) {
+static int upsgi_validate_metric_name(char *buf) {
 	size_t len = strlen(buf);
 	size_t i;
 	for(i=0;i<len;i++) {
@@ -156,7 +156,7 @@ static int uwsgi_validate_metric_name(char *buf) {
 	oids can be null
 */
 
-static int uwsgi_validate_metric_oid(char *buf) {
+static int upsgi_validate_metric_oid(char *buf) {
 	if (!buf) return 1;
         size_t len = strlen(buf);
         size_t i;
@@ -174,8 +174,8 @@ static int uwsgi_validate_metric_oid(char *buf) {
         return 1;
 }
 
-void uwsgi_metric_append(struct uwsgi_metric *um) {
-	struct uwsgi_metric *old_metric=NULL,*metric=uwsgi.metrics;
+void upsgi_metric_append(struct upsgi_metric *um) {
+	struct upsgi_metric *old_metric=NULL,*metric=upsgi.metrics;
 	while(metric) {
 		old_metric = metric;
                 metric = metric->next;
@@ -185,34 +185,34 @@ void uwsgi_metric_append(struct uwsgi_metric *um) {
                        old_metric->next = um;
         }
         else {
-        	uwsgi.metrics = um;
+        	upsgi.metrics = um;
         }
 
-        uwsgi.metrics_cnt++;
+        upsgi.metrics_cnt++;
 }
 
-struct uwsgi_metric_collector *uwsgi_metric_collector_by_name(char *name) {
+struct upsgi_metric_collector *upsgi_metric_collector_by_name(char *name) {
 	if (!name) return NULL;
-	struct uwsgi_metric_collector *umc = uwsgi.metric_collectors;
+	struct upsgi_metric_collector *umc = upsgi.metric_collectors;
 	while(umc) {
 		if (!strcmp(name, umc->name)) return umc;
 		umc = umc->next;
 	}
-	uwsgi_log("unable to find metric collector \"%s\"\n", name);
+	upsgi_log("unable to find metric collector \"%s\"\n", name);
 	exit(1);
 }
 
-struct uwsgi_metric *uwsgi_register_metric_do(char *name, char *oid, uint8_t value_type, char *collector, void *ptr, uint32_t freq, void *custom, int do_not_push) {
-	if (!uwsgi.has_metrics) return NULL;
-	struct uwsgi_metric *old_metric=NULL,*metric=uwsgi.metrics;
+struct upsgi_metric *upsgi_register_metric_do(char *name, char *oid, uint8_t value_type, char *collector, void *ptr, uint32_t freq, void *custom, int do_not_push) {
+	if (!upsgi.has_metrics) return NULL;
+	struct upsgi_metric *old_metric=NULL,*metric=upsgi.metrics;
 
-	if (!uwsgi_validate_metric_name(name)) {
-		uwsgi_log("invalid metric name: %s\n", name);
+	if (!upsgi_validate_metric_name(name)) {
+		upsgi_log("invalid metric name: %s\n", name);
 		exit(1);
 	}
 
-	if (!uwsgi_validate_metric_oid(oid)) {
-		uwsgi_log("invalid metric oid: %s\n", oid);
+	if (!upsgi_validate_metric_oid(oid)) {
+		upsgi_log("invalid metric oid: %s\n", oid);
 		exit(1);
 	}
 
@@ -224,9 +224,9 @@ struct uwsgi_metric *uwsgi_register_metric_do(char *name, char *oid, uint8_t val
 		metric = metric->next;
 	}
 
-	metric = uwsgi_calloc(sizeof(struct uwsgi_metric));
+	metric = upsgi_calloc(sizeof(struct upsgi_metric));
 	// always make a copy of the name (so we can use stack for building strings)
-	metric->name = uwsgi_str(name);
+	metric->name = upsgi_str(name);
 	metric->name_len = strlen(metric->name);
 
 	if (!do_not_push) {
@@ -234,63 +234,63 @@ struct uwsgi_metric *uwsgi_register_metric_do(char *name, char *oid, uint8_t val
 			old_metric->next = metric;
 		}
 		else {
-			uwsgi.metrics = metric;
+			upsgi.metrics = metric;
 		}
 
-		uwsgi.metrics_cnt++;
+		upsgi.metrics_cnt++;
 	}
 
 found:
 	metric->oid = oid;
 	if (metric->oid) {
 		metric->oid_len = strlen(oid);
-		metric->oid = uwsgi_str(oid);
+		metric->oid = upsgi_str(oid);
 		char *p, *ctx = NULL;
-		char *oid_tmp = uwsgi_str(metric->oid);
+		char *oid_tmp = upsgi_str(metric->oid);
 		// slower but we save lot of memory
-		struct uwsgi_buffer *ub = uwsgi_buffer_new(1);
-                uwsgi_foreach_token(oid_tmp, ".", p, ctx) {
+		struct upsgi_buffer *ub = upsgi_buffer_new(1);
+                upsgi_foreach_token(oid_tmp, ".", p, ctx) {
 			uint64_t l = strtoull(p, NULL, 10);	
-			if (uwsgi_base128(ub, l, 1)) {
-				uwsgi_log("unable to encode oid %s to asn/ber\n", metric->oid);
+			if (upsgi_base128(ub, l, 1)) {
+				upsgi_log("unable to encode oid %s to asn/ber\n", metric->oid);
 				exit(1);
 			}
 		}
 		metric->asn = ub->buf;
 		metric->asn_len = ub->pos;
 		ub->buf = NULL;
-		uwsgi_buffer_destroy(ub);
+		upsgi_buffer_destroy(ub);
 		free(oid_tmp);
 	}
 	metric->type = value_type;
-	metric->collector = uwsgi_metric_collector_by_name(collector);
+	metric->collector = upsgi_metric_collector_by_name(collector);
 	metric->ptr = ptr;
 	metric->freq = freq;
 	if (!metric->freq) metric->freq = 1;
 	metric->custom = custom;
 
-	if (uwsgi.metrics_dir) {
-		char *filename = uwsgi_concat3(uwsgi.metrics_dir, "/", name);
+	if (upsgi.metrics_dir) {
+		char *filename = upsgi_concat3(upsgi.metrics_dir, "/", name);
 		int fd = open(filename, O_RDWR|O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP);
 		if (fd < 0) {
-			uwsgi_error_open(filename);
+			upsgi_error_open(filename);
 			exit(1);
 		}
 		// fill the file
-		if (lseek(fd, uwsgi.page_size-1, SEEK_SET) < 0) {
-			uwsgi_error("uwsgi_register_metric()/lseek()");
-			uwsgi_log("unable to register metric: %s\n", name);
+		if (lseek(fd, upsgi.page_size-1, SEEK_SET) < 0) {
+			upsgi_error("upsgi_register_metric()/lseek()");
+			upsgi_log("unable to register metric: %s\n", name);
 			exit(1);
 		}
 		if (write(fd, "\0", 1) != 1) {
-			uwsgi_error("uwsgi_register_metric()/write()");
-			uwsgi_log("unable to register metric: %s\n", name);
+			upsgi_error("upsgi_register_metric()/write()");
+			upsgi_log("unable to register metric: %s\n", name);
 			exit(1);
 		}
-		metric->map = mmap(NULL, uwsgi.page_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+		metric->map = mmap(NULL, upsgi.page_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
 		if (metric->map == MAP_FAILED) {
-			uwsgi_error("uwsgi_register_metric()/mmap()");
-			uwsgi_log("unable to register metric: %s\n", name);
+			upsgi_error("upsgi_register_metric()/mmap()");
+			upsgi_log("unable to register metric: %s\n", name);
 			exit(1);
 		}
 		
@@ -302,11 +302,11 @@ found:
 	return metric;
 }
 
-struct uwsgi_metric *uwsgi_register_metric(char *name, char *oid, uint8_t value_type, char *collector, void *ptr, uint32_t freq, void *custom) {
-	return uwsgi_register_metric_do(name, oid, value_type, collector, ptr, freq, custom, 0);
+struct upsgi_metric *upsgi_register_metric(char *name, char *oid, uint8_t value_type, char *collector, void *ptr, uint32_t freq, void *custom) {
+	return upsgi_register_metric_do(name, oid, value_type, collector, ptr, freq, custom, 0);
 }
 
-struct uwsgi_metric *uwsgi_register_keyval_metric(char *arg) {
+struct upsgi_metric *upsgi_register_keyval_metric(char *arg) {
 	char *m_name = NULL;
 	char *m_oid = NULL;
 	char *m_type = NULL;
@@ -324,9 +324,9 @@ struct uwsgi_metric *uwsgi_register_keyval_metric(char *arg) {
 	char *m_reset_after_push = NULL;
 
 	if (!strchr(arg, '=')) {
-		m_name = uwsgi_str(arg);
+		m_name = upsgi_str(arg);
 	}
-	else if (uwsgi_kvlist_parse(arg, strlen(arg), ',', '=',
+	else if (upsgi_kvlist_parse(arg, strlen(arg), ',', '=',
 		"name", &m_name,
 		"oid", &m_oid,
 		"type", &m_type,
@@ -343,29 +343,29 @@ struct uwsgi_metric *uwsgi_register_keyval_metric(char *arg) {
 		"alias", &m_alias,
 		"reset_after_push", &m_reset_after_push,
 		NULL)) {
-		uwsgi_log("invalid metric keyval syntax: %s\n", arg);
+		upsgi_log("invalid metric keyval syntax: %s\n", arg);
 		exit(1);
 	}
 
 	if (!m_name) {
-		uwsgi_log("you need to specify a metric name: %s\n", arg);
+		upsgi_log("you need to specify a metric name: %s\n", arg);
 		exit(1);
 	}
 
-	uint8_t type = UWSGI_METRIC_COUNTER;
+	uint8_t type = UPSGI_METRIC_COUNTER;
 	char *collector = NULL;
 	uint32_t freq = 0;
 	int64_t initial_value = 0;
 
 	if (m_type) {
 		if (!strcmp(m_type, "gauge")) {
-			type = UWSGI_METRIC_GAUGE;
+			type = UPSGI_METRIC_GAUGE;
 		}
 		else if (!strcmp(m_type, "absolute")) {
-			type = UWSGI_METRIC_ABSOLUTE;
+			type = UPSGI_METRIC_ABSOLUTE;
 		}
 		else if (!strcmp(m_type, "alias")) {
-			type = UWSGI_METRIC_ALIAS;
+			type = UPSGI_METRIC_ALIAS;
 		}
 	}
 
@@ -380,7 +380,7 @@ struct uwsgi_metric *uwsgi_register_keyval_metric(char *arg) {
 		initial_value = strtoll(m_initial_value, NULL, 10);		
 	}
 
-	struct uwsgi_metric* um =  uwsgi_register_metric(m_name, m_oid, type, collector, NULL, freq, NULL);
+	struct upsgi_metric* um =  upsgi_register_metric(m_name, m_oid, type, collector, NULL, freq, NULL);
 	um->initial_value = initial_value;
 
 	if (m_reset_after_push){
@@ -389,20 +389,20 @@ struct uwsgi_metric *uwsgi_register_keyval_metric(char *arg) {
 
 	if (m_children) {
 		char *p, *ctx = NULL;
-        	uwsgi_foreach_token(m_children, ";", p, ctx) {
-			struct uwsgi_metric *child = uwsgi_metric_find_by_name(p);
+        	upsgi_foreach_token(m_children, ";", p, ctx) {
+			struct upsgi_metric *child = upsgi_metric_find_by_name(p);
 			if (!child) {
-				uwsgi_log("unable to find metric \"%s\"\n", p);
+				upsgi_log("unable to find metric \"%s\"\n", p);
 				exit(1);
 			}
-			uwsgi_metric_add_child(um, child);
+			upsgi_metric_add_child(um, child);
                 }
         }
 
 	if (m_alias) {
-		struct uwsgi_metric *alias = uwsgi_metric_find_by_name(m_alias);
+		struct upsgi_metric *alias = upsgi_metric_find_by_name(m_alias);
 		if (!alias) {
-			uwsgi_log("unable to find metric \"%s\"\n", m_alias);
+			upsgi_log("unable to find metric \"%s\"\n", m_alias);
                         exit(1);
 		}
 		um->ptr = (void *) alias;
@@ -437,20 +437,20 @@ struct uwsgi_metric *uwsgi_register_keyval_metric(char *arg) {
 	return um;
 }
 
-static void *uwsgi_metrics_loop(void *arg) {
+static void *upsgi_metrics_loop(void *arg) {
 
 	// block signals on this thread
         sigset_t smask;
         sigfillset(&smask);
-#ifndef UWSGI_DEBUG
+#ifndef UPSGI_DEBUG
         sigdelset(&smask, SIGSEGV);
 #endif
         pthread_sigmask(SIG_BLOCK, &smask, NULL);
 
 	for(;;) {
-		struct uwsgi_metric *metric = uwsgi.metrics;
+		struct upsgi_metric *metric = upsgi.metrics;
 		// every second scan the whole metrics tree
-		time_t now = uwsgi_now();
+		time_t now = upsgi_now();
 		while(metric) {
 			if (!metric->last_update) {
 				metric->last_update = now;
@@ -458,43 +458,43 @@ static void *uwsgi_metrics_loop(void *arg) {
 			else {
 				if ((uint32_t) (now - metric->last_update) < metric->freq) goto next;
 			}
-			uwsgi_wlock(uwsgi.metrics_lock);
+			upsgi_wlock(upsgi.metrics_lock);
 			int64_t value = *metric->value;
 			// gather the new value based on the type of collection strategy
 			if (metric->collector) {
 				*metric->value = metric->initial_value + metric->collector->func(metric);
 			}
 			int64_t new_value = *metric->value;
-			uwsgi_rwunlock(uwsgi.metrics_lock);
+			upsgi_rwunlock(upsgi.metrics_lock);
 
 			metric->last_update = now;
 
-			if (uwsgi.metrics_dir && metric->map) {
+			if (upsgi.metrics_dir && metric->map) {
 				if (value != new_value) {
-					int ret = snprintf(metric->map, uwsgi.page_size, "%lld\n", (long long) new_value);
-					if (ret > 0 && ret < uwsgi.page_size) {
+					int ret = snprintf(metric->map, upsgi.page_size, "%lld\n", (long long) new_value);
+					if (ret > 0 && ret < upsgi.page_size) {
 						memset(metric->map+ret, 0, 4096-ret);
 					}
 				}
 			}
 
 			// thresholds;
-			struct uwsgi_metric_threshold *umt = metric->thresholds;
+			struct upsgi_metric_threshold *umt = metric->thresholds;
 			while(umt) {
 				if (new_value >= umt->value) {
 					if (umt->reset) {
-						uwsgi_wlock(uwsgi.metrics_lock);
+						upsgi_wlock(upsgi.metrics_lock);
 						*metric->value = umt->reset_value;
-						uwsgi_rwunlock(uwsgi.metrics_lock);
+						upsgi_rwunlock(upsgi.metrics_lock);
 					}
 
 					if (umt->alarm) {
 						if (umt->last_alarm + umt->rate <= now) {
 							if (umt->msg) {
-								uwsgi_alarm_trigger(umt->alarm, umt->msg, umt->msg_len);
+								upsgi_alarm_trigger(umt->alarm, umt->msg, umt->msg_len);
 							}
 							else {
-								uwsgi_alarm_trigger(umt->alarm, metric->name, metric->name_len);
+								upsgi_alarm_trigger(umt->alarm, metric->name, metric->name_len);
 							}
 							umt->last_alarm = now;
 						}
@@ -512,15 +512,15 @@ next:
 	
 }
 
-void uwsgi_metrics_start_collector() {
-	if (!uwsgi.has_metrics) return;
+void upsgi_metrics_start_collector() {
+	if (!upsgi.has_metrics) return;
 	pthread_t t;
-        pthread_create(&t, NULL, uwsgi_metrics_loop, NULL);
-	uwsgi_log("metrics collector thread started\n");
+        pthread_create(&t, NULL, upsgi_metrics_loop, NULL);
+	upsgi_log("metrics collector thread started\n");
 }
 
-struct uwsgi_metric *uwsgi_metric_find_by_name(char *name) {
-	struct uwsgi_metric *um = uwsgi.metrics;
+struct upsgi_metric *upsgi_metric_find_by_name(char *name) {
+	struct upsgi_metric *um = upsgi.metrics;
 	while(um) {
 		if (!strcmp(um->name, name)) {
 			return um;
@@ -531,10 +531,10 @@ struct uwsgi_metric *uwsgi_metric_find_by_name(char *name) {
 	return NULL;
 }
 
-struct uwsgi_metric *uwsgi_metric_find_by_namen(char *name, size_t len) {
-        struct uwsgi_metric *um = uwsgi.metrics;
+struct upsgi_metric *upsgi_metric_find_by_namen(char *name, size_t len) {
+        struct upsgi_metric *um = upsgi.metrics;
         while(um) {
-                if (!uwsgi_strncmp(um->name, um->name_len, name, len)) {
+                if (!upsgi_strncmp(um->name, um->name_len, name, len)) {
                         return um;
                 }
                 um = um->next;
@@ -543,14 +543,14 @@ struct uwsgi_metric *uwsgi_metric_find_by_namen(char *name, size_t len) {
         return NULL;
 }
 
-struct uwsgi_metric_child *uwsgi_metric_add_child(struct uwsgi_metric *parent, struct uwsgi_metric *child) {
-	struct uwsgi_metric_child *umc = parent->children, *old_umc = NULL;
+struct upsgi_metric_child *upsgi_metric_add_child(struct upsgi_metric *parent, struct upsgi_metric *child) {
+	struct upsgi_metric_child *umc = parent->children, *old_umc = NULL;
 	while(umc) {
 		old_umc = umc;
 		umc = umc->next;
 	}
 
-	umc = uwsgi_calloc(sizeof(struct uwsgi_metric_child));
+	umc = upsgi_calloc(sizeof(struct upsgi_metric_child));
 	umc->um = child;
 	if (old_umc) {
 		old_umc->next = umc;
@@ -561,8 +561,8 @@ struct uwsgi_metric_child *uwsgi_metric_add_child(struct uwsgi_metric *parent, s
 	return umc;
 }
 
-struct uwsgi_metric *uwsgi_metric_find_by_oid(char *oid) {
-        struct uwsgi_metric *um = uwsgi.metrics;
+struct upsgi_metric *upsgi_metric_find_by_oid(char *oid) {
+        struct upsgi_metric *um = upsgi.metrics;
         while(um) {
                 if (um->oid && !strcmp(um->oid, oid)) {
                         return um;
@@ -573,10 +573,10 @@ struct uwsgi_metric *uwsgi_metric_find_by_oid(char *oid) {
         return NULL;
 }
 
-struct uwsgi_metric *uwsgi_metric_find_by_oidn(char *oid, size_t len) {
-        struct uwsgi_metric *um = uwsgi.metrics;
+struct upsgi_metric *upsgi_metric_find_by_oidn(char *oid, size_t len) {
+        struct upsgi_metric *um = upsgi.metrics;
         while(um) {
-                if (um->oid && !uwsgi_strncmp(um->oid, um->oid_len, oid, len)) {
+                if (um->oid && !upsgi_strncmp(um->oid, um->oid_len, oid, len)) {
                         return um;
                 }
                 um = um->next;
@@ -585,10 +585,10 @@ struct uwsgi_metric *uwsgi_metric_find_by_oidn(char *oid, size_t len) {
         return NULL;
 }
 
-struct uwsgi_metric *uwsgi_metric_find_by_asn(char *asn, size_t len) {
-        struct uwsgi_metric *um = uwsgi.metrics;
+struct upsgi_metric *upsgi_metric_find_by_asn(char *asn, size_t len) {
+        struct upsgi_metric *um = upsgi.metrics;
         while(um) {
-                if (um->oid && um->asn && !uwsgi_strncmp(um->asn, um->asn_len, asn, len)) {
+                if (um->oid && um->asn && !upsgi_strncmp(um->asn, um->asn_len, asn, len)) {
                         return um;
                 }
                 um = um->next;
@@ -610,258 +610,258 @@ struct uwsgi_metric *uwsgi_metric_find_by_asn(char *asn, size_t len) {
 
 */
 
-#define um_op struct uwsgi_metric *um = NULL;\
-	if (!uwsgi.has_metrics) return -1;\
+#define um_op struct upsgi_metric *um = NULL;\
+	if (!upsgi.has_metrics) return -1;\
 	if (name) {\
-                um = uwsgi_metric_find_by_name(name);\
+                um = upsgi_metric_find_by_name(name);\
         }\
         else if (oid) {\
-                um = uwsgi_metric_find_by_oid(oid);\
+                um = upsgi_metric_find_by_oid(oid);\
         }\
         if (!um) return -1;\
-	if (um->collector || um->type == UWSGI_METRIC_ALIAS) return -1;\
-	uwsgi_wlock(uwsgi.metrics_lock)
+	if (um->collector || um->type == UPSGI_METRIC_ALIAS) return -1;\
+	upsgi_wlock(upsgi.metrics_lock)
 
-int uwsgi_metric_set(char *name, char *oid, int64_t value) {
+int upsgi_metric_set(char *name, char *oid, int64_t value) {
 	um_op;
 	*um->value = value;
-	uwsgi_rwunlock(uwsgi.metrics_lock);
+	upsgi_rwunlock(upsgi.metrics_lock);
 	return 0;
 }
 
-int uwsgi_metric_inc(char *name, char *oid, int64_t value) {
+int upsgi_metric_inc(char *name, char *oid, int64_t value) {
         um_op;
 	*um->value += value;
-	uwsgi_rwunlock(uwsgi.metrics_lock);
+	upsgi_rwunlock(upsgi.metrics_lock);
 	return 0;
 }
 
-int uwsgi_metric_dec(char *name, char *oid, int64_t value) {
+int upsgi_metric_dec(char *name, char *oid, int64_t value) {
         um_op;
 	*um->value -= value;
-	uwsgi_rwunlock(uwsgi.metrics_lock);
+	upsgi_rwunlock(upsgi.metrics_lock);
 	return 0;
 }
 
-int uwsgi_metric_mul(char *name, char *oid, int64_t value) {
+int upsgi_metric_mul(char *name, char *oid, int64_t value) {
         um_op;
 	*um->value *= value;
-	uwsgi_rwunlock(uwsgi.metrics_lock);
+	upsgi_rwunlock(upsgi.metrics_lock);
 	return 0;
 }
 
-int uwsgi_metric_div(char *name, char *oid, int64_t value) {
+int upsgi_metric_div(char *name, char *oid, int64_t value) {
 	// avoid division by zero
 	if (value == 0) return -1;
         um_op;
 	*um->value /= value;
-	uwsgi_rwunlock(uwsgi.metrics_lock);
+	upsgi_rwunlock(upsgi.metrics_lock);
 	return 0;
 }
 
-int64_t uwsgi_metric_get(char *name, char *oid) {
-	if (!uwsgi.has_metrics) return 0;
+int64_t upsgi_metric_get(char *name, char *oid) {
+	if (!upsgi.has_metrics) return 0;
 	int64_t ret = 0;
-	struct uwsgi_metric *um = NULL;
+	struct upsgi_metric *um = NULL;
 	if (name) {
-		um = uwsgi_metric_find_by_name(name);
+		um = upsgi_metric_find_by_name(name);
 	}
 	else if (oid) {
-		um = uwsgi_metric_find_by_oid(oid);
+		um = upsgi_metric_find_by_oid(oid);
 	}
 	if (!um) return 0;
 
 	// now (in rlocked context) we get the value from
 	// the map
-	uwsgi_rlock(uwsgi.metrics_lock);
+	upsgi_rlock(upsgi.metrics_lock);
 	ret = *um->value;
 	// unlock
-	uwsgi_rwunlock(uwsgi.metrics_lock);
+	upsgi_rwunlock(upsgi.metrics_lock);
 	return ret;
 }
 
-int64_t uwsgi_metric_getn(char *name, size_t nlen, char *oid, size_t olen) {
-        if (!uwsgi.has_metrics) return 0;
+int64_t upsgi_metric_getn(char *name, size_t nlen, char *oid, size_t olen) {
+        if (!upsgi.has_metrics) return 0;
         int64_t ret = 0;
-        struct uwsgi_metric *um = NULL;
+        struct upsgi_metric *um = NULL;
         if (name) {
-                um = uwsgi_metric_find_by_namen(name, nlen);
+                um = upsgi_metric_find_by_namen(name, nlen);
         }
         else if (oid) {
-                um = uwsgi_metric_find_by_oidn(oid, olen);
+                um = upsgi_metric_find_by_oidn(oid, olen);
         }
         if (!um) return 0;
 
         // now (in rlocked context) we get the value from
         // the map
-        uwsgi_rlock(uwsgi.metrics_lock);
+        upsgi_rlock(upsgi.metrics_lock);
         ret = *um->value;
         // unlock
-        uwsgi_rwunlock(uwsgi.metrics_lock);
+        upsgi_rwunlock(upsgi.metrics_lock);
         return ret;
 }
 
-int uwsgi_metric_set_max(char *name, char *oid, int64_t value) {
+int upsgi_metric_set_max(char *name, char *oid, int64_t value) {
 	um_op;
 	if (value > *um->value)
 	        *um->value = value;
-	uwsgi_rwunlock(uwsgi.metrics_lock);
+	upsgi_rwunlock(upsgi.metrics_lock);
 	return 0;
 }
 
-int uwsgi_metric_set_min(char *name, char *oid, int64_t value) {
+int upsgi_metric_set_min(char *name, char *oid, int64_t value) {
 	um_op;
 	if ((value > um->initial_value || 0) && value < *um->value)
 		*um->value = value;
-	uwsgi_rwunlock(uwsgi.metrics_lock);
+	upsgi_rwunlock(upsgi.metrics_lock);
 	return 0;
 }
 
-#define uwsgi_metric_name(f, n) ret = snprintf(buf, 4096, f, n); if (ret <= 1 || ret >= 4096) { uwsgi_log("unable to register metric name %s\n", f); exit(1);}
-#define uwsgi_metric_name2(f, n, n2) ret = snprintf(buf, 4096, f, n, n2); if (ret <= 1 || ret >= 4096) { uwsgi_log("unable to register metric name %s\n", f); exit(1);}
+#define upsgi_metric_name(f, n) ret = snprintf(buf, 4096, f, n); if (ret <= 1 || ret >= 4096) { upsgi_log("unable to register metric name %s\n", f); exit(1);}
+#define upsgi_metric_name2(f, n, n2) ret = snprintf(buf, 4096, f, n, n2); if (ret <= 1 || ret >= 4096) { upsgi_log("unable to register metric name %s\n", f); exit(1);}
 
-#define uwsgi_metric_oid(f, n) ret = snprintf(buf2, 4096, f, n); if (ret <= 1 || ret >= 4096) { uwsgi_log("unable to register metric oid %s\n", f); exit(1);}
-#define uwsgi_metric_oid2(f, n, n2) ret = snprintf(buf2, 4096, f, n, n2); if (ret <= 1 || ret >= 4096) { uwsgi_log("unable to register metric oid %s\n", f); exit(1);}
+#define upsgi_metric_oid(f, n) ret = snprintf(buf2, 4096, f, n); if (ret <= 1 || ret >= 4096) { upsgi_log("unable to register metric oid %s\n", f); exit(1);}
+#define upsgi_metric_oid2(f, n, n2) ret = snprintf(buf2, 4096, f, n, n2); if (ret <= 1 || ret >= 4096) { upsgi_log("unable to register metric oid %s\n", f); exit(1);}
 
-void uwsgi_setup_metrics() {
+void upsgi_setup_metrics() {
 
-	if (!uwsgi.has_metrics) return;
+	if (!upsgi.has_metrics) return;
 
 	char buf[4096];
 	char buf2[4096];
 
 	// create the main rwlock
-	uwsgi.metrics_lock = uwsgi_rwlock_init("metrics");
+	upsgi.metrics_lock = upsgi_rwlock_init("metrics");
 	
 	// get realpath of the storage dir
-	if (uwsgi.metrics_dir) {
-		char *dir = uwsgi_expand_path(uwsgi.metrics_dir, strlen(uwsgi.metrics_dir), NULL);
+	if (upsgi.metrics_dir) {
+		char *dir = upsgi_expand_path(upsgi.metrics_dir, strlen(upsgi.metrics_dir), NULL);
 		if (!dir) {
-			uwsgi_error("uwsgi_setup_metrics()/uwsgi_expand_path()");
+			upsgi_error("upsgi_setup_metrics()/upsgi_expand_path()");
 			exit(1);
 		}
-		uwsgi.metrics_dir = dir;
+		upsgi.metrics_dir = dir;
 	}
 
 	// the 'core' namespace
-	uwsgi_register_metric("core.routed_signals", "5.1", UWSGI_METRIC_COUNTER, "ptr", &uwsgi.shared->routed_signals, 0, NULL);
-	uwsgi_register_metric("core.unrouted_signals", "5.2", UWSGI_METRIC_COUNTER, "ptr", &uwsgi.shared->unrouted_signals, 0, NULL);
+	upsgi_register_metric("core.routed_signals", "5.1", UPSGI_METRIC_COUNTER, "ptr", &upsgi.shared->routed_signals, 0, NULL);
+	upsgi_register_metric("core.unrouted_signals", "5.2", UPSGI_METRIC_COUNTER, "ptr", &upsgi.shared->unrouted_signals, 0, NULL);
 
-	uwsgi_register_metric("core.busy_workers", "5.3", UWSGI_METRIC_GAUGE, "ptr", &uwsgi.shared->busy_workers, 0, NULL);
-	uwsgi_register_metric("core.idle_workers", "5.4", UWSGI_METRIC_GAUGE, "ptr", &uwsgi.shared->idle_workers, 0, NULL);
-	uwsgi_register_metric("core.overloaded", "5.5", UWSGI_METRIC_COUNTER, "ptr", &uwsgi.shared->overloaded, 0, NULL);
+	upsgi_register_metric("core.busy_workers", "5.3", UPSGI_METRIC_GAUGE, "ptr", &upsgi.shared->busy_workers, 0, NULL);
+	upsgi_register_metric("core.idle_workers", "5.4", UPSGI_METRIC_GAUGE, "ptr", &upsgi.shared->idle_workers, 0, NULL);
+	upsgi_register_metric("core.overloaded", "5.5", UPSGI_METRIC_COUNTER, "ptr", &upsgi.shared->overloaded, 0, NULL);
 
 	// parents are appended only at the end
-	struct uwsgi_metric *total_tx = uwsgi_register_metric_do("core.total_tx", "5.100", UWSGI_METRIC_COUNTER, "sum", NULL, 0, NULL, 1);
-	struct uwsgi_metric *total_rss = uwsgi_register_metric_do("core.total_rss", "5.101", UWSGI_METRIC_GAUGE, "sum", NULL, 0, NULL, 1);
-	struct uwsgi_metric *total_vsz = uwsgi_register_metric_do("core.total_vsz", "5.102", UWSGI_METRIC_GAUGE, "sum", NULL, 0, NULL, 1);
-	struct uwsgi_metric *total_avg_rt = uwsgi_register_metric_do("core.avg_response_time", "5.103", UWSGI_METRIC_GAUGE, "avg", NULL, 0, NULL, 1);
-	struct uwsgi_metric *total_running_time = uwsgi_register_metric_do("core.total_running_time", "5.104", UWSGI_METRIC_COUNTER, "sum", NULL, 0, NULL, 1);
+	struct upsgi_metric *total_tx = upsgi_register_metric_do("core.total_tx", "5.100", UPSGI_METRIC_COUNTER, "sum", NULL, 0, NULL, 1);
+	struct upsgi_metric *total_rss = upsgi_register_metric_do("core.total_rss", "5.101", UPSGI_METRIC_GAUGE, "sum", NULL, 0, NULL, 1);
+	struct upsgi_metric *total_vsz = upsgi_register_metric_do("core.total_vsz", "5.102", UPSGI_METRIC_GAUGE, "sum", NULL, 0, NULL, 1);
+	struct upsgi_metric *total_avg_rt = upsgi_register_metric_do("core.avg_response_time", "5.103", UPSGI_METRIC_GAUGE, "avg", NULL, 0, NULL, 1);
+	struct upsgi_metric *total_running_time = upsgi_register_metric_do("core.total_running_time", "5.104", UPSGI_METRIC_COUNTER, "sum", NULL, 0, NULL, 1);
 
 	int ret;
 
 	// create the 'worker' namespace
 	int i;
-	for(i=0;i<=uwsgi.numproc;i++) {
+	for(i=0;i<=upsgi.numproc;i++) {
 
-		uwsgi_metric_name("worker.%d.requests", i) ; uwsgi_metric_oid("3.%d.1", i);
-		uwsgi_register_metric(buf, buf2, UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[i].requests, 0, NULL);
+		upsgi_metric_name("worker.%d.requests", i) ; upsgi_metric_oid("3.%d.1", i);
+		upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].requests, 0, NULL);
 
-		uwsgi_metric_name("worker.%d.delta_requests", i) ; uwsgi_metric_oid("3.%d.2", i);
-		uwsgi_register_metric(buf, buf2, UWSGI_METRIC_ABSOLUTE, "ptr", &uwsgi.workers[i].delta_requests, 0, NULL);
+		upsgi_metric_name("worker.%d.delta_requests", i) ; upsgi_metric_oid("3.%d.2", i);
+		upsgi_register_metric(buf, buf2, UPSGI_METRIC_ABSOLUTE, "ptr", &upsgi.workers[i].delta_requests, 0, NULL);
 
-		uwsgi_metric_name("worker.%d.failed_requests", i) ; uwsgi_metric_oid("3.%d.13", i);
-		uwsgi_register_metric(buf, buf2, UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[i].failed_requests, 0, NULL);
+		upsgi_metric_name("worker.%d.failed_requests", i) ; upsgi_metric_oid("3.%d.13", i);
+		upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].failed_requests, 0, NULL);
 
-		uwsgi_metric_name("worker.%d.respawns", i) ; uwsgi_metric_oid("3.%d.14", i);
-		uwsgi_register_metric(buf, buf2, UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[i].respawn_count, 0, NULL);
+		upsgi_metric_name("worker.%d.respawns", i) ; upsgi_metric_oid("3.%d.14", i);
+		upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].respawn_count, 0, NULL);
 
-		uwsgi_metric_name("worker.%d.avg_response_time", i) ; uwsgi_metric_oid("3.%d.8", i);
-		struct uwsgi_metric *avg_rt = uwsgi_register_metric(buf, buf2, UWSGI_METRIC_GAUGE, "ptr", &uwsgi.workers[i].avg_response_time, 0, NULL);
-		if (i > 0) uwsgi_metric_add_child(total_avg_rt, avg_rt);
+		upsgi_metric_name("worker.%d.avg_response_time", i) ; upsgi_metric_oid("3.%d.8", i);
+		struct upsgi_metric *avg_rt = upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi.workers[i].avg_response_time, 0, NULL);
+		if (i > 0) upsgi_metric_add_child(total_avg_rt, avg_rt);
 
-		uwsgi_metric_name("worker.%d.total_tx", i) ; uwsgi_metric_oid("3.%d.9", i);
-		struct uwsgi_metric *tx = uwsgi_register_metric(buf, buf2, UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[i].tx, 0, NULL);
-		if (i > 0) uwsgi_metric_add_child(total_tx, tx);
+		upsgi_metric_name("worker.%d.total_tx", i) ; upsgi_metric_oid("3.%d.9", i);
+		struct upsgi_metric *tx = upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].tx, 0, NULL);
+		if (i > 0) upsgi_metric_add_child(total_tx, tx);
 
-		uwsgi_metric_name("worker.%d.rss_size", i) ; uwsgi_metric_oid("3.%d.11", i);
-		struct uwsgi_metric *rss = uwsgi_register_metric(buf, buf2, UWSGI_METRIC_GAUGE, "ptr", &uwsgi.workers[i].rss_size, 0, NULL);
-		if (i > 0) uwsgi_metric_add_child(total_rss, rss);
+		upsgi_metric_name("worker.%d.rss_size", i) ; upsgi_metric_oid("3.%d.11", i);
+		struct upsgi_metric *rss = upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi.workers[i].rss_size, 0, NULL);
+		if (i > 0) upsgi_metric_add_child(total_rss, rss);
 
-		uwsgi_metric_name("worker.%d.vsz_size", i) ; uwsgi_metric_oid("3.%d.12", i);
-		struct uwsgi_metric *vsz = uwsgi_register_metric(buf, buf2, UWSGI_METRIC_GAUGE, "ptr", &uwsgi.workers[i].vsz_size, 0, NULL);
-		if (i > 0) uwsgi_metric_add_child(total_vsz, vsz);
+		upsgi_metric_name("worker.%d.vsz_size", i) ; upsgi_metric_oid("3.%d.12", i);
+		struct upsgi_metric *vsz = upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi.workers[i].vsz_size, 0, NULL);
+		if (i > 0) upsgi_metric_add_child(total_vsz, vsz);
 
-		uwsgi_metric_name("worker.%d.running_time", i) ; uwsgi_metric_oid("3.%d.13", i);
-		struct uwsgi_metric *running_time = uwsgi_register_metric(buf, buf2, UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[i].running_time, 0, NULL);
-		if (i > 0) uwsgi_metric_add_child(total_running_time, running_time);
+		upsgi_metric_name("worker.%d.running_time", i) ; upsgi_metric_oid("3.%d.13", i);
+		struct upsgi_metric *running_time = upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].running_time, 0, NULL);
+		if (i > 0) upsgi_metric_add_child(total_running_time, running_time);
 
 		// skip core metrics for worker 0
 		if (i == 0) continue;
 
-		if (uwsgi.metrics_no_cores) continue;
+		if (upsgi.metrics_no_cores) continue;
 
 		int j;
-		for(j=0;j<uwsgi.cores;j++) {
-			uwsgi_metric_name2("worker.%d.core.%d.requests", i, j) ; uwsgi_metric_oid2("3.%d.2.%d.1", i, j);
-			uwsgi_register_metric(buf, buf2, UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[i].cores[j].requests, 0, NULL);
+		for(j=0;j<upsgi.cores;j++) {
+			upsgi_metric_name2("worker.%d.core.%d.requests", i, j) ; upsgi_metric_oid2("3.%d.2.%d.1", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].requests, 0, NULL);
 
-			uwsgi_metric_name2("worker.%d.core.%d.write_errors", i, j) ; uwsgi_metric_oid2("3.%d.2.%d.3", i, j);
-			uwsgi_register_metric(buf, buf2, UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[i].cores[j].write_errors, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.write_errors", i, j) ; upsgi_metric_oid2("3.%d.2.%d.3", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].write_errors, 0, NULL);
 
-			uwsgi_metric_name2("worker.%d.core.%d.routed_requests", i, j) ; uwsgi_metric_oid2("3.%d.2.%d.4", i, j);
-			uwsgi_register_metric(buf, buf2, UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[i].cores[j].routed_requests, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.routed_requests", i, j) ; upsgi_metric_oid2("3.%d.2.%d.4", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].routed_requests, 0, NULL);
 
-			uwsgi_metric_name2("worker.%d.core.%d.static_requests", i, j) ; uwsgi_metric_oid2("3.%d.2.%d.5", i, j);
-			uwsgi_register_metric(buf, buf2, UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[i].cores[j].static_requests, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.static_requests", i, j) ; upsgi_metric_oid2("3.%d.2.%d.5", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].static_requests, 0, NULL);
 
-			uwsgi_metric_name2("worker.%d.core.%d.offloaded_requests", i, j) ; uwsgi_metric_oid2("3.%d.2.%d.6", i, j);
-			uwsgi_register_metric(buf, buf2, UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[i].cores[j].offloaded_requests, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.offloaded_requests", i, j) ; upsgi_metric_oid2("3.%d.2.%d.6", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].offloaded_requests, 0, NULL);
 
-			uwsgi_metric_name2("worker.%d.core.%d.exceptions", i, j) ; uwsgi_metric_oid2("3.%d.2.%d.7", i, j);
-			uwsgi_register_metric(buf, buf2, UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[i].cores[j].exceptions, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.exceptions", i, j) ; upsgi_metric_oid2("3.%d.2.%d.7", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].exceptions, 0, NULL);
 
-			uwsgi_metric_name2("worker.%d.core.%d.read_errors", i, j) ; uwsgi_metric_oid2("3.%d.2.%d.8", i, j);
-			uwsgi_register_metric(buf, buf2, UWSGI_METRIC_COUNTER, "ptr", &uwsgi.workers[i].cores[j].read_errors, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.read_errors", i, j) ; upsgi_metric_oid2("3.%d.2.%d.8", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].read_errors, 0, NULL);
 
 		}
 	}
 
 	// append parents
-	uwsgi_metric_append(total_tx);
-	uwsgi_metric_append(total_rss);
-	uwsgi_metric_append(total_vsz);
-	uwsgi_metric_append(total_avg_rt);
-	uwsgi_metric_append(total_running_time);
+	upsgi_metric_append(total_tx);
+	upsgi_metric_append(total_rss);
+	upsgi_metric_append(total_vsz);
+	upsgi_metric_append(total_avg_rt);
+	upsgi_metric_append(total_running_time);
 
 	// sockets
-	struct uwsgi_socket *uwsgi_sock = uwsgi.sockets;
+	struct upsgi_socket *upsgi_sock = upsgi.sockets;
 	int pos = 0;
-	while(uwsgi_sock) {
-		uwsgi_metric_name("socket.%d.listen_queue", pos) ; uwsgi_metric_oid("7.%d.1", pos);
-                uwsgi_register_metric(buf, buf2, UWSGI_METRIC_GAUGE, "ptr", &uwsgi_sock->queue, 0, NULL);
+	while(upsgi_sock) {
+		upsgi_metric_name("socket.%d.listen_queue", pos) ; upsgi_metric_oid("7.%d.1", pos);
+                upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi_sock->queue, 0, NULL);
 		pos++;
-		uwsgi_sock = uwsgi_sock->next;
+		upsgi_sock = upsgi_sock->next;
 	}
 
 	// create aliases
-	uwsgi_register_metric("rss_size", NULL, UWSGI_METRIC_ALIAS, NULL, total_rss, 0, NULL);
-	uwsgi_register_metric("vsz_size", NULL, UWSGI_METRIC_ALIAS, NULL, total_vsz, 0, NULL);
+	upsgi_register_metric("rss_size", NULL, UPSGI_METRIC_ALIAS, NULL, total_rss, 0, NULL);
+	upsgi_register_metric("vsz_size", NULL, UPSGI_METRIC_ALIAS, NULL, total_vsz, 0, NULL);
 
 	// create custom/user-defined metrics
-	struct uwsgi_string_list *usl;
-	uwsgi_foreach(usl, uwsgi.additional_metrics) {
-		struct uwsgi_metric *um = uwsgi_register_keyval_metric(usl->value);
+	struct upsgi_string_list *usl;
+	upsgi_foreach(usl, upsgi.additional_metrics) {
+		struct upsgi_metric *um = upsgi_register_keyval_metric(usl->value);
 		if (um) {
-			uwsgi_log("added custom metric: %s\n", um->name);
+			upsgi_log("added custom metric: %s\n", um->name);
 		}
 	}
 
 	// allocate shared memory
-	int64_t *values = uwsgi_calloc_shared(sizeof(int64_t) * uwsgi.metrics_cnt);
+	int64_t *values = upsgi_calloc_shared(sizeof(int64_t) * upsgi.metrics_cnt);
 	pos = 0;
 
-	struct uwsgi_metric *metric = uwsgi.metrics;
+	struct upsgi_metric *metric = upsgi.metrics;
 	while(metric) {
 		metric->value = &values[pos];
 		pos++;
@@ -869,12 +869,12 @@ void uwsgi_setup_metrics() {
 	}
 
 	// remap aliases
-	metric = uwsgi.metrics;
+	metric = upsgi.metrics;
         while(metric) {
-		if (metric->type == UWSGI_METRIC_ALIAS) {
-			struct uwsgi_metric *alias = (struct uwsgi_metric *) metric->ptr;
+		if (metric->type == UPSGI_METRIC_ALIAS) {
+			struct upsgi_metric *alias = (struct upsgi_metric *) metric->ptr;
 			if (!alias) {
-				uwsgi_log("metric alias \"%s\" requires a mapping !!!\n", metric->name);
+				upsgi_log("metric alias \"%s\" requires a mapping !!!\n", metric->name);
 				exit(1);
 			}
 			metric->value = alias->value;
@@ -887,14 +887,14 @@ void uwsgi_setup_metrics() {
 	}
 
 	// setup thresholds
-	uwsgi_foreach(usl, uwsgi.metrics_threshold) {
+	upsgi_foreach(usl, upsgi.metrics_threshold) {
 		char *m_key = NULL;
 		char *m_value = NULL;
 		char *m_alarm = NULL;
 		char *m_rate = NULL;
 		char *m_reset = NULL;
 		char *m_msg = NULL;
-		if (uwsgi_kvlist_parse(usl->value, usl->len, ',', '=',
+		if (upsgi_kvlist_parse(usl->value, usl->len, ',', '=',
                 	"key", &m_key,
                 	"value", &m_value,
                 	"alarm", &m_alarm,
@@ -902,22 +902,22 @@ void uwsgi_setup_metrics() {
                 	"msg", &m_msg,
                 	"reset", &m_reset,
                 	NULL)) {
-                		uwsgi_log("invalid metric threshold keyval syntax: %s\n", usl->value);
+                		upsgi_log("invalid metric threshold keyval syntax: %s\n", usl->value);
                 		exit(1);
 		}
 
 		if (!m_key || !m_value) {
-			uwsgi_log("metric's threshold requires a key and a value: %s\n", usl->value);
+			upsgi_log("metric's threshold requires a key and a value: %s\n", usl->value);
 			exit(1);
 		}
 
-		struct uwsgi_metric *um = uwsgi_metric_find_by_name(m_key);
+		struct upsgi_metric *um = upsgi_metric_find_by_name(m_key);
 		if (!um) {
-			uwsgi_log("unable to find metric %s\n", m_key);
+			upsgi_log("unable to find metric %s\n", m_key);
 			exit(1);
 		}
 
-		struct uwsgi_metric_threshold *umt = uwsgi_calloc(sizeof(struct uwsgi_metric_threshold));
+		struct upsgi_metric_threshold *umt = upsgi_calloc(sizeof(struct upsgi_metric_threshold));
 		umt->value = strtoll(m_value, NULL, 10);
 		if (m_reset) {
 			umt->reset = 1;
@@ -941,7 +941,7 @@ void uwsgi_setup_metrics() {
 		if (m_reset) free(m_reset);
 
 		if (um->thresholds) {
-			struct uwsgi_metric_threshold *umt_list = um->thresholds;
+			struct upsgi_metric_threshold *umt_list = um->thresholds;
 			while(umt_list) {
 				if (!umt_list->next) {
 					umt_list->next = umt;
@@ -954,15 +954,15 @@ void uwsgi_setup_metrics() {
 			um->thresholds = umt;
 		}
 
-		uwsgi_log("added threshold for metric %s (value: %lld)\n", um->name, umt->value);
+		upsgi_log("added threshold for metric %s (value: %lld)\n", um->name, umt->value);
 	}
 
-	uwsgi_log("initialized %llu metrics\n", uwsgi.metrics_cnt);
+	upsgi_log("initialized %llu metrics\n", upsgi.metrics_cnt);
 
-	if (uwsgi.metrics_dir) {
-		uwsgi_log("memory allocated for metrics storage: %llu bytes (%llu MB)\n", uwsgi.metrics_cnt * uwsgi.page_size, (uwsgi.metrics_cnt * uwsgi.page_size)/1024/1024);
-		if (uwsgi.metrics_dir_restore) {
-			metric = uwsgi.metrics;
+	if (upsgi.metrics_dir) {
+		upsgi_log("memory allocated for metrics storage: %llu bytes (%llu MB)\n", upsgi.metrics_cnt * upsgi.page_size, (upsgi.metrics_cnt * upsgi.page_size)/1024/1024);
+		if (upsgi.metrics_dir_restore) {
+			metric = upsgi.metrics;
         		while(metric) {
 				if (metric->map) {
 					metric->initial_value = strtoll(metric->map, NULL, 10);
@@ -973,8 +973,8 @@ void uwsgi_setup_metrics() {
 	}
 }
 
-struct uwsgi_metric_collector *uwsgi_register_metric_collector(char *name, int64_t (*func)(struct uwsgi_metric *)) {
-	struct uwsgi_metric_collector *collector = uwsgi.metric_collectors, *old_collector = NULL;
+struct upsgi_metric_collector *upsgi_register_metric_collector(char *name, int64_t (*func)(struct upsgi_metric *)) {
+	struct upsgi_metric_collector *collector = upsgi.metric_collectors, *old_collector = NULL;
 
 	while(collector) {
 		if (!strcmp(collector->name, name)) goto found;
@@ -982,13 +982,13 @@ struct uwsgi_metric_collector *uwsgi_register_metric_collector(char *name, int64
 		collector = collector->next;
 	}
 
-	collector = uwsgi_calloc(sizeof(struct uwsgi_metric_collector));
+	collector = upsgi_calloc(sizeof(struct upsgi_metric_collector));
 	collector->name = name;
 	if (old_collector) {
 		old_collector->next = collector;
 	}
 	else {
-		uwsgi.metric_collectors = collector;
+		upsgi.metric_collectors = collector;
 	}
 found:
 	collector->func = func;
@@ -996,15 +996,15 @@ found:
 	return collector;
 }
 
-static int64_t uwsgi_metric_collector_ptr(struct uwsgi_metric *um) {
+static int64_t upsgi_metric_collector_ptr(struct upsgi_metric *um) {
 	return *um->ptr;
 }
 
-static int64_t uwsgi_metric_collector_sum(struct uwsgi_metric *um) {
+static int64_t upsgi_metric_collector_sum(struct upsgi_metric *um) {
 	int64_t total = 0;
-        struct uwsgi_metric_child *umc = um->children;
+        struct upsgi_metric_child *umc = um->children;
         while(umc) {
-                struct uwsgi_metric *c = umc->um;
+                struct upsgi_metric *c = umc->um;
                 total += *c->value;
                 umc = umc->next;
         }
@@ -1012,11 +1012,11 @@ static int64_t uwsgi_metric_collector_sum(struct uwsgi_metric *um) {
         return total;
 }
 
-static int64_t uwsgi_metric_collector_accumulator(struct uwsgi_metric *um) {
+static int64_t upsgi_metric_collector_accumulator(struct upsgi_metric *um) {
         int64_t total = *um->value;
-        struct uwsgi_metric_child *umc = um->children;
+        struct upsgi_metric_child *umc = um->children;
         while(umc) {
-                struct uwsgi_metric *c = umc->um;
+                struct upsgi_metric *c = umc->um;
                 total += *c->value;
                 umc = umc->next;
         }
@@ -1024,11 +1024,11 @@ static int64_t uwsgi_metric_collector_accumulator(struct uwsgi_metric *um) {
         return total;
 }
 
-static int64_t uwsgi_metric_collector_multiplier(struct uwsgi_metric *um) {
+static int64_t upsgi_metric_collector_multiplier(struct upsgi_metric *um) {
         int64_t total = 0;
-        struct uwsgi_metric_child *umc = um->children;
+        struct upsgi_metric_child *umc = um->children;
         while(umc) {
-                struct uwsgi_metric *c = umc->um;
+                struct upsgi_metric *c = umc->um;
                 total += *c->value;
                 umc = umc->next;
         }
@@ -1036,11 +1036,11 @@ static int64_t uwsgi_metric_collector_multiplier(struct uwsgi_metric *um) {
         return total * um->arg1n;
 }
 
-static int64_t uwsgi_metric_collector_adder(struct uwsgi_metric *um) {
+static int64_t upsgi_metric_collector_adder(struct upsgi_metric *um) {
         int64_t total = 0;
-        struct uwsgi_metric_child *umc = um->children;
+        struct upsgi_metric_child *umc = um->children;
         while(umc) {
-                struct uwsgi_metric *c = umc->um;
+                struct upsgi_metric *c = umc->um;
                 total += *c->value;
                 umc = umc->next;
         }
@@ -1048,12 +1048,12 @@ static int64_t uwsgi_metric_collector_adder(struct uwsgi_metric *um) {
         return total + um->arg1n;
 }
 
-static int64_t uwsgi_metric_collector_avg(struct uwsgi_metric *um) {
+static int64_t upsgi_metric_collector_avg(struct upsgi_metric *um) {
         int64_t total = 0;
 	int64_t count = 0;
-        struct uwsgi_metric_child *umc = um->children;
+        struct upsgi_metric_child *umc = um->children;
         while(umc) {
-                struct uwsgi_metric *c = umc->um;
+                struct upsgi_metric *c = umc->um;
                 total += *c->value;
 		count++;
                 umc = umc->next;
@@ -1064,9 +1064,9 @@ static int64_t uwsgi_metric_collector_avg(struct uwsgi_metric *um) {
         return total/count;
 }
 
-static int64_t uwsgi_metric_collector_func(struct uwsgi_metric *um) {
+static int64_t upsgi_metric_collector_func(struct upsgi_metric *um) {
 	if (!um->arg1) return 0;
-	int64_t (*func)(struct uwsgi_metric *) = (int64_t (*)(struct uwsgi_metric *)) um->custom;
+	int64_t (*func)(struct upsgi_metric *) = (int64_t (*)(struct upsgi_metric *)) um->custom;
 	if (!func) {
 		func = dlsym(RTLD_DEFAULT, um->arg1);
 		um->custom = func;
@@ -1075,13 +1075,13 @@ static int64_t uwsgi_metric_collector_func(struct uwsgi_metric *um) {
         return func(um);
 }
 
-void uwsgi_metrics_collectors_setup() {
-	uwsgi_register_metric_collector("ptr", uwsgi_metric_collector_ptr);
-	uwsgi_register_metric_collector("file", uwsgi_metric_collector_file);
-	uwsgi_register_metric_collector("sum", uwsgi_metric_collector_sum);
-	uwsgi_register_metric_collector("accumulator", uwsgi_metric_collector_accumulator);
-	uwsgi_register_metric_collector("adder", uwsgi_metric_collector_adder);
-	uwsgi_register_metric_collector("multiplier", uwsgi_metric_collector_multiplier);
-	uwsgi_register_metric_collector("avg", uwsgi_metric_collector_avg);
-	uwsgi_register_metric_collector("func", uwsgi_metric_collector_func);
+void upsgi_metrics_collectors_setup() {
+	upsgi_register_metric_collector("ptr", upsgi_metric_collector_ptr);
+	upsgi_register_metric_collector("file", upsgi_metric_collector_file);
+	upsgi_register_metric_collector("sum", upsgi_metric_collector_sum);
+	upsgi_register_metric_collector("accumulator", upsgi_metric_collector_accumulator);
+	upsgi_register_metric_collector("adder", upsgi_metric_collector_adder);
+	upsgi_register_metric_collector("multiplier", upsgi_metric_collector_multiplier);
+	upsgi_register_metric_collector("avg", upsgi_metric_collector_avg);
+	upsgi_register_metric_collector("func", upsgi_metric_collector_func);
 }

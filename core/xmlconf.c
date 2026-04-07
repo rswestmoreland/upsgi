@@ -1,15 +1,15 @@
-#ifdef UWSGI_XML
+#ifdef UPSGI_XML
 
-#include "uwsgi.h"
+#include "upsgi.h"
 
-extern struct uwsgi_server uwsgi;
+extern struct upsgi_server upsgi;
 
-#ifdef UWSGI_XML_LIBXML2
+#ifdef UPSGI_XML_LIBXML2
 
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-void uwsgi_xml_config(char *filename, struct wsgi_request *wsgi_req, char *magic_table[]) {
+void upsgi_xml_config(char *filename, struct wsgi_request *wsgi_req, char *magic_table[]) {
 	xmlDoc *doc = NULL;
 	xmlNode *element = NULL;
 	xmlNode *node = NULL;
@@ -24,43 +24,43 @@ void uwsgi_xml_config(char *filename, struct wsgi_request *wsgi_req, char *magic
 
 	LIBXML_TEST_VERSION
 
-	if (uwsgi_check_scheme(filename)) {
-		colon = uwsgi_get_last_char(filename, '/');
-		colon = uwsgi_get_last_char(colon, ':');
+	if (upsgi_check_scheme(filename)) {
+		colon = upsgi_get_last_char(filename, '/');
+		colon = upsgi_get_last_char(colon, ':');
 	}
 	else {
-		colon = uwsgi_get_last_char(filename, ':');
+		colon = upsgi_get_last_char(filename, ':');
 	}
 	if (colon) {
 		colon[0] = 0;
 		colon++;
 		if (*colon == 0) {
-			uwsgi_log("invalid xml id\n");
+			upsgi_log("invalid xml id\n");
 			exit(1);
 		}
-		uwsgi_log("[uWSGI] using xml uwsgi id: %s\n", colon);
+		upsgi_log("[upsgi] using xml upsgi id: %s\n", colon);
 	}
 
-	xml_content = uwsgi_open_and_read(filename, &xml_size, 0, magic_table);
+	xml_content = upsgi_open_and_read(filename, &xml_size, 0, magic_table);
 
 	doc = xmlReadMemory(xml_content, xml_size, filename, NULL, 0);
 	if (doc == NULL) {
-		uwsgi_log("[uWSGI] could not parse file %s.\n", filename);
+		upsgi_log("[upsgi] could not parse file %s.\n", filename);
 		exit(1);
 	}
 
-	uwsgi_log_initial("[uWSGI] parsing config file %s\n", filename);
+	upsgi_log_initial("[upsgi] parsing config file %s\n", filename);
 
 	element = xmlDocGetRootElement(doc);
 	if (element == NULL) {
-		uwsgi_log("[uWSGI] invalid xml config file.\n");
+		upsgi_log("[upsgi] invalid xml config file.\n");
 		exit(1);
 	}
-	if (strcmp((char *) element->name, "uwsgi")) {
+	if (strcmp((char *) element->name, "upsgi")) {
 		for (node = element->children; node; node = node->next) {
 			element = NULL;
 			if (node->type == XML_ELEMENT_NODE) {
-				if (!strcmp((char *) node->name, "uwsgi")) {
+				if (!strcmp((char *) node->name, "upsgi")) {
 					xml_id = (char *) xmlGetProp(node, (const xmlChar *) "id");
 
 					if (colon && xml_id) {
@@ -75,7 +75,7 @@ void uwsgi_xml_config(char *filename, struct wsgi_request *wsgi_req, char *magic
 		}
 
 		if (!element) {
-			uwsgi_log("[uWSGI] invalid xml root element, <uwsgi> expected.\n");
+			upsgi_log("[upsgi] invalid xml root element, <upsgi> expected.\n");
 			exit(1);
 		}
 	}
@@ -85,8 +85,8 @@ void uwsgi_xml_config(char *filename, struct wsgi_request *wsgi_req, char *magic
 	for (node = element->children; node; node = node->next) {
 
 		node_mode = xmlGetProp(node, (const xmlChar *) "mode");
-		if (uwsgi.mode && node_mode) {
-			if (strcmp(uwsgi.mode, (char *) node_mode)) {
+		if (upsgi.mode && node_mode) {
+			if (strcmp(upsgi.mode, (char *) node_mode)) {
 				continue;
 			}
 		}
@@ -117,10 +117,10 @@ void uwsgi_xml_config(char *filename, struct wsgi_request *wsgi_req, char *magic
 					char *opt_value = strdup((char *) node->children->content);
 
 					if (mountpoint) {
-						opt_value = uwsgi_concat3(mountpoint, "=", opt_value);
+						opt_value = upsgi_concat3(mountpoint, "=", opt_value);
 					}
 					else if (domain) {
-						opt_value = uwsgi_concat3(domain, "|=", opt_value);
+						opt_value = upsgi_concat3(domain, "|=", opt_value);
 					}
 					add_exported_option("mount", opt_value, 0);
 					add_exported_option("app", strdup(""), 0);
@@ -130,10 +130,10 @@ void uwsgi_xml_config(char *filename, struct wsgi_request *wsgi_req, char *magic
 					char *opt_value = strdup((char *) node->children->next->children->content);
 
 					if (mountpoint) {
-						opt_value = uwsgi_concat3(mountpoint, "=", opt_value);
+						opt_value = upsgi_concat3(mountpoint, "=", opt_value);
 					}
 					else if (domain) {
-						opt_value = uwsgi_concat3(domain, "|=", opt_value);
+						opt_value = upsgi_concat3(domain, "|=", opt_value);
 					}
 
 					add_exported_option("mount", opt_value, 0);
@@ -163,17 +163,17 @@ void uwsgi_xml_config(char *filename, struct wsgi_request *wsgi_req, char *magic
 
 #endif
 
-#ifdef UWSGI_XML_EXPAT
+#ifdef UPSGI_XML_EXPAT
 
 #include <expat.h>
 
-int uwsgi_xml_found_stanza = 0;
-char *uwsgi_xml_found_opt_key = NULL;
+int upsgi_xml_found_stanza = 0;
+char *upsgi_xml_found_opt_key = NULL;
 
 static void startElement(void *xml_id, const XML_Char * name, const XML_Char ** attrs) {
 
 
-	if (!uwsgi_xml_found_stanza) {
+	if (!upsgi_xml_found_stanza) {
 		if (xml_id) {
 			if (!attrs[0])
 				return;
@@ -184,43 +184,43 @@ static void startElement(void *xml_id, const XML_Char * name, const XML_Char ** 
 			if (strcmp((char *) xml_id, attrs[1]))
 				return;
 		}
-		if (!strcmp("uwsgi", name))
-			uwsgi_xml_found_stanza = 1;
+		if (!strcmp("upsgi", name))
+			upsgi_xml_found_stanza = 1;
 	}
 	else {
-		uwsgi_xml_found_opt_key = (char *) name;
+		upsgi_xml_found_opt_key = (char *) name;
 	}
 }
 
 
 static void textElement(void *xml_id, const char *s, int len) {
 
-	if (!uwsgi_xml_found_stanza)
+	if (!upsgi_xml_found_stanza)
 		return;
-	if (uwsgi_xml_found_opt_key) {
-		add_exported_option(strdup(uwsgi_xml_found_opt_key), uwsgi_concat2n((char *) s, len, (char *) "", 0), 0);
-		uwsgi_xml_found_opt_key = NULL;
+	if (upsgi_xml_found_opt_key) {
+		add_exported_option(strdup(upsgi_xml_found_opt_key), upsgi_concat2n((char *) s, len, (char *) "", 0), 0);
+		upsgi_xml_found_opt_key = NULL;
 	}
 }
 
 static void endElement(void *xml_id, const XML_Char * name) {
 
-	if (!uwsgi_xml_found_stanza)
+	if (!upsgi_xml_found_stanza)
 		return;
 
-	if (!strcmp(name, "uwsgi")) {
-		uwsgi_xml_found_stanza = 0;
+	if (!strcmp(name, "upsgi")) {
+		upsgi_xml_found_stanza = 0;
 		return;
 	}
 
-	if (!uwsgi_xml_found_opt_key)
+	if (!upsgi_xml_found_opt_key)
 		return;
 
-	add_exported_option(strdup(uwsgi_xml_found_opt_key), strdup("1"), 0);
-	uwsgi_xml_found_opt_key = NULL;
+	add_exported_option(strdup(upsgi_xml_found_opt_key), strdup("1"), 0);
+	upsgi_xml_found_opt_key = NULL;
 }
 
-void uwsgi_xml_config(char *filename, struct wsgi_request *wsgi_req, char *magic_table[]) {
+void upsgi_xml_config(char *filename, struct wsgi_request *wsgi_req, char *magic_table[]) {
 
 	char *colon;
 
@@ -228,26 +228,26 @@ void uwsgi_xml_config(char *filename, struct wsgi_request *wsgi_req, char *magic
 	size_t xml_size = 0;
 	int done = 0;
 
-	if (uwsgi_check_scheme(filename)) {
-		colon = uwsgi_get_last_char(filename, '/');
-		colon = uwsgi_get_last_char(colon, ':');
+	if (upsgi_check_scheme(filename)) {
+		colon = upsgi_get_last_char(filename, '/');
+		colon = upsgi_get_last_char(colon, ':');
 	}
 	else {
-		colon = uwsgi_get_last_char(filename, ':');
+		colon = upsgi_get_last_char(filename, ':');
 	}
 	if (colon) {
 		colon[0] = 0;
 		colon++;
 		if (*colon == 0) {
-			uwsgi_log("invalid xml id\n");
+			upsgi_log("invalid xml id\n");
 			exit(1);
 		}
-		uwsgi_log("[uWSGI] using xml uwsgi id: %s\n", colon);
+		upsgi_log("[upsgi] using xml upsgi id: %s\n", colon);
 	}
 
-	xml_content = uwsgi_open_and_read(filename, &xml_size, 0, magic_table);
+	xml_content = upsgi_open_and_read(filename, &xml_size, 0, magic_table);
 
-	uwsgi_log("[uWSGI] parsing config file %s\n", filename);
+	upsgi_log("[upsgi] parsing config file %s\n", filename);
 
 	XML_Parser parser = XML_ParserCreate(NULL);
 	XML_SetUserData(parser, NULL);
@@ -261,7 +261,7 @@ void uwsgi_xml_config(char *filename, struct wsgi_request *wsgi_req, char *magic
 	do {
 		if (!XML_Parse(parser, xml_content, xml_size, done)) {
 			if (XML_GetErrorCode(parser) != XML_ERROR_JUNK_AFTER_DOC_ELEMENT) {
-				uwsgi_log("unable to parse xml file: %s (line %d)\n", XML_ErrorString(XML_GetErrorCode(parser)), XML_GetCurrentLineNumber(parser));
+				upsgi_log("unable to parse xml file: %s (line %d)\n", XML_ErrorString(XML_GetErrorCode(parser)), XML_GetCurrentLineNumber(parser));
 				exit(1);
 			}
 			else {

@@ -1,4 +1,4 @@
-#include "uwsgi.h"
+#include "upsgi.h"
 
 /*
 
@@ -18,26 +18,26 @@
 
 
 	# unencrypted mode
-	uwsgi --zeus 192.168.173.17:4040 --emperor /etc/uwsgi/vassals
+	upsgi --zeus 192.168.173.17:4040 --emperor /etc/upsgi/vassals
 	# crypted mode
-	uwsgi --zeus 192.168.173.17:4040,foobar.crt,foobar.key --emperor /etc/uwsgi/vassals
+	upsgi --zeus 192.168.173.17:4040,foobar.crt,foobar.key --emperor /etc/upsgi/vassals
 	# crypted + authentication mode
-	uwsgi --zeus 192.168.173.17:4040,foobar.crt,foobar.key,clients.pem --emperor /etc/uwsgi/vassals
+	upsgi --zeus 192.168.173.17:4040,foobar.crt,foobar.key,clients.pem --emperor /etc/upsgi/vassals
 
 
 	to connect an Emperor to Zeus
 
 	# unencrypted mode
-	uwsgi --emperor zeus:192.168.173.17:4040
+	upsgi --emperor zeus:192.168.173.17:4040
 	# crypted mode
-	uwsgi --emperor zeus-ssl:192.168.173.17:4040
+	upsgi --emperor zeus-ssl:192.168.173.17:4040
 	# crypted + authentication mode
-	uwsgi --emperor zeus-ssl:192.168.173.17:4040,myself.key
+	upsgi --emperor zeus-ssl:192.168.173.17:4040,myself.key
 
 
 	Protocol
 
-	(each message is a basic uwsgi packet: modifier1 pktsize modifier2 payload)
+	(each message is a basic upsgi packet: modifier1 pktsize modifier2 payload)
 	
 	modifier2 identifies the type of the message
 
@@ -47,7 +47,7 @@
 
 	2 -> ACCEPTED_VASSAL {name: 'foobar.ini'} [ emperor -> zeus ]
 
-        3 -> CONFIG_CHUNK {name: 'foobar.ini', body: '[uwsgi].....'} [ zeus -> the chosen emperor ]
+        3 -> CONFIG_CHUNK {name: 'foobar.ini', body: '[upsgi].....'} [ zeus -> the chosen emperor ]
 
 	4 -> CONFIG_END {name: 'foobar.ini'} [ zeus -> the chosen emperor ]
 
@@ -71,7 +71,7 @@
 	check how many nodes the instance needs (default 1)
 */
 
-int uwsgi_zeus_spawn_instance(struct uwsgi_instance *ui) {
+int upsgi_zeus_spawn_instance(struct upsgi_instance *ui) {
 	int i, nodes = 1;
 	char *how_many_nodes = vassal_attr_get(ui, "zeus-nodes");
 	if (how_many_nodes) {	

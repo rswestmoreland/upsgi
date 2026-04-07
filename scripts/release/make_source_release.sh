@@ -36,9 +36,9 @@ tar \
     --exclude='./.local-lib' \
     --exclude='./__pycache__' \
     --exclude='./*/__pycache__' \
-    --exclude='./uwsgibuild.*' \
+    --exclude='./upsgibuild.*' \
     --exclude='./upsgi' \
-    --exclude='./uwsgi' \
+    --exclude='./upsgi' \
     --exclude='./*.o' \
     --exclude='./core/*.o' \
     --exclude='./plugins/*/*.o' \

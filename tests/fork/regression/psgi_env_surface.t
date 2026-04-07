@@ -6,14 +6,7 @@ use FindBin;
 use Test::More;
 
 use lib File::Spec->catdir($FindBin::Bin, '..', 'lib');
-use UpSGITest qw(build_artifact_dir default_binary fixture_app fixture_static_root http_get pick_port render_profile start_server stop_server wait_http);
-
-sub append_config_lines {
-    my ($path, @lines) = @_;
-    open my $fh, '>>', $path or die "unable to append to $path: $!\n";
-    print {$fh} "\n", @lines;
-    close $fh;
-}
+use UpSGITest qw(append_yaml_options build_artifact_dir default_binary fixture_app fixture_static_root http_get pick_port render_profile start_server stop_server wait_http);
 
 sub parse_lines {
     my ($text) = @_;
@@ -29,23 +22,23 @@ sub parse_lines {
 sub start_case {
     my (%args) = @_;
     my $artifact_dir = build_artifact_dir($args{name});
-    my $config_ini = File::Spec->catfile($artifact_dir, 'baseline.ini');
+    my $config_yaml = File::Spec->catfile($artifact_dir, 'baseline.yaml');
     my $server_log = File::Spec->catfile($artifact_dir, 'server.log');
 
     render_profile(
         profile => 'baseline',
-        output_ini => $config_ini,
+        output_yaml => $config_yaml,
         app => fixture_app('app_psgi_env_surface.psgi'),
         static_root => fixture_static_root(),
         log_file => $server_log,
         port => $args{port},
     );
 
-    append_config_lines($config_ini, @{ $args{append} || [] }) if $args{append};
+    append_yaml_options($config_yaml, @{ $args{append} || [] }) if $args{append};
 
     start_server(
         binary => default_binary(),
-        config_ini => $config_ini,
+        config_yaml => $config_yaml,
         artifact_dir => $artifact_dir,
     );
     ok(wait_http(host => '127.0.0.1', port => $args{port}, path => '/env'), "$args{name} server becomes reachable");

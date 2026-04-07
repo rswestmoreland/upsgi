@@ -20,8 +20,8 @@
 ### Changed
 - reduced common request-time overhead in the retained HTTP socket path with a normalized `PATH_INFO` fast path and cached `SERVER_PORT` slice reuse
 - reduced common PSGI bridge overhead by trimming `%env` construction work and constructing `psgi.input` and `psgi.errors` directly from cached stashes when available
-- reduced simple request logging overhead with a second-level timestamp cache in `uwsgi_logit_simple()` for single-threaded workers
-- reduced common static candidate-path construction overhead with a stack-buffer fast path in `uwsgi_file_serve()`
+- reduced simple request logging overhead with a second-level timestamp cache in `upsgi_logit_simple()` for single-threaded workers
+- reduced common static candidate-path construction overhead with a stack-buffer fast path in `upsgi_file_serve()`
 - refreshed the public source release artifacts and release decision/docs for `0.1.1` after the hardening and optimization cycle
 
 ## 0.1.0 - 2026-04-04

@@ -17,14 +17,14 @@ my @perls = qw/
 /;
 
 my %installed;
-@installed{ map /(uwsgi-perl-[-\w.]+)/ ? $1 : (), `perlbrew list` } = ();
+@installed{ map /(upsgi-perl-[-\w.]+)/ ? $1 : (), `perlbrew list` } = ();
 
 my $tap = TAP::Harness->new( { verbosity => 1 } );
 
 for my $perl (@perls) {
     for my $thread (0, 1) {
-        my $name = $ENV{UWSGI_PERL} =
-            'uwsgi-perl-' . $perl . ( '-thread' x $thread );
+        my $name = $ENV{UPSGI_PERL} =
+            'upsgi-perl-' . $perl . ( '-thread' x $thread );
 
         warn "\n# $name\n\n";
 
@@ -34,10 +34,10 @@ for my $perl (@perls) {
             ('--thread') x $thread and die $!
             unless exists $installed{$name};
 
-        # Clean previously compiled uWSGI.
+        # Clean previously compiled upsgi.
         system 'python3', 'upsgiconfig.py', '-c' and die $!;
 
-        # Compile uWSGI, only show STDERR.
+        # Compile upsgi, only show STDERR.
         `perlbrew exec --with $name python3 upsgiconfig.py -b psgi`;
         exit if $?;
 
