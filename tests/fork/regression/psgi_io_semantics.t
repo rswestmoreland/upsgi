@@ -52,6 +52,10 @@ is($env_false->{status}, 200, 'baseline env request returns 200');
 like($env_false->{content}, qr/^input_buffered=0$/m, 'baseline env exposes false psgix.input.buffered');
 like($env_false->{content}, qr/^has_logger=1$/m, 'baseline env exposes psgix.logger');
 like($env_false->{content}, qr/^has_errors=1$/m, 'baseline env exposes psgi.errors');
+like($env_false->{content}, qr/^has_io=0$/m, 'baseline env omits psgix.io by default');
+like($env_false->{content}, qr/^io_class=NA$/m, 'baseline env omits psgix.io class by default');
+like($env_false->{content}, qr/^io_fileno=NA$/m, 'baseline env omits psgix.io fileno by default');
+like($env_false->{content}, qr/^io_autoflush=NA$/m, 'baseline env omits psgix.io autoflush state by default');
 stop_server($artifact_dir_false);
 $artifact_dir_false = undef;
 
@@ -72,6 +76,7 @@ append_config_lines(
     $config_true,
     "post-buffering = 4096\n",
     "post-buffering-bufsize = 1024\n",
+    "psgi-enable-psgix-io = true\n",
 );
 
 start_server(
@@ -89,6 +94,10 @@ ok(wait_http(host => '127.0.0.1', port => $port_true, path => '/env'), 'buffered
 my $env_true = http_get(host => '127.0.0.1', port => $port_true, path => '/env');
 is($env_true->{status}, 200, 'buffered env request returns 200');
 like($env_true->{content}, qr/^input_buffered=1$/m, 'buffered env exposes true psgix.input.buffered');
+like($env_true->{content}, qr/^has_io=1$/m, 'buffered env exposes psgix.io when enabled');
+like($env_true->{content}, qr/^io_class=IO::Socket$/m, 'buffered env exposes psgix.io as an IO::Socket');
+like($env_true->{content}, qr/^io_fileno=\d+$/m, 'buffered env exposes psgix.io with a numeric fileno');
+like($env_true->{content}, qr/^io_autoflush=1$/m, 'buffered env exposes psgix.io with autoflush enabled');
 
 my $err = http_get(host => '127.0.0.1', port => $port_true, path => '/error-print');
 is($err->{status}, 200, 'psgi.errors print request returns 200');

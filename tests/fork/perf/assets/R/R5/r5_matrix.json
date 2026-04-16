@@ -1,0 +1,8 @@
+{
+  "concurrency": "high sustained",
+  "duration_minutes": [
+    10,
+    30
+  ],
+  "payload_profile": "moderate valid payloads"
+}

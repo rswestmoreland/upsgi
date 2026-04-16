@@ -93,6 +93,13 @@ my $dup_xtest_resp = send_raw_request(
 );
 ok($dup_xtest_resp eq '' || $dup_xtest_resp !~ m{\AHTTP/1\.[01] 200\b}, 'duplicate non-list request header is not accepted as 200');
 
+my $folded_header_resp = send_raw_request(
+    host => '127.0.0.1',
+    port => $port,
+    payload => "GET / HTTP/1.1\r\nHost: localhost\r\nX-Test: one\r\n two\r\nConnection: close\r\n\r\n",
+);
+ok($folded_header_resp eq '' || $folded_header_resp !~ m{\AHTTP/1\.[01] 200\b}, 'folded request headers are not accepted as 200');
+
 my $te_cl_resp = send_raw_request(
     host => '127.0.0.1',
     port => $port,
@@ -118,6 +125,7 @@ like($log_text, qr/duplicate CONTENT_LENGTH header/, 'log records duplicate Cont
 like($log_text, qr/duplicate TRANSFER_ENCODING header/, 'log records duplicate Transfer-Encoding rejection');
 like($log_text, qr/duplicate CONTENT_TYPE header/, 'log records duplicate Content-Type rejection');
 like($log_text, qr/duplicate X_TEST header/, 'log records duplicate non-list header rejection');
+like($log_text, qr/folded headers are unsupported/, 'log records folded header rejection');
 like($log_text, qr/chunked Transfer-Encoding with Content-Length/, 'log records chunked plus Content-Length rejection');
 
 done_testing();

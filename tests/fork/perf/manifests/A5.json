@@ -1,0 +1,71 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/A5/app_upload_mix.psgi",
+      "tests/fork/perf/assets/A5/upload_matrix.json",
+      "tests/fork/perf/assets/A5/upload_mix_client.py"
+    ]
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "body-buffer discipline"
+      ],
+      "source": "nginx"
+    },
+    {
+      "ideas": [
+        "body-limit thinking"
+      ],
+      "source": "H2O"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "A5",
+  "lane": "A",
+  "notes": [
+    "Repo-local upload mix asset pack is packaged."
+  ],
+  "parameters": {
+    "measurement_focus": [
+      "tail latency inflation for non-upload requests",
+      "memory spikes",
+      "spill-to-disk behavior",
+      "read stalls"
+    ]
+  },
+  "phase": "P4",
+  "purpose": "Measure whether uploads poison the rest of the app on a 2-core box.",
+  "questions": [
+    "Is request-body handling the next real bottleneck?",
+    "Do body limits or buffering policy need priority?"
+  ],
+  "schema_version": "1",
+  "status": "asset_packaged",
+  "title": "Upload-mixed web workload",
+  "traffic_shape": {
+    "mix": [
+      "80% normal traffic",
+      "20% multipart/file uploads"
+    ],
+    "upload_sizes_bytes": [
+      65536,
+      524288,
+      4194304,
+      16777216
+    ]
+  }
+}

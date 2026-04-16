@@ -1,0 +1,10 @@
+{
+  "sequence": [
+    {"method": "GET", "path": "/small", "expect_bytes_min": 3},
+    {"method": "GET", "path": "/download/256k", "expect_bytes": 262144},
+    {"method": "GET", "path": "/api/ping", "expect_bytes_min": 10},
+    {"method": "GET", "path": "/download/1m", "expect_bytes": 1048576},
+    {"method": "GET", "path": "/small", "expect_bytes_min": 3},
+    {"method": "GET", "path": "/download/8m", "expect_bytes": 8388608}
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "client_type": "many valid slow senders",
+  "upload_rates_bytes_per_sec": [
+    8192,
+    65536,
+    262144
+  ]
+}

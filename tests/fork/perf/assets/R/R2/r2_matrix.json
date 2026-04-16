@@ -1,0 +1,13 @@
+{
+  "burst_pattern": "30 second bursts with idle gaps",
+  "compressed_sizes_bytes": [
+    32768,
+    131072,
+    524288
+  ],
+  "content_type": "application/octet-stream",
+  "inflate_ratios": [
+    4,
+    10
+  ]
+}

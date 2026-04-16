@@ -1,0 +1,87 @@
+{
+  "collectors": {
+    "P1_upsgi_stats_sampler": {
+      "purpose": "Sample upsgi stats socket or HTTP stats endpoint on a fixed interval.",
+      "script": "tests/fork/perf/collectors/p1_stats_sampler.sh"
+    },
+    "P2_strace_fc": {
+      "purpose": "Capture syscall frequency/time for a target process.",
+      "script": "tests/fork/perf/collectors/p2_strace_fc.sh"
+    },
+    "P3_perf_record": {
+      "purpose": "Capture CPU stack profile for a target process.",
+      "script": "tests/fork/perf/collectors/p3_perf_record.sh"
+    },
+    "P4_smaps_rollup_sampler": {
+      "purpose": "Sample /proc/<pid>/smaps_rollup on an interval.",
+      "script": "tests/fork/perf/collectors/p4_smaps_rollup.sh"
+    },
+    "P5_disk_profile": {
+      "purpose": "Capture disk-level pressure during append-heavy scenarios.",
+      "script": "tests/fork/perf/collectors/p5_disk_profile.sh"
+    }
+  },
+  "execution_order": [
+    "A1",
+    "R1",
+    "A2",
+    "R2",
+    "A3",
+    "R3",
+    "A5",
+    "R4",
+    "R5",
+    "X1",
+    "X2",
+    "X3",
+    "A4",
+    "X4",
+    "A6",
+    "R6"
+  ],
+  "phases": {
+    "P0": [
+      "P0-H1",
+      "P0-H2",
+      "P0-H3",
+      "P0-H4",
+      "P0-H7",
+      "P0-H8",
+      "P0-H9",
+      "P0-H10"
+    ],
+    "P1": [
+      "A1",
+      "R1"
+    ],
+    "P2": [
+      "A2",
+      "R2",
+      "R6"
+    ],
+    "P3": [
+      "A3",
+      "R3"
+    ],
+    "P4": [
+      "A5",
+      "R4",
+      "A6"
+    ],
+    "P5": [
+      "R5"
+    ],
+    "P6": [
+      "X1"
+    ],
+    "P7": [
+      "X2",
+      "X3"
+    ],
+    "P8": [
+      "A4",
+      "X4"
+    ]
+  },
+  "schema_version": "1"
+}

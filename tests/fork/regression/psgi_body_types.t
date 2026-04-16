@@ -38,19 +38,22 @@ END {
 ok(wait_http(host => '127.0.0.1', port => $port, path => '/Array'), 'body-types server becomes reachable');
 
 for my $case (
-    [ 'Array',      'ARRAY'      ],
-    [ 'DATA',       'GLOB'       ],
+    [ 'Array',      'ARRAY',      $code ],
+    [ 'EmptyArray', 'ARRAY',      ''    ],
+    [ 'DATA',       'GLOB',       $code ],
     [ 'FILEHANDLE', 'GLOB'       ],
     [ 'FileHandle', 'FileHandle' ],
     [ 'IO::File',   'IO::File'   ],
     [ 'IO::String', 'IO::String' ],
     [ 'ObjectPath', 'ObjectPath' ],
 ) {
-    my ($path, $ref) = @$case;
+    my ($path, $ref, $expected_content) = @$case;
+    $expected_content = $code unless defined $expected_content;
     my $resp = http_get(host => '127.0.0.1', port => $port, path => '/' . $path);
     is($resp->{status}, 200, "$path returns 200");
     is($resp->{headers}{'x-ref'}, $ref, "$path reports the expected body ref type");
-    is($resp->{content}, $code, "$path produces the expected body content");
+    is($resp->{headers}{'content-type'}, 'text/plain', "$path preserves the content type header");
+    is($resp->{content}, $expected_content, "$path produces the expected body content");
 }
 
 for my $path (qw(

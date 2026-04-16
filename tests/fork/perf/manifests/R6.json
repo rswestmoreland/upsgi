@@ -1,0 +1,79 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/R/common/receiver_app.psgi",
+      "tests/fork/perf/assets/R/common/generate_payloads.py",
+      "tests/fork/perf/assets/R/common/receiver_client.py",
+      "tests/fork/perf/assets/R/R6/r6_matrix.json",
+      "tests/fork/perf/assets/R/R6/run_r6_smoke.sh",
+      "tests/fork/perf/assets/R/common/raw_abuse_client.py",
+      "tests/fork/perf/assets/R/common/corpus/",
+      "tests/fork/perf/assets/R/common/hostile_case_runner.py",
+      "tests/fork/perf/assets/R/R6/run_r6_measured.sh"
+    ]
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "anti-flood thresholds"
+      ],
+      "source": "Wazuh"
+    },
+    {
+      "ideas": [
+        "hardening-style close behavior"
+      ],
+      "source": "nginx"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "R6",
+  "lane": "R",
+  "notes": [
+    "Blocked on receiver PSGI app bundle and hostile-ingest corpus.",
+    "See tests/fork/perf/assets/R/README.md.",
+    "Repo-local receiver asset pack is packaged."
+  ],
+  "parameters": {
+    "measurement_focus": [
+      "reject cost",
+      "worker survival",
+      "RSS drift",
+      "starvation impact on good senders"
+    ]
+  },
+  "phase": "P2",
+  "purpose": "Measure rejection cost and resilience under realistic abuse.",
+  "questions": [
+    "How expensive is rejection?",
+    "Does bad traffic meaningfully starve good traffic?"
+  ],
+  "schema_version": "1",
+  "status": "asset_packaged",
+  "title": "Hostile ingest traffic",
+  "traffic_shape": {
+    "cases": [
+      "wrong method",
+      "wrong path",
+      "invalid JSON",
+      "broken inflate stream",
+      "mixed chunked bodies",
+      "too-large bodies",
+      "header abuse",
+      "random disconnects"
+    ]
+  }
+}

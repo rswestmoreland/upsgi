@@ -115,125 +115,6 @@ XS(XS_reload) {
     XSRETURN_YES;
 }
 
-XS(XS_cache_set) {
-	dXSARGS;
-
-	char *key, *val;
-	STRLEN keylen;
-	STRLEN vallen;
-	uint64_t expires = 0;
-	char *cache = NULL;
-
-	psgi_check_args(2);
-
-	key = SvPV(ST(0), keylen);
-	val = SvPV(ST(1), vallen);
-
-	if (items > 2) {
-		expires = SvIV(ST(2));
-		if (items > 3) {
-			cache = SvPV_nolen(ST(3));
-		}
-	}
-
-	if (!upsgi_cache_magic_set(key, (uint16_t) keylen, val, (uint64_t) vallen, expires, 0, cache)) {
-		XSRETURN_YES;
-	}
-	XSRETURN_UNDEF;
-}
-
-XS(XS_cache_get) {
-	dXSARGS;
-
-	char *key;
-	char *cache = NULL;
-	STRLEN keylen;
-	uint64_t vallen = 0;
-
-	psgi_check_args(1);
-
-	key = SvPV(ST(0), keylen);
-
-	if (items > 1) {
-		cache = SvPV_nolen(ST(1));
-	}
-
-	char *value = upsgi_cache_magic_get(key, (uint16_t) keylen, &vallen, NULL, cache);
-	if (value) {
-		ST(0) = newSVpv(value, vallen);
-		free(value);
-		sv_2mortal(ST(0));
-		XSRETURN(1);
-	}
-
-	XSRETURN_UNDEF;
-}
-
-XS(XS_cache_exists) {
-        dXSARGS;
-
-        char *key;
-        char *cache = NULL;
-        STRLEN keylen;
-
-        psgi_check_args(1);
-
-        key = SvPV(ST(0), keylen);
-
-        if (items > 1) {
-                cache = SvPV_nolen(ST(1));
-        }
-
-        if (upsgi_cache_magic_exists(key, (uint16_t) keylen, cache)) {
-                XSRETURN_YES;
-        }
-
-        XSRETURN_UNDEF;
-
-}
-
-XS(XS_cache_del) {
-        dXSARGS;
-
-        char *key;
-        char *cache = NULL;
-        STRLEN keylen;
-
-        psgi_check_args(1);
-
-        key = SvPV(ST(0), keylen);
-
-        if (items > 1) {
-                cache = SvPV_nolen(ST(1));
-        }
-
-        if (!upsgi_cache_magic_del(key, (uint16_t) keylen, cache)) {
-                XSRETURN_YES;
-        }
-
-        XSRETURN_UNDEF;
-
-}
-
-XS(XS_cache_clear) {
-        dXSARGS;
-
-        char *cache = NULL;
-        psgi_check_args(1);
-
-        cache = SvPV_nolen(ST(0));
-
-        if (!upsgi_cache_magic_clear(cache)) {
-                XSRETURN_YES;
-        }
-
-        XSRETURN_UNDEF;
-
-}
-
-
-
-
 XS(XS_register_signal) {
 	dXSARGS;
 
@@ -253,13 +134,6 @@ XS(XS_register_signal) {
 
 	XSRETURN_YES;
 	
-}
-
-XS(XS_spooler) {
-	dXSARGS;
-	psgi_check_args(1);
-	uperl.spooler = (CV *) newRV_inc(ST(0));
-	XSRETURN_YES;
 }
 
 XS(XS_register_rpc) {
@@ -461,19 +335,6 @@ XS(XS_signal_wait) {
 	XSRETURN_YES;
 }
 
-#ifdef UPSGI_SSL
-XS(XS_i_am_the_lord) {
-
-	dXSARGS;
-
-        psgi_check_args(1);
-
-	if (upsgi_legion_i_am_the_lord(SvPV_nolen(ST(0)))) {
-        	XSRETURN_YES;
-	}
-        XSRETURN_NO;
-}
-#endif
 
 XS(XS_connection_fd) {
 	dXSARGS;
@@ -540,37 +401,15 @@ XS(XS_websocket_send) {
 	XSRETURN_UNDEF;
 }
 
-XS(XS_websocket_send_from_sharedarea) {
-        dXSARGS;
-
-        psgi_check_args(2);
-	int id = SvIV(ST(0));
-        uint64_t pos = SvIV(ST(1));
-	uint64_t len = 0;
-
-	if (items > 2) {
-		len = SvIV(ST(2));
-	}
-	
-        struct wsgi_request *wsgi_req = current_wsgi_req();
-
-        if (upsgi_websocket_send_from_sharedarea(wsgi_req, id, pos, len)) {
-                croak("unable to send websocket message from sharedarea");
-        }
-
-        XSRETURN_UNDEF;
-}
-
-
 XS(XS_websocket_send_binary) {
-        dXSARGS;
+	dXSARGS;
 
         char *message = NULL;
         STRLEN message_len = 0;
 
-        psgi_check_args(1);
+	psgi_check_args(1);
 
-        message = SvPV(ST(0), message_len);
+	message = SvPV(ST(0), message_len);
 
         struct wsgi_request *wsgi_req = current_wsgi_req();
 
@@ -578,31 +417,8 @@ XS(XS_websocket_send_binary) {
                 croak("unable to send websocket binary message");
         }
 
-        XSRETURN_UNDEF;
+	XSRETURN_UNDEF;
 }
-
-XS(XS_websocket_send_binary_from_sharedarea) {
-        dXSARGS;
-
-        psgi_check_args(2);
-        int id = SvIV(ST(0));
-        uint64_t pos = SvIV(ST(1));
-        uint64_t len = 0;
-
-        if (items > 2) {
-                len = SvIV(ST(2));
-        }
-
-        struct wsgi_request *wsgi_req = current_wsgi_req();
-
-        if (upsgi_websocket_send_binary_from_sharedarea(wsgi_req, id, pos, len)) {
-                croak("unable to send websocket binary message from sharedarea");
-        }
-
-        XSRETURN_UNDEF;
-}
-
-
 
 XS(XS_websocket_recv) {
 	dXSARGS;
@@ -779,109 +595,6 @@ XS(XS_metric_get) {
         XSRETURN(1);
 }
 
-XS(XS_sharedarea_wait) {
-        dXSARGS;
-        int id;
-	int freq = 0;
-	int timeout = 0;
-
-	psgi_check_args(1);
-	
-	id = SvIV(ST(0));
-	if (items > 1) {
-		freq = SvIV(ST(1));
-		if (items > 2) {
-			timeout = SvIV(ST(2));
-		}
-	}
-
-	if (upsgi_sharedarea_wait(id, freq, timeout)) {
-                croak("unable to wait for sharedarea %d", id);
-                XSRETURN_UNDEF;
-        }
-	XSRETURN_YES;
-}
-
-XS(XS_sharedarea_read) {
-	dXSARGS;
-	int id;
-	uint64_t pos;
-	uint64_t len = 0;
-	psgi_check_args(2);	
-
-	id = SvIV(ST(0));
-	pos = SvIV(ST(1));
-
-	if (items > 2) {
-		len = SvIV(ST(2));	
-	}
-	else {
-		struct upsgi_sharedarea *sa = upsgi_sharedarea_get_by_id(id, pos);
-		if (!sa) {
-			croak("unable to read from sharedarea %d", id);
-                	XSRETURN_UNDEF;
-		}
-		len = (sa->max_pos+1)-pos;
-	}
-
-	char *buf = upsgi_malloc(len);
-	int64_t rlen = upsgi_sharedarea_read(id, pos, buf, len);
-	if (rlen < 0) {
-		free(buf);
-		croak("unable to read from sharedarea %d", id);
-                XSRETURN_UNDEF;
-	}
-
-	ST(0) = sv_newmortal();
-     	sv_usepvn(ST(0), buf, rlen);
-        XSRETURN(1);
-}
-
-XS(XS_sharedarea_readfast) {
-        dXSARGS;
-        int id;
-        uint64_t pos;
-        uint64_t len = 0;
-        psgi_check_args(3);
-
-        id = SvIV(ST(0));
-        pos = SvIV(ST(1));
-	char *buf = SvPV_nolen(ST(2));
-
-        if (items > 3) {
-                len = SvIV(ST(3));
-        }
-
-        if (upsgi_sharedarea_read(id, pos, buf, len)) {
-                croak("unable to (fast) read from sharedarea %d", id);
-                XSRETURN_UNDEF;
-        }
-
-	XSRETURN_YES;
-}
-
-
-XS(XS_sharedarea_write) {
-        dXSARGS;
-        int id;
-        uint64_t pos;
-        STRLEN vallen;
-
-        psgi_check_args(3);
-
-        id = SvIV(ST(0));
-        pos = SvIV(ST(1));
-        char *value = SvPV(ST(2), vallen);
-
-        if (upsgi_sharedarea_write(id, pos, value, vallen)) {
-                croak("unable to write to sharedarea %d", id);
-                XSRETURN_UNDEF;
-        }
-
-	XSRETURN_YES;
-}
-
-
 XS(XS_chunked_read) {
 	dXSARGS;
         int timeout = 0;
@@ -920,64 +633,6 @@ XS(XS_chunked_read_nb) {
         ST(0) = newSVpvn(chunk, len);
         sv_2mortal(ST(0));
         XSRETURN(1);
-}
-
-XS(XS_spool) {
-
-	dXSARGS;
-	psgi_check_args(1);
-
-	SV *arg = ST(0);
-	HV *env = NULL;
-
-	char *body = NULL;
-	STRLEN body_len = 0;
-
-	if (SvROK(arg)) {
-		env = (HV *) SvRV(arg);
-	}
-	else {
-		croak("spool argument must be a hashref");
-		XSRETURN_UNDEF;
-	}
-
-	if (SvTYPE(env) != SVt_PVHV) {
-		croak("spool argument must be a hashref");
-                XSRETURN_UNDEF;
-	}
-
-	if (hv_exists(env, "body", 4)) {
-		SV **body_sv = hv_fetch(env, "body", 4, 0);
-		body = SvPV(*body_sv, body_len);
-		(void)hv_delete(env, "body", 4, 0);
-	}	
-
-	struct upsgi_buffer *ub = upsgi_buffer_new(upsgi.page_size);
-	
-	HE *he;
-	hv_iterinit(env);
-        while((he = hv_iternext(env))) {
-		I32 klen;
-		STRLEN vlen;
-		char *key = hv_iterkey(he, &klen);
-                char *value = SvPV(hv_iterval(env, he), vlen);
-		if (upsgi_buffer_append_keyval(ub, key, klen, value, vlen)) {
-			croak("unable to serialize hash to spool file");
-			upsgi_buffer_destroy(ub);
-			XSRETURN_UNDEF;
-		}
-        }
-
-	char *filename = upsgi_spool_request(NULL, ub->buf, ub->pos, body, body_len);
-	upsgi_buffer_destroy(ub);
-	if (filename) {
-		ST(0) = newSVpv(filename, strlen(filename));
-		free(filename);
-		XSRETURN(1);
-	}
-
-	croak("unable to spool request");
-	XSRETURN_UNDEF;
 }
 
 XS(XS_add_var) {
@@ -1042,11 +697,6 @@ XS(XS_get_logvar) {
 void init_perl_embedded_module() {
 	psgi_xs(reload);
 
-	psgi_xs(cache_get);
-	psgi_xs(cache_exists);
-	psgi_xs(cache_set);
-	psgi_xs(cache_del);
-	psgi_xs(cache_clear);
 
 	psgi_xs(call);
 	psgi_xs(rpc);
@@ -1062,7 +712,6 @@ void init_perl_embedded_module() {
 	psgi_xs(register_rpc);
 	psgi_xs(signal_wait);
 #ifdef UPSGI_SSL
-	psgi_xs(i_am_the_lord);
 #endif
 
 	psgi_xs(connection_fd);
@@ -1072,9 +721,7 @@ void init_perl_embedded_module() {
 	psgi_xs(websocket_recv);
 	psgi_xs(websocket_recv_nb);
 	psgi_xs(websocket_send);
-	psgi_xs(websocket_send_from_sharedarea);
 	psgi_xs(websocket_send_binary);
-	psgi_xs(websocket_send_binary_from_sharedarea);
 	psgi_xs(postfork);
 	psgi_xs(atexit);
 
@@ -1093,13 +740,7 @@ void init_perl_embedded_module() {
 	psgi_xs(chunked_read);
 	psgi_xs(chunked_read_nb);
 
-	psgi_xs(sharedarea_read);
-	psgi_xs(sharedarea_readfast);
-	psgi_xs(sharedarea_write);
-	psgi_xs(sharedarea_wait);
 
-	psgi_xs(spooler);
-	psgi_xs(spool);
 
 	psgi_xs(add_var);
 	psgi_xs(worker_id);

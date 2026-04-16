@@ -1,0 +1,12 @@
+{
+  "payload_sizes_bytes": [
+    262144,
+    1048576,
+    4194304,
+    16777216
+  ],
+  "variants": [
+    "compressed",
+    "uncompressed"
+  ]
+}

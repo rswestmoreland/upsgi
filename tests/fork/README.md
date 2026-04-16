@@ -3,7 +3,7 @@
 This tree contains fork-specific regression, fault, and soak assets for upsgi.
 
 ## Current scope
-The current checkpoint implements the maintained fork harness for regression, fault, soak, and Y1 measurement baseline capture:
+The current source tree implements the maintained fork harness for regression, fault, soak, and Y1 measurement baseline capture:
 - fixture apps
 - fixture static assets
 - profile rendering helper
@@ -24,6 +24,7 @@ The current checkpoint implements the maintained fork harness for regression, fa
 - `fault/` startup and retained hardening tests
 - `soak/` advisory burst and reload smoke checks
 - `bench/` Y1 measurement baseline helpers
+- `perf/` performance scenario manifests, collectors, and seed validation assets
 
 ## Current regression tests
 - `startup.t`
@@ -33,12 +34,18 @@ The current checkpoint implements the maintained fork harness for regression, fa
 - `logging.t`
 - `upload.t`
 - `reload.t`
+- `observability_profile_script.t`
+- `lossless_logger_queue_behavior.t`
+- `lossless_logger_queue_split_runtime.t`
+- `lossless_logger_queue_disable_runtime.t`
+- `log_sink_recovery_runtime.t`
 
 ## Current fault tests
 - `bad_app_path.t`
 - `unknown_option.t`
 - `request_hardening.t`
 - `psgi_hardening.t`
+- `chunked_request_hardening.t`
 
 ## Artifact contract
 Each test creates its own artifact directory and preserves it on failure. The expected artifact set is:
@@ -68,3 +75,12 @@ The regression harness reuses the fork-owned profile templates in `tests/fork/co
 - `bench/capture_baseline.sh` captures the maintained Y1 baseline matrix
 - `bench/http_bench.py` performs sequential request timing and writes per-case JSON
 - `bench/render_summary.py` renders a Markdown and JSON summary from captured case results
+
+- regression/lossless_logger_queue_surface.t - source-level guard for the bounded logger queue config and stats surface
+
+- regression/lossless_logger_queue_split_runtime.t - live runtime guard for the split generic/request logger queues
+
+- regression/lossless_logger_queue_disable_runtime.t - live runtime guard for the default-on queue path and disable-log-queue switch
+- regression/log_sink_recovery_runtime.t - live runtime guard for socket sink reset and retry recovery
+- regression/log_queue_tuning_docs.t - source-level guard for tuned logging defaults and shipped queue-cap profiles
+

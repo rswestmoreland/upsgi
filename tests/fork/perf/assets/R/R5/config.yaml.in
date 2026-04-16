@@ -1,0 +1,10 @@
+upsgi:
+  master: true
+  workers: 1
+  need-app: true
+  strict: true
+  vacuum: true
+  die-on-term: true
+  http-socket: :%(port)s
+  psgi: %(app)s
+  logto: %(log_file)s

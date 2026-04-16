@@ -181,29 +181,103 @@ static SV *upsgi_perl_new_blessed_object(HV *stash) {
 	return sv_bless(newRV_noinc(newSV(0)), stash);
 }
 
+static int upsgi_perl_obj_autoflush(SV *obj) {
+	dSP;
+
+	ENTER;
+	SAVETMPS;
+	PUSHMARK(SP);
+	XPUSHs(obj);
+	XPUSHs(sv_2mortal(newSViv(1)));
+	PUTBACK;
+
+	call_method("autoflush", G_SCALAR | G_EVAL);
+
+	SPAGAIN;
+	if (SvTRUE(ERRSV)) {
+		upsgi_log("%s", SvPV_nolen(ERRSV));
+		sv_setsv(ERRSV, &PL_sv_undef);
+		PUTBACK;
+		FREETMPS;
+		LEAVE;
+		return -1;
+	}
+
+	if (SP > PL_stack_base) {
+		(void) POPs;
+	}
+
+	PUTBACK;
+	FREETMPS;
+	LEAVE;
+	return 0;
+}
+
 SV *upsgi_perl_obj_new_from_fd(char *class, size_t class_len, int fd) {
-	SV *newobj;
+	SV *newobj = NULL;
+	GV *gv = NULL;
+	HV *stash = NULL;
+	int io_fd = -1;
+	char fdopen_spec[64];
+	int fdopen_len;
 
-        dSP;
+#ifdef F_DUPFD_CLOEXEC
+	io_fd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+#endif
+	if (io_fd < 0) {
+		io_fd = dup(fd);
+		if (io_fd < 0) {
+			upsgi_error("dup()");
+			return NULL;
+		}
 
-        ENTER;
-        SAVETMPS;
-        PUSHMARK(SP);
-	XPUSHs(sv_2mortal(newSVpv( class, class_len)));
-        XPUSHs(sv_2mortal(newSViv( fd )));
-        XPUSHs(sv_2mortal(newSVpv( "w", 1 )));
-        PUTBACK;
+		if (fcntl(io_fd, F_SETFD, FD_CLOEXEC) < 0) {
+			upsgi_error("fcntl(F_SETFD, FD_CLOEXEC)");
+			close(io_fd);
+			return NULL;
+		}
+	}
 
-        call_method( "new_from_fd", G_SCALAR);
+	stash = gv_stashpvn(class, class_len, GV_ADD);
+	if (!stash) {
+		upsgi_log("unable to resolve Perl stash for %.*s\n", (int) class_len, class);
+		close(io_fd);
+		return NULL;
+	}
 
-        SPAGAIN;
+	gv = newGVgen(class);
+	if (!gv) {
+		upsgi_log("unable to allocate Perl glob for %.*s\n", (int) class_len, class);
+		close(io_fd);
+		return NULL;
+	}
 
-        newobj = SvREFCNT_inc(POPs);
-        PUTBACK;
-        FREETMPS;
-        LEAVE;
+	fdopen_len = snprintf(fdopen_spec, sizeof(fdopen_spec), ">&=%d", io_fd);
+	if (fdopen_len <= 0 || (size_t) fdopen_len >= sizeof(fdopen_spec)) {
+		upsgi_log("unable to format Perl fdopen spec for %d\n", io_fd);
+		SvREFCNT_dec((SV *) gv);
+		close(io_fd);
+		return NULL;
+	}
 
-        return newobj;
+	if (!do_open(gv, fdopen_spec, fdopen_len, 0, 0, 0, NULL)) {
+		SvREFCNT_dec((SV *) gv);
+		close(io_fd);
+		return NULL;
+	}
+
+	newobj = sv_bless(newRV_noinc((SV *) gv), stash);
+	if (!newobj) {
+		SvREFCNT_dec((SV *) gv);
+		return NULL;
+	}
+
+	if (upsgi_perl_obj_autoflush(newobj)) {
+		SvREFCNT_dec(newobj);
+		return NULL;
+	}
+
+	return newobj;
 }
 
 SV *upsgi_perl_call_stream(SV *func) {
@@ -303,6 +377,51 @@ SV *upsgi_perl_obj_call(SV *obj, char *method) {
 }
 
 
+HV *upsgi_psgi_build_base_env(void) {
+	HV *env = newHV();
+	SV *bool_yes = &PL_sv_yes;
+	SV *bool_no = &PL_sv_no;
+
+	if (!hv_store(env, "psgi.multiprocess", 17, upsgi.numproc > 1 ? bool_yes : bool_no, 0)) goto clear;
+	if (!hv_store(env, "psgi.multithread", 16, upsgi.threads > 1 ? bool_yes : bool_no, 0)) goto clear;
+	if (!hv_store(env, "psgi.nonblocking", 16, upsgi.async > 0 ? bool_yes : bool_no, 0)) goto clear;
+	if (!hv_store(env, "psgix.harakiri", 14, upsgi.master_process ? bool_yes : bool_no, 0)) goto clear;
+	if (!hv_store(env, "psgi.run_once", 13, bool_no, 0)) goto clear;
+	if (!hv_store(env, "psgi.streaming", 14, bool_yes, 0)) goto clear;
+	if (!hv_store(env, "psgix.cleanup", 13, bool_yes, 0)) goto clear;
+	if (!hv_store(env, "psgix.input.buffered", 20, upsgi.post_buffering > 0 ? bool_yes : bool_no, 0)) goto clear;
+
+	return env;
+clear:
+	SvREFCNT_dec((SV *) env);
+	return NULL;
+}
+
+HV **upsgi_psgi_build_slot_env_bases(SV **logger_refs, SV **informational_refs, int include_informational) {
+	int i = 0;
+	int slots = upsgi.threads > 1 ? upsgi.threads : 1;
+	HV **bases = upsgi_calloc(sizeof(HV *) * slots);
+	for (i = 0; i < slots; i++) {
+		HV *env = upsgi_psgi_build_base_env();
+		if (!env) continue;
+		if (logger_refs && logger_refs[i]) {
+			if (!hv_store(env, "psgix.logger", 12, SvREFCNT_inc(logger_refs[i]), 0)) {
+				SvREFCNT_dec((SV *) env);
+				continue;
+			}
+		}
+		if (include_informational && informational_refs && informational_refs[i]) {
+			if (!hv_store(env, "psgix.informational", 19, SvREFCNT_inc(informational_refs[i]), 0)) {
+				SvREFCNT_dec((SV *) env);
+				continue;
+			}
+		}
+		bases[i] = env;
+	}
+	return bases;
+}
+
+
 AV *psgi_call(struct wsgi_request *wsgi_req, SV *psgi_func, SV *env) {
 
 	AV *ret = NULL;
@@ -342,15 +461,23 @@ SV *build_psgi_env(struct wsgi_request *wsgi_req) {
 	int i;
 	int slot = 0;
 	struct upsgi_app *wi = &upsgi_apps[wsgi_req->app_id];
-	HV *env = newHV();
+	HV **plain_bases = NULL;
+	HV **http11_bases = NULL;
+	HV *env = NULL;
 	HV *input_stash = NULL;
 	HV *error_stash = NULL;
-	SV *bool_yes = &PL_sv_yes;
-	SV *bool_no = &PL_sv_no;
 	if (upsgi.threads > 1) slot = wsgi_req->async_id;
 	input_stash = ((HV **) wi->input)[slot];
 	error_stash = ((HV **) wi->error)[slot];
-	hv_ksplit(env, (U32) (wsgi_req->var_cnt + 16));
+	plain_bases = (HV **) wi->psgi_env_base_plain;
+	http11_bases = (HV **) wi->psgi_env_base_http11;
+	if (wsgi_req->protocol_len == 8 && !upsgi_strncmp("HTTP/1.1", 8, wsgi_req->protocol, wsgi_req->protocol_len)) {
+		env = http11_bases && http11_bases[slot] ? newHVhv(http11_bases[slot]) : newHV();
+	}
+	else {
+		env = plain_bases && plain_bases[slot] ? newHVhv(plain_bases[slot]) : newHV();
+	}
+	hv_ksplit(env, (U32) (wsgi_req->var_cnt + 24));
 	for(i=0;i<wsgi_req->var_cnt;i++) {
 		char *key = wsgi_req->hvec[i].iov_base;
 		STRLEN key_len = wsgi_req->hvec[i].iov_len;
@@ -368,32 +495,31 @@ SV *build_psgi_env(struct wsgi_request *wsgi_req) {
 		}
 		i++;
 	}
-        AV *av = newAV();
-        av_store( av, 0, newSViv(1));
-        av_store( av, 1, newSViv(1));
-        if (!hv_store(env, "psgi.version", 12, newRV_noinc((SV *)av ), 0)) goto clear;
-        if (!hv_store(env, "psgi.multiprocess", 17, upsgi.numproc > 1    ? bool_yes : bool_no, 0)) goto clear;
-        if (!hv_store(env, "psgi.multithread",  16, upsgi.threads > 1    ? bool_yes : bool_no, 0)) goto clear;
-        if (!hv_store(env, "psgi.nonblocking",  16, upsgi.async   > 0    ? bool_yes : bool_no, 0)) goto clear;
-        if (!hv_store(env, "psgix.harakiri",    14, upsgi.master_process ? bool_yes : bool_no, 0)) goto clear;
-        if (!hv_store(env, "psgi.run_once",  13, bool_no,  0)) goto clear;
-        if (!hv_store(env, "psgi.streaming", 14, bool_yes, 0)) goto clear;
-        if (!hv_store(env, "psgix.cleanup",  13, bool_yes, 0)) goto clear;
-	SV *us;
-        if (wsgi_req->scheme_len > 0) us = newSVpvn(wsgi_req->scheme, wsgi_req->scheme_len);
-        else if (wsgi_req->https_len > 0) {
-                if (!strncasecmp(wsgi_req->https, "on", 2) || wsgi_req->https[0] == '1') us = newSVpvs("https");
-                else us = newSVpvs("http");
-        }
-        else us = newSVpvs("http");
-        if (!hv_store(env, "psgi.url_scheme", 15, us, 0)) goto clear;
-	SV *pi = input_stash ? upsgi_perl_new_blessed_object(input_stash) : upsgi_perl_obj_new("upsgi::input", 12);
-        if (!hv_store(env, "psgi.input", 10, pi, 0)) goto clear;
-	if (!hv_store(env, "psgix.input.buffered", 20, upsgi.post_buffering > 0 ? bool_yes : bool_no, 0)) goto clear;
-	if (!hv_store(env, "psgix.logger", 12, newRV((SV *) ((SV **) wi->responder1)[slot]), 0)) goto clear;
-	if (wsgi_req->protocol_len == 8 && !upsgi_strncmp("HTTP/1.1", 8, wsgi_req->protocol, wsgi_req->protocol_len)) {
-		if (!hv_store(env, "psgix.informational", 19, newRV((SV *) ((SV **) wi->responder2)[slot]), 0)) goto clear;
+	AV *av = newAV();
+	SV *us = NULL;
+	av_store(av, 0, newSViv(1));
+	av_store(av, 1, newSViv(1));
+	if (!hv_store(env, "psgi.version", 12, newRV_noinc((SV *) av), 0)) goto clear;
+	if (wsgi_req->scheme_len > 0) {
+		us = newSVpvn(wsgi_req->scheme, wsgi_req->scheme_len);
 	}
+	else if (wsgi_req->https_len > 0) {
+		if (!strncasecmp(wsgi_req->https, "on", 2) || wsgi_req->https[0] == '1') {
+			if (!uperl.psgi_scheme_https) uperl.psgi_scheme_https = newSVpvs("https");
+			us = SvREFCNT_inc(uperl.psgi_scheme_https);
+		}
+		else {
+			if (!uperl.psgi_scheme_http) uperl.psgi_scheme_http = newSVpvs("http");
+			us = SvREFCNT_inc(uperl.psgi_scheme_http);
+		}
+	}
+	else {
+		if (!uperl.psgi_scheme_http) uperl.psgi_scheme_http = newSVpvs("http");
+		us = SvREFCNT_inc(uperl.psgi_scheme_http);
+	}
+	if (!hv_store(env, "psgi.url_scheme", 15, us, 0)) goto clear;
+	SV *pi = input_stash ? upsgi_perl_new_blessed_object(input_stash) : upsgi_perl_obj_new("upsgi::input", 12);
+	if (!hv_store(env, "psgi.input", 10, pi, 0)) goto clear;
 	av = newAV();
 	if (!hv_store(env, "psgix.cleanup.handlers", 22, newRV_noinc((SV *)av ), 0)) goto clear;
 	if (uperl.enable_psgix_io) {
@@ -479,7 +605,11 @@ already_initialized:
 int upsgi_perl_request(struct wsgi_request *wsgi_req) {
 
 	if (wsgi_req->async_status == UPSGI_AGAIN) {
-		return psgi_response(wsgi_req, wsgi_req->async_placeholder);	
+		int ret = psgi_response(wsgi_req, wsgi_req->async_placeholder);
+		if (ret != UPSGI_AGAIN) {
+			upsgi_psgi_output_state_release(wsgi_req);
+		}
+		return ret;
 	}
 
 	/* Standard PSGI request */
@@ -582,8 +712,10 @@ int upsgi_perl_request(struct wsgi_request *wsgi_req) {
 
 clear2:
 	// clear response
+	upsgi_psgi_output_state_release(wsgi_req);
 	SvREFCNT_dec(wsgi_req->async_result);
 clear:
+	upsgi_psgi_output_state_release(wsgi_req);
 
 	FREETMPS;
 	LEAVE;
@@ -935,58 +1067,6 @@ static void upsgi_perl_hijack(void) {
 
 }
 
-static void upsgi_perl_add_item(char *key, uint16_t keylen, char *val, uint16_t vallen, void *data) {
-
-        HV *spool_dict = (HV*) data;
-
-	(void)hv_store(spool_dict, key, keylen, newSVpv(val, vallen), 0);
-}
-
-
-static int upsgi_perl_spooler(char *filename, char *buf, uint16_t len, char *body, size_t body_len) {
-
-        int ret = -1;
-
-	if (!uperl.spooler) return 0;
-
-	dSP;
-        ENTER;
-        SAVETMPS;
-        PUSHMARK(SP);
-
-	HV *spool_dict = newHV();	
-
-	if (upsgi_hooked_parse(buf, len, upsgi_perl_add_item, (void *) spool_dict)) {
-                return 0;
-        }
-
-        (void) hv_store(spool_dict, "spooler_task_name", 18, newSVpv(filename, 0), 0);
-
-        if (body && body_len > 0) {
-                (void) hv_store(spool_dict, "body", 4, newSVpv(body, body_len), 0);
-        }
-
-        XPUSHs( sv_2mortal((SV*)newRV_noinc((SV*)spool_dict)) );
-        PUTBACK;
-
-        call_sv( SvRV((SV*)uperl.spooler), G_SCALAR|G_EVAL);
-
-        SPAGAIN;
-        if(SvTRUE(ERRSV)) {
-                upsgi_log("[upsgi-spooler-perl error] %s", SvPV_nolen(ERRSV));
-		ret = -1;
-        }
-	else {
-		ret = POPi;
-	}
-
-        PUTBACK;
-        FREETMPS;
-        LEAVE;
-
-	return ret;
-}
-
 static int upsgi_perl_hook_perl(char *arg) {
 	SV *ret = perl_eval_pv(arg, 0);
 	if (!ret) return -1;
@@ -1018,7 +1098,6 @@ struct upsgi_plugin psgi_plugin = {
 	.signal_handler = upsgi_perl_signal_handler,
 	.rpc = upsgi_perl_rpc,
 
-	.mule = upsgi_perl_mule,
 
 	.hijack_worker = upsgi_perl_hijack,
 
@@ -1031,6 +1110,5 @@ struct upsgi_plugin psgi_plugin = {
 
 	.magic = upsgi_perl_magic,
 
-	.spooler = upsgi_perl_spooler,
 	.on_load = upsgi_perl_register_features,
 };

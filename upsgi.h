@@ -415,6 +415,7 @@ struct upsgi_custom_option {
 struct upsgi_lock_item {
 	char *id;
 	void *lock_ptr;
+	int lock_engine;
 	int rw;
 	pid_t pid;
 	int can_deadlock;
@@ -445,6 +446,12 @@ struct upsgi_lock_ops {
 #define upsgi_rlock(x) upsgi.lock_ops.rlock(x)
 #define upsgi_wlock(x) upsgi.lock_ops.wlock(x)
 #define upsgi_rwunlock(x) upsgi.lock_ops.rwunlock(x)
+
+#define UPSGI_THUNDER_LOCK_BACKEND_NONE 0
+#define UPSGI_THUNDER_LOCK_BACKEND_PTHREAD_ROBUST 1
+#define UPSGI_THUNDER_LOCK_BACKEND_PTHREAD_PLAIN 2
+#define UPSGI_THUNDER_LOCK_BACKEND_IPCSEM 3
+#define UPSGI_THUNDER_LOCK_BACKEND_FDLOCK 4
 
 #define upsgi_wait_read_req(x) upsgi.wait_read_hook(x->fd, upsgi.socket_timeout) ; x->switches++
 #define upsgi_wait_write_req(x) upsgi.wait_write_hook(x->fd, upsgi.socket_timeout) ; x->switches++
@@ -631,9 +638,6 @@ struct upsgi_daemon {
 
 	struct upsgi_string_list *touch;
 
-#ifdef UPSGI_SSL
-	char *legion;
-#endif
 
 	int ns_pid;
 	int throttle;
@@ -649,8 +653,11 @@ struct upsgi_logger {
 	char *name;
 	char *id;
 	 ssize_t(*func) (struct upsgi_logger *, char *, size_t);
+	int (*reset)(struct upsgi_logger *);
 	int configured;
 	int fd;
+	int recovery_needed;
+	int batch_writes;
 	void *data;
 	union upsgi_sockaddr addr;
 	socklen_t addr_len;
@@ -662,102 +669,22 @@ struct upsgi_logger {
 	struct upsgi_logger *next;
 };
 
-#ifdef UPSGI_SSL
-struct upsgi_legion_node {
-	char *name;
-	uint16_t name_len;
-	uint64_t valor;
-	char uuid[37];
-	char *scroll;
-	uint16_t scroll_len;
-	uint64_t checksum;
-	uint64_t lord_valor;
-	char lord_uuid[36];
-	time_t last_seen;
-	struct upsgi_legion_node *prev;
-	struct upsgi_legion_node *next;
+struct upsgi_log_queue_item {
+	struct upsgi_logger *logger;
+	char *buf;
+	size_t len;
+	size_t pos;
+	uint8_t is_req_log;
+	struct upsgi_log_queue_item *next;
 };
 
-struct upsgi_legion {
-	char *legion;
-	uint16_t legion_len;
-	uint64_t valor;
-	char *addr;
-	char *name;
-	uint16_t name_len;
-	pid_t pid;
-	char uuid[37];
-	int socket;
-
-	int quorum;
-	int changed;
-	// if set the next packet will be a death-announce
-	int dead;
-
-	// set to 1 first time when quorum is reached
-	int joined;
-
-	uint64_t checksum;
-
-	char *scroll;
-	uint16_t scroll_len;
-
-	char *lord_scroll;
-	uint16_t lord_scroll_len;
-	uint16_t lord_scroll_size;
-
-	char lord_uuid[36];
-	uint64_t lord_valor;
-
-	time_t i_am_the_lord;
-
-	time_t unix_check;
-
-	time_t last_warning;
-
-	struct upsgi_lock_item *lock;
-
-	EVP_CIPHER_CTX *encrypt_ctx;
-	EVP_CIPHER_CTX *decrypt_ctx;
-
-	char *scrolls;
-	uint64_t scrolls_len;
-	uint64_t scrolls_max_size;
-
-	// found nodes dynamic lists
-	struct upsgi_legion_node *nodes_head;
-	struct upsgi_legion_node *nodes_tail;
-
-	// static list of nodes to send announces to
-	struct upsgi_string_list *nodes;
-	struct upsgi_string_list *lord_hooks;
-	struct upsgi_string_list *unlord_hooks;
-	struct upsgi_string_list *setup_hooks;
-	struct upsgi_string_list *death_hooks;
-	struct upsgi_string_list *join_hooks;
-	struct upsgi_string_list *node_joined_hooks;
-	struct upsgi_string_list *node_left_hooks;
-
-	time_t suspended_til;
-	struct upsgi_legion *next;
-};
-
-struct upsgi_legion_action {
-	char *name;
-	int (*func) (struct upsgi_legion *, char *);
-	char *log_msg;
-	struct upsgi_legion_action *next;
-};
-#endif
-
-struct upsgi_queue_header {
-	uint64_t pos;
-	uint64_t pull_pos;
-};
-
-struct upsgi_queue_item {
-	uint64_t size;
-	time_t ts;
+struct upsgi_log_queue {
+	struct upsgi_log_queue_item *head;
+	struct upsgi_log_queue_item *tail;
+	uint64_t depth;
+	uint64_t bytes;
+	uint64_t records_cap;
+	uint64_t bytes_cap;
 };
 
 struct upsgi_hash_algo {
@@ -770,19 +697,6 @@ struct upsgi_hash_algo *upsgi_hash_algo_get(char *);
 void upsgi_hash_algo_register(char *, uint32_t(*)(char *, uint64_t));
 void upsgi_hash_algo_register_all(void);
 
-struct upsgi_sharedarea {
-	int id;
-	int pages;
-	int fd;
-	struct upsgi_lock_item *lock;
-	char *area;
-	uint64_t max_pos;
-	uint64_t updates;
-	uint64_t hits;
-	uint8_t honour_used;
-	uint64_t used;
-	void *obj;
-};
 
 // maintain alignment here !!!
 struct upsgi_cache_item {
@@ -1025,6 +939,7 @@ struct upsgi_socket {
 
 	int disabled;
 	int recv_flag;
+	int configured_socket_num;
 
 	struct upsgi_socket *next;
 	int lazy;
@@ -1078,7 +993,6 @@ struct upsgi_plugin {
 	void (*harakiri) (int);
 
 	void (*hijack_worker) (void);
-	void (*spooler_init) (void);
 	void (*atexit) (void);
 
 	int (*magic) (char *, char *);
@@ -1088,7 +1002,6 @@ struct upsgi_plugin {
 	int (*signal_handler) (uint8_t, void *);
 	char *(*code_string) (char *, char *, char *, char *, uint16_t);
 
-	int (*spooler) (char *, char *, uint16_t, char *, size_t);
 
 	uint64_t(*rpc) (void *, uint8_t, char **, uint16_t *, char **);
 
@@ -1096,8 +1009,6 @@ struct upsgi_plugin {
 	void (*post_jail) (void);
 	void (*before_privileges_drop) (void);
 
-	int (*mule) (char *);
-	int (*mule_msg) (char *, size_t);
 
 	void (*master_cleanup) (void);
 
@@ -1128,8 +1039,6 @@ char *upsgi_regexp_apply_ovec(char *, int, char *, int, int *, int);
 int upsgi_regexp_match_pattern(char *pattern, char *str);
 #endif
 
-
-
 struct upsgi_app {
 
 	uint8_t modifier1;
@@ -1152,6 +1061,14 @@ struct upsgi_app {
 	void *responder0;
 	void *responder1;
 	void *responder2;
+
+	/* PSGI-only cached immutable callback refs to reduce per-request SV churn. */
+	void *psgi_logger_refs;
+	void *psgi_informational_refs;
+
+	/* PSGI-only per-slot env bases cloned into each request env. */
+	void *psgi_env_base_plain;
+	void *psgi_env_base_http11;
 
 	void *eventfd_read;
 	void *eventfd_write;
@@ -1178,29 +1095,6 @@ struct upsgi_app {
 	uint64_t avg_response_time;
 };
 
-struct upsgi_spooler {
-
-	char dir[PATH_MAX];
-	pid_t pid;
-	uint64_t respawned;
-	uint64_t tasks;
-	struct upsgi_lock_item *lock;
-	time_t harakiri;
-	time_t user_harakiri;
-
-	int mode;
-
-	int running;
-
-	int signal_pipe[2];
-
-	struct upsgi_spooler *next;
-
-	time_t last_task_managed;
-
-	time_t cursed_at;
-	time_t no_mercy_at;
-};
 
 #ifdef UPSGI_ROUTING
 
@@ -1486,8 +1380,6 @@ struct wsgi_request {
 	char *touch_reload;
 	uint16_t touch_reload_len;
 
-	char *cache_get;
-	uint16_t cache_get_len;
 
 	char *if_modified_since;
 	uint16_t if_modified_since_len;
@@ -1558,6 +1450,30 @@ struct wsgi_request {
 	// when set, do not send warnings about bad behaviours
 	int post_warning;
 
+	/*
+	 * Body scheduler observability-first scaffold state.
+	 *
+	 * These fields do not change request behavior in B1. They only track body
+	 * ingress shape so the later scheduler pass can be validated against the
+	 * current code path.
+	 */
+	uint64_t body_sched_started_at_us;
+	uint64_t body_sched_last_service_us;
+	uint64_t body_sched_bytes_observed;
+	uint64_t body_sched_deficit_bytes;
+	uint64_t body_sched_last_budget_bytes;
+	uint32_t body_sched_rounds_observed;
+	uint32_t body_sched_full_budget_turns;
+	uint8_t body_sched_registered;
+	uint8_t body_sched_lane_class;
+	uint8_t body_sched_promoted_by_bytes;
+	uint8_t body_sched_promoted_by_rounds;
+	uint8_t body_sched_promoted_by_residency;
+	uint8_t body_sched_marked_complete;
+	uint8_t body_sched_last_budget_capped;
+	uint8_t body_sched_disabled_fallback_noted;
+	uint8_t body_sched_recent_wait_event;
+
 	// deprecated fields: size_t is 32bit on 32bit platform
 	size_t __range_from;
 	size_t __range_to;
@@ -1614,6 +1530,16 @@ struct wsgi_request {
 	size_t chunked_input_need;
 	uint8_t chunked_input_complete;
         size_t chunked_input_decapitate;
+
+	/* stage-1 standard PSGI response-state scaffolding */
+	uint8_t psgi_output_mode;
+	uint8_t psgi_output_flags;
+	uint8_t psgi_chunk_owner_kind;
+	uint8_t psgi_output_resume_kind;
+	struct upsgi_buffer *psgi_output_buf;
+	void *psgi_output_owner_ref;
+	size_t psgi_output_pos;
+	size_t psgi_output_len;
 
 	uint64_t stream_id;
 
@@ -1727,7 +1653,6 @@ struct upsgi_clock {
 	struct upsgi_clock *next;
 };
 
-struct upsgi_subscribe_slot;
 struct upsgi_stats_pusher;
 struct upsgi_stats_pusher_instance;
 
@@ -1779,8 +1704,6 @@ struct upsgi_logging_options {
 
 struct upsgi_harakiri_options {
 	int workers;
-	int spoolers;
-	int mules;
 };
 
 struct upsgi_fsmon {
@@ -1792,7 +1715,6 @@ struct upsgi_fsmon {
 	struct upsgi_fsmon *next;
 };
 
-struct upsgi_subscription_client;
 
 struct upsgi_server {
 
@@ -2162,6 +2084,11 @@ struct upsgi_server {
 	int log_master_stream;
 	int log_master_req_stream;
 	int log_drain_burst;
+	int log_queue_enabled;
+	uint64_t log_queue_records;
+	uint64_t log_queue_bytes;
+	struct upsgi_log_queue logger_queue;
+	struct upsgi_log_queue req_logger_queue;
 
 	int log_reopen;
 	int log_truncate;
@@ -2204,7 +2131,6 @@ struct upsgi_server {
 
         struct upsgi_string_list *hook_as_vassal;
         struct upsgi_string_list *hook_as_emperor;
-        struct upsgi_string_list *hook_as_mule;
         struct upsgi_string_list *hook_as_gateway;
 	
 
@@ -2334,16 +2260,10 @@ struct upsgi_server {
 	char *static_cache_paths_name;
 	struct upsgi_cache *static_cache_paths;
 	int cache_expire_freq;
-	int cache_report_freed_items;
 	int cache_no_expire;
-	uint64_t cache_max_items;
-	uint64_t cache_blocksize;
-	char *cache_store;
-	int cache_store_sync;
 	struct upsgi_string_list *cache2;
 	int cache_setup;
 	int locking_setup;
-	int cache_use_last_modified;
 
 	struct upsgi_dyn_dict *static_expires_type;
 	struct upsgi_dyn_dict *static_expires_type_mtime;
@@ -2453,16 +2373,6 @@ struct upsgi_server {
 	int multicast_loop;
 	char *multicast_group;
 
-	struct upsgi_spooler *spoolers;
-	int spooler_numproc;
-	struct upsgi_spooler *i_am_a_spooler;
-	char *spooler_chdir;
-	int spooler_max_tasks;
-	int spooler_ordered;
-	int spooler_quiet;
-	int spooler_frequency;
-
-
 	int snmp;
 	char *snmp_addr;
 	char *snmp_community;
@@ -2480,6 +2390,7 @@ struct upsgi_server {
 	int post_buffering_harakiri;
 	size_t post_buffering_bufsize;
 	size_t body_read_warning;
+	int body_scheduler;
 
 	int master_process;
 	int master_queue;
@@ -2525,10 +2436,6 @@ struct upsgi_server {
 	int max_vars;
 	int vec_size;
 
-	// shared area
-	struct upsgi_string_list *sharedareas_list;
-	int sharedareas_cnt;
-	struct upsgi_sharedarea **sharedareas;
 
 	// avoid thundering herd in threaded modes
 	pthread_mutex_t thunder_mutex;
@@ -2536,25 +2443,21 @@ struct upsgi_server {
 
 	int use_thunder_lock;
 	int use_thunder_lock_watchdog;
+	char *thunder_lock_backend_request;
+	int thunder_lock_backend;
+	int thunder_lock_backend_has_owner_dead_recovery;
+	char *thunder_lock_backend_reason;
 	struct upsgi_lock_item *the_thunder_lock;
 
 	/* the list of workers */
 	struct upsgi_worker *workers;
 	int max_apps;
 
-	/* the list of mules */
-	struct upsgi_string_list *mules_patches;
-	struct upsgi_mule *mules;
-	struct upsgi_string_list *farms_list;
-	struct upsgi_farm *farms;
-	int mule_msg_size;
+	/* background worker family removed in R3 */
 
 	pid_t mypid;
 	int mywid;
 
-	int muleid;
-	int mules_cnt;
-	int farms_cnt;
 
 	rlim_t requested_max_fd;
 	rlim_t max_fd;
@@ -2693,19 +2596,7 @@ struct upsgi_server {
 	size_t lock_size;
 	size_t rwlock_size;
 
-	struct upsgi_string_list *add_cache_item;
-	struct upsgi_string_list *load_file_in_cache;
-#ifdef UPSGI_ZLIB
-	struct upsgi_string_list *load_file_in_cache_gzip;
-#endif
-	char *use_check_cache;
-	struct upsgi_cache *check_cache;
 	struct upsgi_cache *caches;
-
-	struct upsgi_string_list *cache_udp_server;
-	struct upsgi_string_list *cache_udp_node;
-
-	char *cache_sync;
 
 	// the stats server
 	char *stats;
@@ -2717,19 +2608,9 @@ struct upsgi_server {
 	struct upsgi_stats_pusher_instance *stats_pusher_instances;
 	int stats_pusher_default_freq;
 
-	uint64_t queue_size;
-	uint64_t queue_blocksize;
-	void *queue;
-	struct upsgi_queue_header *queue_header;
-	char *queue_store;
-	size_t queue_filesize;
-	int queue_store_sync;
-
-
 	int locks;
 	int persistent_ipcsem;
 
-	struct upsgi_lock_item *queue_lock;
 	struct upsgi_lock_item **user_lock;
 	struct upsgi_lock_item *signal_table_lock;
 	struct upsgi_lock_item *fmon_table_lock;
@@ -2744,16 +2625,6 @@ struct upsgi_server {
 	uint64_t rpc_max;
 	struct upsgi_rpc *rpc_table;	
 
-	// subscription client
-	int subscriptions_blocked;
-	int subscribe_freq;
-	int subscription_tolerance;
-	int unsubscribe_on_graceful_reload;
-	struct upsgi_string_list *subscriptions;
-	struct upsgi_string_list *subscriptions2;
-
-	struct upsgi_subscribe_node *(*subscription_algo) (struct upsgi_subscribe_slot *, struct upsgi_subscribe_node *, struct upsgi_subscription_client *);
-	int subscription_dotsplit;
 
 	int never_swap;
 
@@ -2772,17 +2643,6 @@ struct upsgi_server {
 	char *sni_dir_ciphers;
 #endif
 
-#ifdef UPSGI_SSL
-	struct upsgi_legion *legions;
-	struct upsgi_legion_action *legion_actions;
-	int legion_queue;
-	int legion_freq;
-	int legion_tolerance;
-	int legion_skew_tolerance;
-	uint16_t legion_scroll_max_size;
-	uint64_t legion_scroll_list_max_size;
-	int legion_death_on_lord_error;
-#endif
 
 #ifdef __linux__
 #ifdef MADV_MERGEABLE
@@ -2825,14 +2685,13 @@ struct upsgi_server {
         struct upsgi_string_list *inject_before;
         struct upsgi_string_list *inject_after;
 
-	// this is a unix socket receiving external notifications (like subscription replies)
+
+	// this is a unix socket receiving external notifications
 	char *notify_socket;
 	int notify_socket_fd;
-	char *subscription_notify_socket;
 
 	//upsgi 2.0.5
 
-	int mule_reload_mercy;
 	int alarm_cheap;
 	int emperor_no_blacklist;
 	int metrics_no_cores;
@@ -2854,8 +2713,6 @@ struct upsgi_server {
 #endif
 	struct upsgi_string_list *hook_post_fork;
 
-	// upsgi 2.0.9
-	char *subscribe_with_modifier1;
 	struct upsgi_string_list *pull_headers;
 
 	// upsgi 2.0.10
@@ -2868,9 +2725,6 @@ struct upsgi_server {
 	int mem_collector_freq;
 
 	// upsgi 2.0.14
-	struct upsgi_string_list *touch_mules_reload;
-	struct upsgi_string_list *touch_spoolers_reload;
-	int spooler_reload_mercy;
 	int skip_atexit_teardown;
 
 	// upsgi 2.0.15
@@ -2904,8 +2758,6 @@ struct upsgi_server {
         struct upsgi_string_list *hook_as_on_demand_vassal;
 	uint64_t max_requests_delta;
 	char *emperor_chdir_attr;
-	struct upsgi_string_list *subscription_algos;
-	int subscription_mountpoints;
 	struct upsgi_string_list *hook_as_emperor_before_vassal;
 	struct upsgi_string_list *hook_as_vassal_before_drop;
 	struct upsgi_string_list *hook_as_emperor_setns;
@@ -2919,13 +2771,11 @@ struct upsgi_server {
 	char *safe_pidfile2;
 
 	int die_on_no_workers;
-	int spooler_cheap;
 	int cheaper_idle;
 
 	char *emperor_trigger_socket;
 	int emperor_trigger_socket_fd;
 
-	int spooler_signal_as_task;
 
 	int log_worker;
 
@@ -2936,18 +2786,12 @@ struct upsgi_server {
 	int emperor_command_socket_fd;
 	int emperor_wait_for_command;
 	struct upsgi_string_list *emperor_wait_for_command_ignore;
-	int subscription_vassal_required;
-	int subscription_clear_on_shutdown;
-
-	int subscription_tolerance_inactive;
 
 #ifdef __linux__
 	rlim_t reload_on_uss;
 	rlim_t reload_on_pss;
 #endif
 
-	int mule_msg_recv_size;
-	char *mule_msg_recv_buf;
 
 	int http_path_info_no_decode_slashes;
 
@@ -3023,9 +2867,6 @@ struct upsgi_cron {
 
 	struct upsgi_cron *next;
 
-#ifdef UPSGI_SSL
-	char *legion;
-#endif
 };
 
 struct upsgi_shared {
@@ -3040,10 +2881,6 @@ struct upsgi_shared {
 	struct upsgi_snmp_custom_value snmp_value[100];
 
 	int worker_signal_pipe[2];
-	int spooler_frequency;
-	int spooler_signal_pipe[2];
-	int mule_signal_pipe[2];
-	int mule_queue_pipe[2];
 
 	// 256 items * (upsgi.numproc + 1)
 	struct upsgi_signal_entry *signal_table;
@@ -3070,6 +2907,32 @@ struct upsgi_shared {
 	uint64_t req_log_sink_stall_events;
 	uint64_t log_dropped_messages;
 	uint64_t req_log_dropped_messages;
+	uint64_t log_queue_depth;
+	uint64_t log_queue_bytes;
+	uint64_t log_queue_depth_max;
+	uint64_t log_queue_bytes_max;
+	uint64_t log_queue_enqueue_events;
+	uint64_t log_queue_flush_events;
+	uint64_t log_queue_backpressure_events;
+	uint64_t log_queue_full_events;
+	uint64_t log_queue_sink_retry_events;
+	uint64_t log_queue_batch_flush_events;
+	uint64_t log_queue_batch_items;
+	uint64_t log_sink_recovery_attempts;
+	uint64_t log_sink_recovery_successes;
+	uint64_t req_log_queue_depth;
+	uint64_t req_log_queue_bytes;
+	uint64_t req_log_queue_depth_max;
+	uint64_t req_log_queue_bytes_max;
+	uint64_t req_log_queue_enqueue_events;
+	uint64_t req_log_queue_flush_events;
+	uint64_t req_log_queue_backpressure_events;
+	uint64_t req_log_queue_full_events;
+	uint64_t req_log_queue_sink_retry_events;
+	uint64_t req_log_queue_batch_flush_events;
+	uint64_t req_log_queue_batch_items;
+	uint64_t req_log_sink_recovery_attempts;
+	uint64_t req_log_sink_recovery_successes;
 
 	uint64_t load;
 	uint64_t max_load;
@@ -3092,6 +2955,7 @@ struct upsgi_shared {
 	uint64_t overloaded;
 
 	int ready;
+
 };
 
 struct upsgi_core {
@@ -3100,6 +2964,11 @@ struct upsgi_core {
 	uint64_t requests;
 	uint64_t failed_requests;
 	uint64_t static_requests;
+	uint64_t static_path_cache_hits;
+	uint64_t static_path_cache_misses;
+	uint64_t static_realpath_calls;
+	uint64_t static_stat_calls;
+	uint64_t static_index_checks;
 	uint64_t routed_requests;
 	uint64_t offloaded_requests;
 
@@ -3125,6 +2994,58 @@ struct upsgi_core {
 	// upsgi 2.1
 	time_t harakiri;
 	time_t user_harakiri;
+
+	/*
+	 * Append-only static observability counters.
+	 *
+	 * Keep these at the end of struct upsgi_core so incremental builds that
+	 * still reuse preexisting objects do not shift the offsets of long-lived
+	 * core fields such as thread_id, ts, and req.
+	 */
+	uint64_t static_open_calls;
+	uint64_t static_open_failures;
+
+	/*
+	 * Body scheduler observability-first scaffold counters.
+	 *
+	 * Keep these appended so preexisting long-lived fields stay stable while the
+	 * experimental read-side scheduler work is validated.
+	 */
+	uint64_t body_sched_rounds;
+	uint64_t body_sched_interactive_turns;
+	uint64_t body_sched_bulk_turns;
+	uint64_t body_sched_requeues;
+	uint64_t body_sched_promotions_to_bulk;
+	uint64_t body_sched_no_credit_skips;
+	uint64_t body_sched_empty_read_events;
+	uint64_t body_sched_eagain_events;
+	uint64_t body_sched_completed_items;
+	uint64_t body_sched_bytes_interactive;
+	uint64_t body_sched_bytes_bulk;
+	uint64_t body_sched_bytes_total;
+	uint64_t body_sched_credit_granted_bytes;
+	uint64_t body_sched_credit_unused_bytes;
+	uint64_t body_sched_active_items;
+	uint64_t body_sched_interactive_depth_max;
+	uint64_t body_sched_bulk_depth_max;
+	uint64_t body_sched_residency_us_max;
+	uint64_t body_sched_residency_us_p50_sample;
+	uint64_t body_sched_residency_us_p95_sample;
+	uint64_t body_sched_items_promoted_by_bytes;
+	uint64_t body_sched_items_promoted_by_rounds;
+	uint64_t body_sched_items_promoted_by_residency;
+	uint64_t body_sched_near_complete_fastfinishes;
+	uint64_t body_sched_overflow_protection_hits;
+	uint64_t body_sched_queue_full_events;
+	uint64_t body_sched_disabled_fallbacks;
+	uint64_t body_sched_full_budget_turns;
+	uint64_t body_sched_wait_relief_events;
+	uint64_t body_sched_yield_hints;
+
+	/* internal gauges and histogram used to derive max depth and sampled residency */
+	uint64_t body_sched_interactive_depth_current;
+	uint64_t body_sched_bulk_depth_current;
+	uint64_t body_sched_residency_hist[16];
 };
 
 struct upsgi_worker {
@@ -3178,6 +3099,12 @@ struct upsgi_worker {
 
 	uint64_t avg_response_time;
 
+	uint64_t thunder_lock_acquires;
+	uint64_t thunder_lock_contention_events;
+	uint64_t thunder_lock_wait_us;
+	uint64_t thunder_lock_hold_us;
+	uint64_t thunder_lock_bypass_count;
+
 	struct upsgi_core *cores;
 
 	int accepting;
@@ -3188,52 +3115,8 @@ struct upsgi_worker {
 
 	uint64_t uss_size;
 	uint64_t pss_size;
-};
-
-
-struct upsgi_mule {
-	int id;
-	pid_t pid;
-
-	int signal_pipe[2];
-	int queue_pipe[2];
-
-	time_t last_spawn;
-	uint64_t respawn_count;
-
-	char *patch;
-
-	// signals managed by this mule
-	uint64_t signals;
-	int sig;
-	uint8_t signum;
-
-	time_t harakiri;
-	time_t user_harakiri;
-
-	char name[0xff];
-
-	time_t cursed_at;
-	time_t no_mercy_at;
-};
-
-struct upsgi_mule_farm {
-	struct upsgi_mule *mule;
-	struct upsgi_mule_farm *next;
-};
-
-struct upsgi_farm {
-	int id;
-	char name[0xff];
-
-	int signal_pipe[2];
-	int queue_pipe[2];
-
-	struct upsgi_mule_farm *mules;
 
 };
-
-
 
 char *upsgi_get_cwd(void);
 
@@ -3280,13 +3163,6 @@ void manage_snmp(int, uint8_t *, int, struct sockaddr_in *);
 
 void upsgi_master_manage_snmp(int);
 
-char *upsgi_spool_request(struct wsgi_request *, char *, size_t, char *, size_t);
-void spooler(struct upsgi_spooler *);
-pid_t spooler_start(struct upsgi_spooler *);
-
-int upsgi_spooler_read_header(char *, int, struct upsgi_header *);
-int upsgi_spooler_read_content(int, char *, char **, size_t *, struct upsgi_header *, struct stat *);
-
 #if defined(_GNU_SOURCE) || defined(__UCLIBC__)
 #define upsgi_versionsort versionsort
 #else
@@ -3294,13 +3170,10 @@ int upsgi_versionsort(const struct dirent **da, const struct dirent **db);
 #endif
 
 void upsgi_curse(int, int);
-void upsgi_curse_mule(int, int);
 void upsgi_destroy_processes(void);
 
 void set_harakiri(struct wsgi_request *, int);
 void set_user_harakiri(struct wsgi_request *, int);
-void set_mule_harakiri(int);
-void set_spooler_harakiri(int);
 void inc_harakiri(struct wsgi_request *, int);
 
 #ifdef __BIG_ENDIAN__
@@ -3396,6 +3269,14 @@ void build_options(void);
 
 int upsgi_postbuffer_do_in_disk(struct wsgi_request *);
 int upsgi_postbuffer_do_in_mem(struct wsgi_request *);
+int upsgi_body_sched_enabled(void);
+size_t upsgi_body_sched_read_budget(struct wsgi_request *, size_t);
+void upsgi_body_sched_note_request(struct wsgi_request *);
+void upsgi_body_sched_note_bytes(struct wsgi_request *, size_t);
+void upsgi_body_sched_note_empty_read(struct wsgi_request *);
+void upsgi_body_sched_note_eagain(struct wsgi_request *);
+void upsgi_body_sched_note_chunked_complete(struct wsgi_request *);
+void upsgi_body_sched_finish(struct wsgi_request *);
 
 void upsgi_register_loop(char *, void (*)(void));
 void *upsgi_get_loop(char *);
@@ -3422,6 +3303,7 @@ char *upsgi_cache_get3(struct upsgi_cache *, char *, uint16_t, uint64_t *, uint6
 char *upsgi_cache_get4(struct upsgi_cache *, char *, uint16_t, uint64_t *, uint64_t *);
 uint32_t upsgi_cache_exists2(struct upsgi_cache *, char *, uint16_t);
 struct upsgi_cache *upsgi_cache_create(char *);
+struct upsgi_cache *upsgi_cache_ensure_named_local(char *, uint64_t, uint64_t);
 struct upsgi_cache *upsgi_cache_by_name(char *);
 struct upsgi_cache *upsgi_cache_by_namelen(char *, uint16_t);
 void upsgi_cache_create_all(void);
@@ -3513,66 +3395,6 @@ int is_a_number(char *);
 
 char *upsgi_resolve_ip(char *);
 
-void upsgi_init_queue(void);
-char *upsgi_queue_get(uint64_t, uint64_t *);
-char *upsgi_queue_pull(uint64_t *);
-int upsgi_queue_push(char *, uint64_t);
-char *upsgi_queue_pop(uint64_t *);
-int upsgi_queue_set(uint64_t, char *, uint64_t);
-
-
-struct upsgi_subscribe_req {
-	char *key;
-	uint16_t keylen;
-
-	char *address;
-	uint16_t address_len;
-
-	char *auth;
-	uint16_t auth_len;
-
-	uint8_t modifier1;
-	uint8_t modifier2;
-
-	uint64_t cores;
-	uint64_t load;
-	uint64_t weight;
-	char *sign;
-	uint16_t sign_len;
-
-	time_t unix_check;
-
-	char *base;
-	uint16_t base_len;
-
-	char *sni_key;
-	uint16_t sni_key_len;
-
-	char *sni_crt;
-	uint16_t sni_crt_len;
-
-	char *sni_ca;
-	uint16_t sni_ca_len;
-
-	pid_t pid;
-	uid_t uid;
-	gid_t gid;
-
-	char *notify;
-	uint16_t notify_len;
-
-	uint64_t backup_level;
-
-	char *proto;
-	uint16_t proto_len;
-
-	struct upsgi_subscribe_node *(*algo) (struct upsgi_subscribe_slot *, struct upsgi_subscribe_node *, struct upsgi_subscription_client *);
-
-	char *vassal;
-	uint16_t vassal_len;
-
-	uint8_t clear;
-};
 
 void upsgi_nuclear_blast();
 
@@ -3785,7 +3607,6 @@ void upsgi_dyn_dict_free(struct upsgi_dyn_dict **);
 
 void upsgi_apply_config_pass(char symbol, char *(*)(char *));
 
-void upsgi_mule(int);
 
 char *upsgi_string_get_list(struct upsgi_string_list **, int, size_t *);
 
@@ -3800,103 +3621,12 @@ void http_url_encode(char *, uint16_t *, char *);
 
 pid_t upsgi_fork(char *);
 
-struct upsgi_mule *get_mule_by_id(int);
-struct upsgi_mule_farm *upsgi_mule_farm_new(struct upsgi_mule_farm **, struct upsgi_mule *);
-
-int upsgi_farm_has_mule(struct upsgi_farm *, int);
-struct upsgi_farm *get_farm_by_name(char *);
-
-struct upsgi_subscription_client {
-	int fd;
-	union upsgi_sockaddr *sockaddr;
-	char *cookie;
-};
-
-struct upsgi_subscribe_node {
-
-	char name[0xff];
-	uint16_t len;
-	uint8_t modifier1;
-	uint8_t modifier2;
-
-	time_t last_check;
-
-	// absolute number of requests
-	uint64_t requests;
-	// number of requests since last subscription ping
-	uint64_t last_requests;
-
-	uint64_t tx;
-	uint64_t rx;
-
-	int death_mark;
-	uint64_t reference;
-	uint64_t cores;
-	uint64_t load;
-	uint64_t failcnt;
-
-	uint64_t weight;
-	uint64_t wrr;
-
-	time_t unix_check;
-
-	// used by unix credentials
-	pid_t pid;
-	uid_t uid;
-	gid_t gid;
-
-	char notify[102];
-
-	struct upsgi_subscribe_slot *slot;
-
-	struct upsgi_subscribe_node *next;
-
-	// upsgi 2.1
-	uint64_t backup_level;
-	//here the solution is a bit hacky, we take the first letter of the proto ('u','\0' -> upsgi, 'h' -> http, 'f' -> fastcgi, 's' -> scgi)
-	char proto;
-
-	char vassal[0xff];
-	uint16_t vassal_len;
-};
-
-struct upsgi_subscribe_slot {
-
-	char key[0xff];
-	uint16_t keylen;
-
-	uint32_t hash;
-
-	uint64_t hits;
-
-	struct upsgi_subscribe_node *nodes;
-
-	struct upsgi_subscribe_slot *prev;
-	struct upsgi_subscribe_slot *next;
-
-#ifdef UPSGI_SSL
-	EVP_PKEY *sign_public_key;
-	EVP_MD_CTX *sign_ctx;
-	uint8_t sni_enabled;
-#endif
-
-	// upsgi 2.1 (algo is required)
-        struct upsgi_subscribe_node *(*algo) (struct upsgi_subscribe_slot *, struct upsgi_subscribe_node *, struct upsgi_subscription_client *);
-
-};
-
-int mule_send_msg(int, char *, size_t);
 
 uint32_t djb33x_hash(char *, uint64_t);
+
 void create_signal_pipe(int *);
 void create_msg_pipe(int *, int);
-struct upsgi_subscribe_slot *upsgi_get_subscribe_slot(struct upsgi_subscribe_slot **, char *, uint16_t);
-struct upsgi_subscribe_node *upsgi_get_subscribe_node_by_name(struct upsgi_subscribe_slot **, char *, uint16_t, char *, uint16_t);
-struct upsgi_subscribe_node *upsgi_get_subscribe_node(struct upsgi_subscribe_slot **, char *, uint16_t, struct upsgi_subscription_client *);
-int upsgi_remove_subscribe_node(struct upsgi_subscribe_slot **, struct upsgi_subscribe_node *);
-struct upsgi_subscribe_node *upsgi_add_subscribe_node(struct upsgi_subscribe_slot **, struct upsgi_subscribe_req *);
 
-ssize_t upsgi_mule_get_msg(int, int, char *, size_t, int);
 
 int upsgi_signal_wait(struct wsgi_request *, int);
 struct upsgi_app *upsgi_add_app(int, uint8_t, char *, int, void *, void *);
@@ -3907,12 +3637,6 @@ void upsgi_configure();
 
 int upsgi_read_response(int, struct upsgi_header *, int, char **);
 char *upsgi_simple_file_read(char *);
-
-void upsgi_send_subscription(char *, char *, size_t, uint8_t, uint8_t, uint8_t, char *, char *, char *, char *, char *);
-void upsgi_send_subscription_from_fd(int, char *, char *, size_t, uint8_t, uint8_t, uint8_t, char *, char *, char *, char *, char *);
-
-void upsgi_subscribe(char *, uint8_t);
-void upsgi_subscribe2(char *, uint8_t);
 
 int upsgi_is_bad_connection(int);
 int upsgi_long2str2n(unsigned long long, char *, int);
@@ -3930,6 +3654,7 @@ void upsgi_apply_cap(cap_value_t *, int);
 #endif
 
 void upsgi_register_logger(char *, ssize_t(*func) (struct upsgi_logger *, char *, size_t));
+void upsgi_logger_set_reset(char *, int(*reset)(struct upsgi_logger *));
 void upsgi_append_logger(struct upsgi_logger *);
 void upsgi_append_req_logger(struct upsgi_logger *);
 struct upsgi_logger *upsgi_get_logger(char *);
@@ -3946,10 +3671,6 @@ void escape_json(char *, size_t, char *);
 
 void *upsgi_malloc_shared(size_t);
 void *upsgi_calloc_shared(size_t);
-
-struct upsgi_spooler *upsgi_new_spooler(char *);
-
-struct upsgi_spooler *upsgi_get_spooler_by_name(char *, size_t);
 
 int upsgi_zerg_attach(char *);
 
@@ -4001,8 +3722,6 @@ void upsgi_opt_load_dl(char *, char *, void *);
 void upsgi_opt_load(char *, char *, void *);
 void upsgi_opt_safe_fd(char *, char *, void *);
 #ifdef UPSGI_SSL
-void upsgi_opt_add_legion_cron(char *, char *, void *);
-void upsgi_opt_add_unique_legion_cron(char *, char *, void *);
 void upsgi_opt_sni(char *, char *, void *);
 struct upsgi_string_list *upsgi_ssl_add_sni_item(char *, char *, char *, char *, char *);
 void upsgi_ssl_del_sni_item(char *, uint16_t);
@@ -4022,7 +3741,6 @@ void upsgi_opt_load_json(char *, char *, void *);
 #endif
 
 void upsgi_opt_set_umask(char *, char *, void *);
-void upsgi_opt_add_spooler(char *, char *, void *);
 void upsgi_opt_add_daemon(char *, char *, void *);
 void upsgi_opt_add_daemon2(char *, char *, void *);
 void upsgi_opt_set_uid(char *, char *, void *);
@@ -4037,9 +3755,6 @@ void upsgi_opt_check_static(char *, char *, void *);
 void upsgi_opt_fileserve_mode(char *, char *, void *);
 void upsgi_opt_static_map(char *, char *, void *);
 
-void upsgi_opt_add_mule(char *, char *, void *);
-void upsgi_opt_add_mules(char *, char *, void *);
-void upsgi_opt_add_farm(char *, char *, void *);
 
 void upsgi_opt_signal(char *, char *, void *);
 
@@ -4142,6 +3857,10 @@ void upsgi_register_cheaper_algo(char *, int (*)(int));
 void upsgi_setup_locking(void);
 int upsgi_fcntl_lock(int);
 int upsgi_fcntl_is_locked(int);
+struct upsgi_lock_item *upsgi_lock_fd_init(char *);
+pid_t upsgi_lock_fd_check(struct upsgi_lock_item *);
+void upsgi_lock_fd(struct upsgi_lock_item *);
+void upsgi_unlock_fd(struct upsgi_lock_item *);
 
 void upsgi_emulate_cow_for_apps(int);
 
@@ -4268,16 +3987,12 @@ SSL_CTX *upsgi_ssl_new_server_context(char *, char *, char *, char *, char *);
 char *upsgi_rsa_sign(char *, char *, size_t, unsigned int *);
 char *upsgi_sanitize_cert_filename(char *, char *, uint16_t);
 void upsgi_opt_scd(char *, char *, void *);
-int upsgi_subscription_sign_check(struct upsgi_subscribe_slot *, struct upsgi_subscribe_req *);
 
 char *upsgi_sha1(char *, size_t, char *);
 char *upsgi_sha1_2n(char *, size_t, char *, size_t, char *);
 char *upsgi_md5(char *, size_t, char *);
 #endif
 
-void upsgi_opt_ssa(char *, char *, void *);
-
-int upsgi_no_subscriptions(struct upsgi_subscribe_slot **);
 void upsgi_deadlock_check(pid_t);
 
 
@@ -4403,11 +4118,11 @@ void upsgi_setup_log_master(void);
 
 void upsgi_setup_shared_sockets(void);
 
-void upsgi_setup_mules_and_farms(void);
 
 void upsgi_setup_workers(void);
 void upsgi_map_sockets(void);
 void upsgi_configure_worker_accept_mode(void);
+int upsgi_socket_mapping_is_worker_exclusive(struct upsgi_socket *upsgi_sock);
 
 void upsgi_set_cpu_affinity(void);
 
@@ -4583,10 +4298,6 @@ int upsgi_offload_request_pipe_do(struct wsgi_request *, int, size_t);
 int upsgi_simple_sendfile(struct wsgi_request *, int, size_t, size_t);
 int upsgi_simple_write(struct wsgi_request *, char *, size_t);
 
-
-void upsgi_subscription_set_algo(char *);
-struct upsgi_subscribe_slot **upsgi_subscription_init_ht(void);
-
 int upsgi_check_pidfile(char *);
 void upsgi_daemons_spawn_all();
 
@@ -4612,25 +4323,7 @@ void simple_loop_run_int(int);
 char *upsgi_strip(char *);
 
 #ifdef UPSGI_SSL
-void upsgi_opt_legion(char *, char *, void *);
-void upsgi_opt_legion_mcast(char *, char *, void *);
-struct upsgi_legion *upsgi_legion_register(char *, char *, char *, char *, char *);
-void upsgi_opt_legion_node(char *, char *, void *);
-void upsgi_legion_register_node(struct upsgi_legion *, char *);
-void upsgi_opt_legion_quorum(char *, char *, void *);
-void upsgi_opt_legion_hook(char *, char *, void *);
-void upsgi_legion_register_hook(struct upsgi_legion *, char *, char *);
-void upsgi_opt_legion_scroll(char *, char *, void *);
-void upsgi_legion_add(struct upsgi_legion *);
-void upsgi_legion_announce_death(void);
 char *upsgi_ssl_rand(size_t);
-void upsgi_start_legions(void);
-int upsgi_legion_announce(struct upsgi_legion *);
-struct upsgi_legion *upsgi_legion_get_by_name(char *);
-struct upsgi_legion_action *upsgi_legion_action_get(char *);
-struct upsgi_legion_action *upsgi_legion_action_register(char *, int (*)(struct upsgi_legion *, char *));
-int upsgi_legion_action_call(char *, struct upsgi_legion *, struct upsgi_string_list *);
-void upsgi_legion_atexit(void);
 #endif
 
 struct upsgi_option *upsgi_opt_get(char *);
@@ -4642,8 +4335,6 @@ int check_hex(char *, int);
 void upsgi_uuid(char *);
 int upsgi_uuid_cmp(char *, char *);
 
-int upsgi_legion_i_am_the_lord(char *);
-char *upsgi_legion_lord_scroll(char *, uint16_t *);
 void upsgi_additional_header_add(struct wsgi_request *, char *, uint16_t);
 void upsgi_remove_header(struct wsgi_request *, char *, uint16_t);
 
@@ -4652,8 +4343,6 @@ void upsgi_proto_hooks_setup(void);
 char *upsgi_base64_decode(char *, size_t, size_t *);
 char *upsgi_base64_encode(char *, size_t, size_t *);
 
-void upsgi_subscribe_all(uint8_t, int);
-#define upsgi_unsubscribe_all() upsgi_subscribe_all(1, 1)
 
 void upsgi_websockets_init(void);
 int upsgi_websocket_send(struct wsgi_request *, char *, size_t);
@@ -4729,12 +4418,8 @@ void upsgi_threaded_logger_worker_spawn(void);
 void upsgi_master_check_idle(void);
 int upsgi_master_check_workers_deadline(void);
 int upsgi_master_check_gateways_deadline(void);
-int upsgi_master_check_mules_deadline(void);
-int upsgi_master_check_spoolers_deadline(void);
 int upsgi_master_check_crons_deadline(void);
-int upsgi_master_check_spoolers_death(int);
 int upsgi_master_check_emperor_death(int);
-int upsgi_master_check_mules_death(int);
 int upsgi_master_check_gateways_death(int);
 int upsgi_master_check_daemons_death(int);
 
@@ -4806,14 +4491,7 @@ struct upsgi_cache_magic_context {
 	uint16_t cache_len;
 };
 
-char *upsgi_cache_magic_get(char *, uint16_t, uint64_t *, uint64_t *, char *);
-int upsgi_cache_magic_set(char *, uint16_t, char *, uint64_t, uint64_t, uint64_t, char *);
-int upsgi_cache_magic_del(char *, uint16_t, char *);
-int upsgi_cache_magic_exists(char *, uint16_t, char *);
-int upsgi_cache_magic_clear(char *);
-void upsgi_cache_magic_context_hook(char *, uint16_t, char *, uint16_t, void *);
 
-char *upsgi_legion_scrolls(char *, uint64_t *);
 int upsgi_emperor_vassal_start(struct upsgi_instance *);
 
 #ifdef UPSGI_ZLIB
@@ -4860,8 +4538,6 @@ char *upsgi_str_to_hex(char *, size_t);
 
 // this 3 functions have been added 1.9.10 to allow plugins take the control over processes
 void upsgi_worker_run(void);
-void upsgi_mule_run(void);
-void upsgi_spooler_run(void);
 void upsgi_takeover(void);
 
 char *upsgi_binary_path(void);
@@ -4889,7 +4565,6 @@ void upsgi_fsmon_setup();
 void upsgi_exit(int) __attribute__ ((__noreturn__));
 void upsgi_fallback_config();
 
-struct upsgi_cache_item *upsgi_cache_keys(struct upsgi_cache *, uint64_t *, struct upsgi_cache_item **);
 void upsgi_cache_rlock(struct upsgi_cache *);
 void upsgi_cache_rwunlock(struct upsgi_cache *);
 char *upsgi_cache_item_key(struct upsgi_cache_item *);
@@ -4924,8 +4599,6 @@ void upsgi_log_do_rotate(char *, char *, off_t, int);
 void upsgi_log_rotate();
 void upsgi_log_reopen();
 void upsgi_reload_workers();
-void upsgi_reload_mules();
-void upsgi_reload_spoolers();
 void upsgi_chain_reload();
 void upsgi_refork_master();
 void upsgi_update_pidfiles();
@@ -5070,39 +4743,6 @@ void upsgi_protocols_register(void);
 
 void upsgi_build_plugin(char *dir);
 
-void upsgi_sharedareas_init();
-
-struct upsgi_sharedarea *upsgi_sharedarea_init(int);
-struct upsgi_sharedarea *upsgi_sharedarea_init_ptr(char *, uint64_t);
-struct upsgi_sharedarea *upsgi_sharedarea_init_fd(int, uint64_t, off_t);
-
-int64_t upsgi_sharedarea_read(int, uint64_t, char *, uint64_t);
-int upsgi_sharedarea_write(int, uint64_t, char *, uint64_t);
-int upsgi_sharedarea_read64(int, uint64_t, int64_t *);
-int upsgi_sharedarea_write64(int, uint64_t, int64_t *);
-int upsgi_sharedarea_read8(int, uint64_t, int8_t *);
-int upsgi_sharedarea_write8(int, uint64_t, int8_t *);
-int upsgi_sharedarea_read16(int, uint64_t, int16_t *);
-int upsgi_sharedarea_write16(int, uint64_t, int16_t *);
-int upsgi_sharedarea_read32(int, uint64_t, int32_t *);
-int upsgi_sharedarea_write32(int, uint64_t, int32_t *);
-int upsgi_sharedarea_inc8(int, uint64_t, int8_t);
-int upsgi_sharedarea_inc16(int, uint64_t, int16_t);
-int upsgi_sharedarea_inc32(int, uint64_t, int32_t);
-int upsgi_sharedarea_inc64(int, uint64_t, int64_t);
-int upsgi_sharedarea_dec8(int, uint64_t, int8_t);
-int upsgi_sharedarea_dec16(int, uint64_t, int16_t);
-int upsgi_sharedarea_dec32(int, uint64_t, int32_t);
-int upsgi_sharedarea_dec64(int, uint64_t, int64_t);
-int upsgi_sharedarea_wait(int, int, int);
-int upsgi_sharedarea_unlock(int);
-int upsgi_sharedarea_rlock(int);
-int upsgi_sharedarea_wlock(int);
-int upsgi_sharedarea_update(int);
-
-struct upsgi_sharedarea *upsgi_sharedarea_get_by_id(int, uint64_t);
-int upsgi_websocket_send_from_sharedarea(struct wsgi_request *, int, uint64_t, uint64_t);
-int upsgi_websocket_send_binary_from_sharedarea(struct wsgi_request *, int, uint64_t, uint64_t);
 
 void upsgi_register_logchunks(void);
 
@@ -5143,10 +4783,6 @@ int upsgi_webdav_multistatus_propstat_close(struct upsgi_buffer *);
 int upsgi_webdav_multistatus_prop_new(struct upsgi_buffer *);
 int upsgi_webdav_multistatus_prop_close(struct upsgi_buffer *);
 
-struct upsgi_subscribe_node *(*upsgi_subscription_algo_get(char * , size_t))(struct upsgi_subscribe_slot *, struct upsgi_subscribe_node *, struct upsgi_subscription_client *);
-
-void upsgi_subscription_init_algos(void);
-void upsgi_register_subscription_algo(char *, struct upsgi_subscribe_node *(*) (struct upsgi_subscribe_slot *, struct upsgi_subscribe_node *, struct upsgi_subscription_client *));
 char *upsgi_subscription_algo_name(void *);
 
 int upsgi_wait_for_fs(char *, int);
@@ -5163,7 +4799,6 @@ int vassal_attr_get_multi(struct upsgi_instance *, char *, int (*)(struct upsgi_
 int upsgi_zeus_spawn_instance(struct upsgi_instance *);
 
 time_t upsgi_parse_http_date(char *, uint16_t);
-void upsgi_spooler_cheap_check(void);
 char* upsgi_getenv_with_default(const char* key);
 
 #define FCGI_BEGIN_REQUEST       1

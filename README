@@ -2,15 +2,15 @@ upsgi
 
 upsgi is a PSGI-first fork of the original upstream codebase.
 
-Project 1 keeps the proven C prefork server model for Perl/PSGI hosting while
-reducing the default product surface to what matters for real PSGI deployment.
-The fork keeps compatibility where that materially helps adoption, but it now
-presents a narrower, clearer public operator surface.
+It keeps the proven C prefork server model for Perl/PSGI hosting while reducing
+the default product surface to what matters for real PSGI deployment.
 
 Baseline fork direction
 - PSGI-first
 - HTTP-socket-first
 - logging-enabled by default
+- thunder lock enabled by default
+- body scheduler enabled by default
 - static-map kept as a baseline feature
 - compatibility-minded for existing PSGI deployments
 - YAML-first runtime configuration for new deployments
@@ -23,38 +23,38 @@ Default embedded plugins
 - rsyslog
 
 Recommended quickstart path
-- Run make to build ./upsgi.
-- Run ./upsgi --version to verify the public release version string.
-- Run ./upsgi --config examples/upsgi/baseline.yaml for the baseline example.
+- Run CPUCOUNT=1 python3 upsgiconfig.py --build default
+- Run ./upsgi --version
+- Run ./upsgi --config examples/upsgi/baseline.yaml for the baseline example
 - Run ./upsgi --config examples/upsgi/debug_exceptions.yaml for the explicit
-  exception-debugging example.
+  exception-debugging example
 - Start from examples/upsgi/upsgi.example.yaml for the full commented runtime
-  template.
+  template
 
-Supported argument families
-- docs/upsgi/SUPPORTED_ARGUMENTS.md - fuller categorized argument reference
-- docs/upsgi/OPTION_SURFACE.md - high-level map of baseline, advanced,
-  compatibility-only, and deferred surface areas
-- docs/upsgi/RUNTIME_CONFIG_POLICY.md - YAML-first runtime config policy
+Default runtime posture
+- thunder lock is enabled by default
+- body scheduler is enabled by default
+- logging queues remain enabled by default
+- W4 slow-reader handling remains protected
+- W5 static-serving improvements remain protected
 
-Major categories covered there include:
-- runtime config entry and app loading
-- listener and socket options
-- PSGI-specific options
-- logging options
-- worker and lifecycle options
-- memory, buffering, and reload controls
-- stats and observability options
-- compatibility-only parse/no-op options
+Disable knobs are available when direct comparison or troubleshooting is needed
+- --disable-thunder-lock
+- --disable-body-scheduler
+- --disable-log-queue
 
-Authoritative docs
+Documentation starting points
 - docs/upsgi/INDEX.md
 - docs/upsgi/QUICKSTART.md
-- docs/upsgi/MIGRATION.md
-- docs/upsgi/SUPPORTED_ARGUMENTS.md
-- docs/upsgi/OPTION_SURFACE.md
-- docs/upsgi/PACKAGING.md
-- docs/upsgi/REPO_LAYOUT.md
+- docs/upsgi/CONFIG_GUIDE.md
+- docs/upsgi/LOGGING.md
+- docs/upsgi/RUNTIME_DEFAULTS.md
+- docs/upsgi/THUNDER_LOCK.md
+- docs/upsgi/BODY_SCHEDULER.md
+- docs/upsgi/SUPPORT_BOUNDARY.md
+- docs/upsgi/ARGUMENT_REFERENCE.md
+- docs/upsgi/REMOVAL_SCOPE_SUMMARY.md
+- docs/performance/N1_ACCEPTED_RUNTIME_BASELINE.md
 
 Compatibility notes
 - http-modifier and related socket modifier flags remain accepted for migration
@@ -62,13 +62,7 @@ Compatibility notes
 - perl-no-die-catch remains accepted for migration compatibility only.
 - log-exceptions is the canonical flag for explicit PSGI exception logging
   during debugging.
+- psgi-enable-psgix-io enables optional raw-socket PSGIx.IO support.
 - New runtime examples should use ./upsgi --config path/to/file.yaml.
 - Older INI, YAML, XML, and JSON runtime configs still load through the
   inherited runtime config system.
-
-Implementation breadth versus public surface
-- The inherited parser surface is still much broader than the curated upsgi
-  public operator model.
-- The repo keeps indexed implementation inventory docs for that wider
-  shared-core breadth, but the supported public operator surface is the one
-  presented in SUPPORTED_ARGUMENTS.md and OPTION_SURFACE.md.

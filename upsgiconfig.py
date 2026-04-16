@@ -1,6 +1,6 @@
 # upsgi build system
 
-upsgi_version = '0.1.2'
+upsgi_version = '0.1.3'
 
 import os
 import re
@@ -745,21 +745,20 @@ class uConf(object):
         self.gcc_list = [
             'core/utils', 'core/protocol', 'core/socket', 'core/logging',
             'core/master', 'core/master_utils', 'core/emperor', 'core/notify',
-            'core/mule', 'core/subscription', 'core/stats', 'core/sendfile',
             'core/async', 'core/master_checks', 'core/fifo', 'core/offload',
-            'core/io', 'core/static', 'core/websockets', 'core/spooler',
             'core/snmp', 'core/exceptions', 'core/config', 'core/setup_utils',
             'core/clock', 'core/init', 'core/buffer', 'core/reader',
             'core/writer', 'core/alarm', 'core/cron', 'core/hooks',
             'core/plugins', 'core/lock', 'core/cache', 'core/daemons',
             'core/errors', 'core/hash', 'core/master_events', 'core/chunked',
-            'core/queue', 'core/event', 'core/signal', 'core/strings',
+            'core/event', 'core/signal', 'core/strings', 'core/io',
+            'core/static', 'core/sendfile', 'core/websockets', 'core/stats',
             'core/progress', 'core/timebomb', 'core/ini', 'core/fsmon',
             'core/mount', 'core/metrics', 'core/plugins_builder',
-            'core/sharedarea', 'core/fork_server', 'core/webdav', 'core/zeus',
+            'core/fork_server', 'core/webdav', 'core/zeus',
             'core/rpc', 'core/gateway', 'core/loop', 'core/cookie',
             'core/querystring', 'core/rb_timers', 'core/transformations',
-            'core/upsgi',
+            'core/body_scheduler', 'core/upsgi',
         ]
         # add protocols
         self.gcc_list.append('proto/base')
@@ -1382,14 +1381,12 @@ class uConf(object):
                     self.libs.append('-lssl')
                     self.libs.append('-lcrypto')
                     self.gcc_list.append('core/ssl')
-                    self.gcc_list.append('core/legion')
                     report['ssl'] = True
             else:
                 self.cflags.append("-DUPSGI_SSL")
                 self.libs.append('-lssl')
                 self.libs.append('-lcrypto')
                 self.gcc_list.append('core/ssl')
-                self.gcc_list.append('core/legion')
                 report['ssl'] = True
 
         if self.get('xml'):

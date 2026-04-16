@@ -262,10 +262,9 @@ XS(XS_input_read) {
 		XSRETURN_IV(rlen);
         }
 
-        // error ?
+        // read error
         if (rlen < 0) {
-		ST(0) = &PL_sv_undef;
-		XSRETURN(1);
+                Perl_croak(aTHX_ "psgi.input read error");
         }
 
 	ST(0) = &PL_sv_undef;
@@ -539,9 +538,9 @@ int init_psgi_app(struct wsgi_request *wsgi_req, char *app, uint16_t app_len, Pe
 			perl_eval_pv(local_lib_use, 1);
 			free(local_lib_use);
 		}
-		perl_eval_pv("use IO::Handle;", 1);
-		perl_eval_pv("use IO::File;", 1);
-		perl_eval_pv("use IO::Socket;", 1);
+		if (uperl.enable_psgix_io) {
+			perl_eval_pv("use IO::Socket;", 1);
+		}
 
 		if (uperl.argv_items || uperl.argv_item) {
 			AV *uperl_argv = GvAV(PL_argvgv);
@@ -629,6 +628,19 @@ clear2:
        	return -1; 
 }
 
+
+static SV **upsgi_psgi_build_cached_coderef_wrappers(CV **callbacks) {
+	int i = 0;
+	int slots = upsgi.threads > 1 ? upsgi.threads : 1;
+	SV **refs = upsgi_calloc(sizeof(SV *) * slots);
+	for (i = 0; i < slots; i++) {
+		if (callbacks && callbacks[i]) {
+			refs[i] = newRV((SV *) callbacks[i]);
+		}
+	}
+	return refs;
+}
+
 /* Register a loaded PSGI app with the shared upsgi app table. */
 int upsgi_perl_add_app(struct wsgi_request *wsgi_req, char *app_name, PerlInterpreter **interpreters, SV **callables, time_t now) {
 	int id = upsgi_apps_cnt;
@@ -655,6 +667,10 @@ int upsgi_perl_add_app(struct wsgi_request *wsgi_req, char *app_name, PerlInterp
         wi->responder0 = uperl.tmp_stream_responder;
         wi->responder1 = uperl.tmp_psgix_logger;
         wi->responder2 = uperl.tmp_psgix_informational;
+        wi->psgi_logger_refs = upsgi_psgi_build_cached_coderef_wrappers((CV **) wi->responder1);
+        wi->psgi_informational_refs = upsgi_psgi_build_cached_coderef_wrappers((CV **) wi->responder2);
+        wi->psgi_env_base_plain = upsgi_psgi_build_slot_env_bases((SV **) wi->psgi_logger_refs, NULL, 0);
+        wi->psgi_env_base_http11 = upsgi_psgi_build_slot_env_bases((SV **) wi->psgi_logger_refs, (SV **) wi->psgi_informational_refs, 1);
 
         upsgi_emulate_cow_for_apps(id);
 
@@ -702,24 +718,6 @@ void upsgi_psgi_app() {
 
 
 }
-
-/* Retained Perl mule support kept in v1 with the PSGI subtree. */
-int upsgi_perl_mule(char *opt) {
-
-        if (upsgi_endswith(opt, ".pl")) {
-                PERL_SET_CONTEXT(uperl.main[0]);
-                uperl.embedding[1] = opt;
-                if (perl_parse(uperl.main[0], xs_init, 3, uperl.embedding, NULL)) {
-                        return 0;
-                }
-                perl_run(uperl.main[0]);
-                return 1;
-        }
-
-        return 0;
-
-}
-
 
 /* Shared helper for executing retained Perl support scripts. */
 void upsgi_perl_exec(char *filename) {

@@ -1,0 +1,70 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/R/common/receiver_app.psgi",
+      "tests/fork/perf/assets/R/common/generate_payloads.py",
+      "tests/fork/perf/assets/R/common/receiver_client.py",
+      "tests/fork/perf/assets/R/R1/r1_matrix.json",
+      "tests/fork/perf/assets/R/R1/run_r1_smoke.sh"
+    ]
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "accept fairness"
+      ],
+      "source": "HAProxy"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "R1",
+  "lane": "R",
+  "notes": [
+    "Blocked on receiver PSGI app bundle and valid payload corpus.",
+    "See tests/fork/perf/assets/R/README.md.",
+    "Repo-local receiver asset pack is packaged."
+  ],
+  "parameters": {
+    "measurement_focus": [
+      "posts per second",
+      "p95 response time",
+      "RSS",
+      "append latency"
+    ]
+  },
+  "phase": "P1",
+  "purpose": "Establish a clean baseline for the receiver path.",
+  "questions": [
+    "Is the receiver path accept-limited, body-limited, or append-limited at baseline?"
+  ],
+  "schema_version": "1",
+  "status": "asset_packaged",
+  "title": "Steady small ingest",
+  "traffic_shape": {
+    "method": "POST",
+    "path": "/push",
+    "payload_sizes_bytes": [
+      8192,
+      32768,
+      65536
+    ],
+    "senders": [
+      50,
+      200,
+      1000
+    ]
+  }
+}

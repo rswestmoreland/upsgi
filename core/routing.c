@@ -1666,15 +1666,6 @@ static int upsgi_route_condition_lowerequal(struct wsgi_request *wsgi_req, struc
         return 0;
 }
 
-#ifdef UPSGI_SSL
-static int upsgi_route_condition_lord(struct wsgi_request *wsgi_req, struct upsgi_route *ur) {
-	struct upsgi_buffer *ub = upsgi_routing_translate(wsgi_req, ur, NULL, 0, ur->subject_str, ur->subject_str_len);
-        if (!ub) return -1;
-        int ret = upsgi_legion_i_am_the_lord(ub->buf);
-        upsgi_buffer_destroy(ub);
-        return ret;
-}
-#endif
 
 
 
@@ -2110,9 +2101,6 @@ void upsgi_register_embedded_routers() {
         upsgi_register_route_condition("contain", upsgi_route_condition_contains);
         upsgi_register_route_condition("ipv4in", upsgi_route_condition_ipv4in);
         upsgi_register_route_condition("ipv6in", upsgi_route_condition_ipv6in);
-#ifdef UPSGI_SSL
-        upsgi_register_route_condition("lord", upsgi_route_condition_lord);
-#endif
 
         upsgi_register_route_condition("empty", upsgi_route_condition_empty);
 

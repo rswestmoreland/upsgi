@@ -215,45 +215,6 @@ int upsgi_master_manage_events(int interesting_fd) {
 		return 0;
 	}
 
-	// check for spooler signal
-	if (upsgi.spoolers) {
-		if (interesting_fd == upsgi.shared->spooler_signal_pipe[0]) {
-			ssize_t rlen = read(interesting_fd, &upsgi_signal, 1);
-			if (rlen < 0) {
-				upsgi_error("upsgi_master_manage_events()/read()");
-			}
-			else if (rlen > 0) {
-				upsgi_route_signal(upsgi_signal);
-			}
-			else {
-				// TODO restart spoolers here
-				upsgi_log_verbose("lost connection with spoolers\n");
-				close(interesting_fd);
-			}
-			return 0;
-		}
-
-	}
-
-	// check for mules signal
-	if (upsgi.mules_cnt > 0) {
-		if (interesting_fd == upsgi.shared->mule_signal_pipe[0]) {
-			ssize_t rlen = read(interesting_fd, &upsgi_signal, 1);
-			if (rlen < 0) {
-				upsgi_error("upsgi_master_manage_events()/read()");
-			}
-			else if (rlen > 0) {
-				upsgi_route_signal(upsgi_signal);
-			}
-			else {
-				// TODO respawn mules here
-				upsgi_log_verbose("lost connection with mules\n");
-				close(interesting_fd);
-			}
-			// return 0;
-		}
-
-	}
 
 	return 0;
 

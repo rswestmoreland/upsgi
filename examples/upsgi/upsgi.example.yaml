@@ -1,101 +1,28 @@
-# Canonical upsgi runtime config template.
-#
-# This file is intentionally YAML-first and grouped by operator concern.
-# Un-commented values form the repository's recommended baseline for a small,
-# reverse-proxy-fronted PSGI deployment. Many advanced settings stay commented
-# out until an operator chooses to set them explicitly.
-#
-# Launch with:
-#   ./upsgi --config examples/upsgi/upsgi.example.yaml
-#
-# Multi-format runtime compatibility remains available. Older INI, XML, JSON,
-# and explicit loader flags still parse where the inherited runtime supports them.
-
 upsgi:
-  # Core process model.
-  master: true                 # Run the master process.
-  workers: 2                   # Start two worker processes.
-  need-app: true               # Refuse to boot if the PSGI app does not load.
-  strict: true                 # Reject unknown options instead of ignoring them.
-  vacuum: true                 # Clean sockets, pidfiles, and fifos on shutdown.
-  die-on-term: true            # Treat SIGTERM as a clean stop request.
+  master: true
+  workers: 2
+  need-app: true
+  strict: true
+  vacuum: true
+  die-on-term: true
+  http-socket: 127.0.0.1:9090
+  psgi: /srv/upsgi/app.psgi
+  logto: /var/log/upsgi/app.log
+  static-map: /static=/srv/upsgi/static
 
-  # Basic app loading.
-  psgi: examples/upsgi/app.psgi
-  # chdir: /srv/upsgi/myapp    # Change to the app directory before loading.
-  # uid: upsgi                 # Drop privileges to this user after bind.
-  # gid: upsgi                 # Drop privileges to this group after bind.
-  # pidfile: /run/upsgi/app.pid
-  # env:
-  #   - PLACK_ENV=production   # Export environment variables before app load.
-  #   - APP_ENV=production
-  # perl-local-lib: /srv/upsgi/myapp/local
-  # perl-arg:
-  #   - --my-app-flag
-  # psgi-enable-psgix-io: true # Enable PSGIx.IO support when the app expects it.
-  # log-exceptions: true       # Enable Perl exception logging for debugging.
+  # Reverse-proxy options
+  # enable-proxy-protocol: false
+  # log-x-forwarded-for: true
 
-  # Listener shape.
-  http-socket: 127.0.0.1:9090  # Bind HTTP directly for a reverse proxy.
-  # stats: 127.0.0.1:9191      # Enable the stats server on a private address.
-  # stats-http: true           # Prefix stats output with HTTP headers.
-  # stats-minified: true       # Produce smaller stats JSON.
-  # so-keepalive: true         # Request TCP keepalive on inherited sockets.
-  # thunder-lock: true         # Preferred for shared inherited listeners.
+  # PSGI / Perl options
+  # log-exceptions: false
+  # psgi-enable-psgix-io: false
 
-  # Static files.
-  static-map: /assets=examples/upsgi/public
-  # static-map:
-  #   - /assets=/srv/upsgi/myapp/public
-  #   - /favicon.ico=/srv/upsgi/myapp/public/favicon.ico
+  # Default-on troubleshooting toggles
+  # disable-thunder-lock: true
+  # disable-body-scheduler: true
+  # disable-log-queue: true
 
-  # Logging.
-  logto: ./upsgi.log           # Write logs to a file.
-  log-x-forwarded-for: true    # Log the forwarded client address when trusted.
-  # logger:
-  #   - rsyslog:127.0.0.1:514  # Additional logger backends remain available.
-  #   - socket:/run/upsgi/log.sock
-  # log-drain-burst: 64        # Bound log drain work per wake under burst load.
-
-  # Request and body buffering.
-  # buffer-size: 65535         # Raise only if you need larger headers.
-  # post-buffering: 1048576    # Spill request bodies larger than this threshold.
-  # post-buffering-bufsize: 65536
-
-  # Worker lifecycle and safety.
-  # max-requests: 5000         # Recycle workers after N requests.
-  # harakiri: 60               # Kill requests that run longer than N seconds.
-  # reload-on-rss: 512         # Recycle a worker above this RSS limit in MB.
-  # limit-as: 1024             # Per-worker address-space limit in MB.
-  # reload-mercy: 8            # Master grace period during reload/shutdown.
-  # worker-reload-mercy: 8     # Worker grace period during reload/shutdown.
-  # touch-chain-reload: /run/upsgi/app.reload
-  # chain-reload-delay: 250    # Delay in milliseconds between worker restarts.
-  # master-fifo: /run/upsgi/master.fifo
-
-  # Adaptive worker controls.
-  # cheaper: 2                 # Keep at least this many workers in cheaper mode.
-  # cheaper-initial: 2         # Spawn this many workers at startup in cheaper mode.
-  # cheaper-step: 1            # Add this many workers per overload cycle.
-  # cheaper-overload: 2        # Overload threshold for spawning more workers.
-  # cheaper-idle: 10           # Idle cycles before shrinking the worker pool.
-  # cheaper-rss-limit-soft: 2048
-  # cheaper-rss-limit-hard: 3072
-
-  # Advanced startup or maintenance hooks.
-  # perl-exec:
-  #   - script/bootstrap.pl    # Run before fork().
-  # perl-exec-post-fork:
-  #   - script/postfork.pl     # Run after each worker forks.
-  # perl-auto-reload: 2        # Poll Perl includes every N seconds in development.
-  # perl-auto-reload-ignore:
-  #   - local/lib/perl5/Some/Stable/Module.pm
-
-  # Compatibility-only parse/accept options.
-  # These still parse for migration compatibility but do not change runtime
-  # behavior in the PSGI-only fork.
-  # http-modifier1: 5
-  # http-modifier2: 0
-  # http-socket-modifier1: 5
-  # http-socket-modifier2: 0
-  # perl-no-die-catch: true
+  # Logging queue sizing
+  # log-queue-records: 512
+  # log-queue-bytes: 524288

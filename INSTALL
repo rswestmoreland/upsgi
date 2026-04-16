@@ -1,8 +1,10 @@
 upsgi install/build notes
 
-This file is the minimal top-level build note for the maintained fork.
-
 Quick local build
+- CPUCOUNT=1 python3 upsgiconfig.py --build default
+- ./upsgi --version
+
+Alternative local build path when your environment already matches the default build profile closely
 - make
 - ./upsgi --version
 
@@ -14,6 +16,13 @@ Quick local validation
 Authoritative docs
 - docs/upsgi/INDEX.md
 - docs/upsgi/QUICKSTART.md
+- docs/upsgi/CONFIG_GUIDE.md
+- docs/upsgi/ARGUMENT_REFERENCE.md
+- docs/upsgi/LOGGING.md
+- docs/upsgi/HARDENING.md
 - docs/upsgi/MIGRATION.md
 - docs/upsgi/PACKAGING.md
 - docs/upsgi/REPO_LAYOUT.md
+- docs/upsgi/KNOWN_LIMITATIONS.md
+- docs/upsgi/RELEASE_CHECKLIST.md
+- docs/upsgi/REMOVAL_SCOPE_SUMMARY.md

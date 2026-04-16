@@ -56,28 +56,6 @@ void upsgi_alarm_func_cmd(struct upsgi_alarm_instance *uai, char *msg, size_t le
 	close(pipe[1]);
 }
 
-// pass the log line to a mule
-
-void upsgi_alarm_init_mule(struct upsgi_alarm_instance *uai) {
-	uai->data32 = atoi(uai->arg);
-	if (uai->data32 > (uint32_t) upsgi.mules_cnt) {
-		upsgi_log_alarm("] invalid mule_id (%d mules available), fallback to 0\n", upsgi.mules_cnt);
-		uai->data32 = 0;
-	}
-}
-
-void upsgi_alarm_func_mule(struct upsgi_alarm_instance *uai, char *msg, size_t len) {
-	// skip if mules are not available
-	if (upsgi.mules_cnt == 0)
-		return;
-	int fd = upsgi.shared->mule_queue_pipe[0];
-	if (uai->data32 > 0) {
-		int mule_id = uai->data32 - 1;
-		fd = upsgi.mules[mule_id].queue_pipe[0];
-	}
-	mule_send_msg(fd, msg, len);
-}
-
 
 // register a new alarm
 void upsgi_register_alarm(char *name, void (*init) (struct upsgi_alarm_instance *), void (*func) (struct upsgi_alarm_instance *, char *, size_t)) {
@@ -108,7 +86,6 @@ void upsgi_register_alarm(char *name, void (*init) (struct upsgi_alarm_instance 
 void upsgi_register_embedded_alarms() {
 	upsgi_register_alarm("signal", upsgi_alarm_init_signal, upsgi_alarm_func_signal);
 	upsgi_register_alarm("cmd", upsgi_alarm_init_cmd, upsgi_alarm_func_cmd);
-	upsgi_register_alarm("mule", upsgi_alarm_init_mule, upsgi_alarm_func_mule);
 	upsgi_register_alarm("log", upsgi_alarm_init_log, upsgi_alarm_func_log);
 }
 
@@ -418,7 +395,7 @@ void upsgi_alarm_run(struct upsgi_alarm_instance *uai, char *msg, size_t len) {
 	uai->last_msg_size = len;
 }
 
-// this is the api function workers,mules and whatever you want can call from code
+// this is the api function workers and other runtime paths can call from code
 void upsgi_alarm_trigger(char *alarm_instance_name, char *msg, size_t len) {
 	if (!upsgi.alarm_thread) return;
 	if (len > upsgi.alarm_msg_size) return;

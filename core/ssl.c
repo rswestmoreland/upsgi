@@ -132,7 +132,7 @@ static int upsgi_sni_cb(SSL *ssl, int *ad, void *arg) {
                 	}
                 	usl = usl->next;
         	}
-		if (!upsgi.subscription_dotsplit) break;
+		break;
 		char *next = memchr(servername+1, '.', servername_len-1);
 		if (next) {
 			servername_len -= next - servername;
@@ -142,8 +142,6 @@ static int upsgi_sni_cb(SSL *ssl, int *ad, void *arg) {
 		}
 		break;
 	}
-
-	if (upsgi.subscription_dotsplit) goto end;
 
 #if defined(UPSGI_PCRE) || defined(UPSGI_PCRE2)
         struct upsgi_regexp_list *url = upsgi.sni_regexp;
@@ -527,13 +525,6 @@ clear:
 }
 
 char *upsgi_sanitize_cert_filename(char *base, char *key, uint16_t keylen) {
-	// stop at the first slash if mountpoints are involved
-	if (upsgi.subscription_mountpoints) {
-		char *slash = memchr(key, '/', keylen);
-		if (slash) {
-			keylen = slash - key;
-		}
-	}
         uint16_t i;
         char *filename = upsgi_concat4n(base, strlen(base), "/", 1, key, keylen, ".pem\0", 5);
 

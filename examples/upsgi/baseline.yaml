@@ -5,8 +5,8 @@ upsgi:
   strict: true
   vacuum: true
   die-on-term: true
-  http-socket: :9090
-  psgi: examples/upsgi/app.psgi
-  static-map: /assets=examples/upsgi/public
-  logto: ./upsgi.log
+  http-socket: 127.0.0.1:9090
+  psgi: examples/psgi/hello.psgi
+  logto: /tmp/upsgi-baseline.log
+  static-map: /assets=tests/fork/fixtures/static
   log-x-forwarded-for: true

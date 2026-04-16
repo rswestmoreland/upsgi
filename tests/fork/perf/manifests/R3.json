@@ -1,0 +1,78 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/R/R3/r3_matrix.json",
+      "tests/fork/perf/assets/R/R3/run_r3_measured.sh",
+      "tests/fork/perf/assets/R/R3/run_r3_smoke.sh",
+      "tests/fork/perf/assets/R/common/generate_payloads.py",
+      "tests/fork/perf/assets/R/common/receiver_app.psgi",
+      "tests/fork/perf/assets/R/common/receiver_bench_ab.py",
+      "tests/fork/perf/assets/R/common/receiver_client.py"
+    ]
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "buffering discipline"
+      ],
+      "source": "nginx"
+    },
+    {
+      "ideas": [
+        "body limits"
+      ],
+      "source": "H2O"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "R3",
+  "lane": "R",
+  "notes": [
+    "Blocked on receiver PSGI app bundle and large-body corpus.",
+    "See tests/fork/perf/assets/R/README.md.",
+    "Repo-local receiver asset pack is packaged.",
+    "Repo-local R3 measured runner added with conservative size-scaled concurrency across the declared large-body matrix."
+  ],
+  "parameters": {
+    "measurement_focus": [
+      "per-request memory amplification",
+      "disk spill behavior",
+      "tail latency",
+      "failure modes"
+    ]
+  },
+  "phase": "P3",
+  "purpose": "Find body-size breakpoints where the server degrades sharply.",
+  "questions": [
+    "Where is the safe operating envelope for large bodies?",
+    "Which limits should become defaults or guidance?"
+  ],
+  "schema_version": "1",
+  "status": "asset_packaged",
+  "title": "Large body matrix",
+  "traffic_shape": {
+    "payload_sizes_bytes": [
+      262144,
+      1048576,
+      4194304,
+      16777216
+    ],
+    "variants": [
+      "compressed",
+      "uncompressed"
+    ]
+  }
+}

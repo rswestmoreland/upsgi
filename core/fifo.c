@@ -37,17 +37,6 @@ static void upsgi_fifo_set_slot_seven(int signum) { upsgi.master_fifo_slot = 7; 
 static void upsgi_fifo_set_slot_eight(int signum) { upsgi.master_fifo_slot = 8; announce_fifo; }
 static void upsgi_fifo_set_slot_nine(int signum) { upsgi.master_fifo_slot = 9; announce_fifo; }
 
-static void subscriptions_blocker(int signum) {
-	if (upsgi.subscriptions_blocked) {
-		upsgi_log_verbose("subscriptions re-enabled\n");
-		upsgi.subscriptions_blocked = 0;
-	}
-	else {
-		upsgi.subscriptions_blocked = 1;
-		upsgi_log_verbose("subscriptions blocked\n");
-	}
-}
-
 static void emperor_rescan(int signum) {
 	if (upsgi.emperor_pid > 0) {
 		if (kill(upsgi.emperor_pid, SIGWINCH)) {
@@ -94,7 +83,6 @@ void upsgi_master_fifo_prepare() {
 	upsgi_fifo_table['r'] = grace_them_all;
 	upsgi_fifo_table['R'] = reap_them_all;
 	upsgi_fifo_table['s'] = stats;
-	upsgi_fifo_table['S'] = subscriptions_blocker;
 	upsgi_fifo_table['w'] = (void (*)(int))upsgi_reload_workers;
 	upsgi_fifo_table['W'] = (void (*)(int))upsgi_brutally_reload_workers;
 

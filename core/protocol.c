@@ -470,6 +470,9 @@ static int upsgi_proto_check_14(struct wsgi_request *wsgi_req, char *key, char *
 		}
 		wsgi_req->post_cl = parsed_content_length;
 		wsgi_req->has_content_length = 1;
+		if (wsgi_req->post_cl > 0) {
+			upsgi_body_sched_note_request(wsgi_req);
+		}
 		if (upsgi.limit_post) {
 			if (wsgi_req->post_cl > upsgi.limit_post) {
 				upsgi_log("Invalid (too big) CONTENT_LENGTH. skip.\n");
@@ -509,12 +512,6 @@ static int upsgi_proto_check_15(struct wsgi_request *wsgi_req, char *key, char *
 	if (!upsgi_proto_key("HTTP_USER_AGENT", 15)) {
 		wsgi_req->user_agent = buf;
 		wsgi_req->user_agent_len = len;
-		return 0;
-	}
-
-	if (upsgi.caches && !upsgi_proto_key("UPSGI_CACHE_GET", 15)) {
-		wsgi_req->cache_get = buf;
-		wsgi_req->cache_get_len = len;
 		return 0;
 	}
 
@@ -591,6 +588,7 @@ static int upsgi_proto_check_22(struct wsgi_request *wsgi_req, char *key, char *
 				return -1;
 			}
                 	wsgi_req->body_is_chunked = 1;
+			upsgi_body_sched_note_request(wsgi_req);
 		}
 	}
 
@@ -761,28 +759,6 @@ next:
 		}
 	}
 
-
-	// check if data are available in the local cache
-	if (wsgi_req->cache_get_len > 0) {
-		uint64_t cache_value_size;
-		char *cache_value = upsgi_cache_magic_get(wsgi_req->cache_get, wsgi_req->cache_get_len, &cache_value_size, NULL, NULL);
-		if (cache_value && cache_value_size > 0) {
-			upsgi_response_write_body_do(wsgi_req, cache_value, cache_value_size);
-			free(cache_value);
-			return -1;
-		}
-	}
-
-	if (upsgi.check_cache && wsgi_req->uri_len && wsgi_req->method_len == 3 && wsgi_req->method[0] == 'G' && wsgi_req->method[1] == 'E' && wsgi_req->method[2] == 'T') {
-
-		uint64_t cache_value_size;
-		char *cache_value = upsgi_cache_magic_get(wsgi_req->uri, wsgi_req->uri_len, &cache_value_size, NULL, NULL);
-		if (cache_value && cache_value_size > 0) {
-			upsgi_response_write_body_do(wsgi_req, cache_value, cache_value_size);
-			free(cache_value);
-			return -1;
-		}
-	}
 
 	if (upsgi.manage_script_name) {
 		if (upsgi_apps_cnt > 0 && wsgi_req->path_info_len >= 1 && wsgi_req->path_info_pos != -1) {
@@ -984,15 +960,14 @@ nextsm2:
 	 */
 	// finally check for docroot
 	if (upsgi.check_static_docroot && wsgi_req->document_root_len > 0) {
-		char *real_docroot = upsgi_expand_path(wsgi_req->document_root, wsgi_req->document_root_len, NULL);
-		if (!real_docroot) {
+		char real_docroot[PATH_MAX + 1];
+		upsgi.workers[upsgi.mywid].cores[wsgi_req->async_id].static_realpath_calls++;
+		if (!upsgi_expand_path(wsgi_req->document_root, wsgi_req->document_root_len, real_docroot)) {
 			return -1;
 		}
 		if (!upsgi_file_serve(wsgi_req, real_docroot, strlen(real_docroot), wsgi_req->path_info, wsgi_req->path_info_len, 0)) {
-			free(real_docroot);
 			return -1;
 		}
-		free(real_docroot);
 	}
 
 	return 0;

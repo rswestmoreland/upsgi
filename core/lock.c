@@ -2,6 +2,15 @@
 
 extern struct upsgi_server upsgi;
 
+#define UPSGI_LOCK_ITEM_ENGINE_DEFAULT 0
+#define UPSGI_LOCK_ITEM_ENGINE_FDLOCK 1
+
+static void upsgi_set_thunder_lock_backend_state(int backend, char *reason, int has_owner_dead_recovery) {
+	upsgi.thunder_lock_backend = backend;
+	upsgi.thunder_lock_backend_reason = reason;
+	upsgi.thunder_lock_backend_has_owner_dead_recovery = has_owner_dead_recovery;
+}
+
 static struct upsgi_lock_item *upsgi_register_lock(char *id, int rw) {
 
 	struct upsgi_lock_item *uli = upsgi.registered_locks;
@@ -9,6 +18,7 @@ static struct upsgi_lock_item *upsgi_register_lock(char *id, int rw) {
 		upsgi.registered_locks = upsgi_malloc_shared(sizeof(struct upsgi_lock_item));
 		upsgi.registered_locks->id = id;
 		upsgi.registered_locks->pid = 0;
+		upsgi.registered_locks->lock_engine = 0;
 		if (rw) {
 			upsgi.registered_locks->lock_ptr = upsgi_malloc_shared(upsgi.rwlock_size);
 		}
@@ -31,6 +41,7 @@ static struct upsgi_lock_item *upsgi_register_lock(char *id, int rw) {
 			}
 			uli->next->id = id;
 			uli->next->pid = 0;
+			uli->next->lock_engine = 0;
 			uli->next->rw = rw;
 			uli->next->next = NULL;
 			return uli->next;
@@ -41,6 +52,15 @@ static struct upsgi_lock_item *upsgi_register_lock(char *id, int rw) {
 	upsgi_log("*** DANGER: unable to allocate lock %s ***\n", id);
 	exit(1);
 
+}
+
+static void upsgi_mutex_fatal(const char *op, struct upsgi_lock_item *uli, int ret) {
+	const char *lock_id = "unknown";
+	if (uli && uli->id) {
+		lock_id = uli->id;
+	}
+	upsgi_log("mutex %s failed for lock %s: %s\n", op, lock_id, strerror(ret));
+	exit(1);
 }
 
 #ifdef UPSGI_LOCK_USE_MUTEX
@@ -141,10 +161,34 @@ retry:
 }
 
 pid_t upsgi_lock_fast_check(struct upsgi_lock_item * uli) {
+	if (uli->lock_engine == UPSGI_LOCK_ITEM_ENGINE_FDLOCK) {
+		return upsgi_lock_fd_check(uli);
+	}
 
-	if (pthread_mutex_trylock((pthread_mutex_t *) uli->lock_ptr) == 0) {
-		pthread_mutex_unlock((pthread_mutex_t *) uli->lock_ptr);
+	int ret = pthread_mutex_trylock((pthread_mutex_t *) uli->lock_ptr);
+	if (ret == 0) {
+		ret = pthread_mutex_unlock((pthread_mutex_t *) uli->lock_ptr);
+		if (ret != 0) {
+			upsgi_mutex_fatal("unlock", uli, ret);
+		}
 		return 0;
+	}
+#ifdef EOWNERDEAD
+	if (ret == EOWNERDEAD) {
+		upsgi_log("[deadlock-detector] a process holding a robust mutex died during lock check. recovering...\n");
+		pthread_mutex_consistent((pthread_mutex_t *) uli->lock_ptr);
+		ret = pthread_mutex_unlock((pthread_mutex_t *) uli->lock_ptr);
+		if (ret != 0) {
+			upsgi_mutex_fatal("unlock", uli, ret);
+		}
+		return 0;
+	}
+	if (ret == ENOTRECOVERABLE) {
+		upsgi_mutex_fatal("trylock", uli, ret);
+	}
+#endif
+	if (ret != EBUSY) {
+		upsgi_mutex_fatal("trylock", uli, ret);
 	}
 	return uli->pid;
 }
@@ -164,21 +208,41 @@ pid_t upsgi_rwlock_fast_check(struct upsgi_lock_item * uli) {
 
 
 void upsgi_lock_fast(struct upsgi_lock_item *uli) {
+	if (uli->lock_engine == UPSGI_LOCK_ITEM_ENGINE_FDLOCK) {
+		upsgi_lock_fd(uli);
+		return;
+	}
 
+	int ret = pthread_mutex_lock((pthread_mutex_t *) uli->lock_ptr);
 #ifdef EOWNERDEAD
-	if (pthread_mutex_lock((pthread_mutex_t *) uli->lock_ptr) == EOWNERDEAD) {
+	if (ret == EOWNERDEAD) {
 		upsgi_log("[deadlock-detector] a process holding a robust mutex died. recovering...\n");
 		pthread_mutex_consistent((pthread_mutex_t *) uli->lock_ptr);
 	}
+	else if (ret == ENOTRECOVERABLE) {
+		upsgi_mutex_fatal("lock", uli, ret);
+	}
+	else if (ret != 0) {
+		upsgi_mutex_fatal("lock", uli, ret);
+	}
 #else
-	pthread_mutex_lock((pthread_mutex_t *) uli->lock_ptr);
+	if (ret != 0) {
+		upsgi_mutex_fatal("lock", uli, ret);
+	}
 #endif
 	uli->pid = upsgi.mypid;
 }
 
 void upsgi_unlock_fast(struct upsgi_lock_item *uli) {
+	if (uli->lock_engine == UPSGI_LOCK_ITEM_ENGINE_FDLOCK) {
+		upsgi_unlock_fd(uli);
+		return;
+	}
 
-	pthread_mutex_unlock((pthread_mutex_t *) uli->lock_ptr);
+	int ret = pthread_mutex_unlock((pthread_mutex_t *) uli->lock_ptr);
+	if (ret != 0) {
+		upsgi_mutex_fatal("unlock", uli, ret);
+	}
 	uli->pid = 0;
 
 }
@@ -660,29 +724,110 @@ pid_t upsgi_rwlock_ipcsem_check(struct upsgi_lock_item *uli) {
 	return upsgi_lock_ipcsem_check(uli);
 }
 
+static int upsgi_lock_fd_get(struct upsgi_lock_item *uli) {
+	int fd = -1;
+	memcpy(&fd, uli->lock_ptr, sizeof(int));
+	return fd;
+}
+
+struct upsgi_lock_item *upsgi_lock_fd_init(char *id) {
+	struct upsgi_lock_item *uli = upsgi_register_lock(id, 0);
+	int fd = upsgi_tmpfd();
+	if (fd < 0) {
+		upsgi_error("upsgi_lock_fd_init()/upsgi_tmpfd()");
+		exit(1);
+	}
+	memcpy(uli->lock_ptr, &fd, sizeof(int));
+	uli->lock_engine = UPSGI_LOCK_ITEM_ENGINE_FDLOCK;
+	uli->can_deadlock = 0;
+	return uli;
+}
+
+pid_t upsgi_lock_fd_check(struct upsgi_lock_item *uli) {
+	int fd = upsgi_lock_fd_get(uli);
+	struct flock fl;
+	memset(&fl, 0, sizeof(fl));
+	fl.l_type = F_WRLCK;
+	fl.l_whence = SEEK_SET;
+	fl.l_start = 0;
+	fl.l_len = 0;
+	if (fcntl(fd, F_SETLK, &fl) == 0) {
+		fl.l_type = F_UNLCK;
+		if (fcntl(fd, F_SETLK, &fl) < 0) {
+			upsgi_error("upsgi_lock_fd_check()/fcntl(F_UNLCK)");
+			exit(1);
+		}
+		return 0;
+	}
+	if (errno == EACCES || errno == EAGAIN) {
+		return 1;
+	}
+	upsgi_error("upsgi_lock_fd_check()/fcntl(F_SETLK)");
+	exit(1);
+}
+
+void upsgi_lock_fd(struct upsgi_lock_item *uli) {
+	int fd = upsgi_lock_fd_get(uli);
+	struct flock fl;
+	memset(&fl, 0, sizeof(fl));
+	fl.l_type = F_WRLCK;
+	fl.l_whence = SEEK_SET;
+	fl.l_start = 0;
+	fl.l_len = 0;
+retry:
+	if (fcntl(fd, F_SETLKW, &fl) < 0) {
+		if (errno == EINTR) goto retry;
+		upsgi_error("upsgi_lock_fd()/fcntl(F_SETLKW)");
+		exit(1);
+	}
+	uli->pid = upsgi.mypid;
+}
+
+void upsgi_unlock_fd(struct upsgi_lock_item *uli) {
+	int fd = upsgi_lock_fd_get(uli);
+	struct flock fl;
+	memset(&fl, 0, sizeof(fl));
+	fl.l_type = F_UNLCK;
+	fl.l_whence = SEEK_SET;
+	fl.l_start = 0;
+	fl.l_len = 0;
+retry:
+	if (fcntl(fd, F_SETLKW, &fl) < 0) {
+		if (errno == EINTR) goto retry;
+		upsgi_error("upsgi_unlock_fd()/fcntl(F_SETLKW)");
+		exit(1);
+	}
+	uli->pid = 0;
+}
+
 /*
 	Unbit-specific workaround for robust-mutexes
 */
-void *upsgi_robust_mutexes_watchdog_loop(void *arg) {
-	for(;;) {
-		upsgi_lock(upsgi.the_thunder_lock);
-		upsgi_unlock(upsgi.the_thunder_lock);
-		sleep(1);
-	}
-	return NULL;
-}
 void upsgi_robust_mutexes_watchdog() {
-	pthread_t tid;
-	pthread_attr_t attr;
-	pthread_attr_init(&attr);
-        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-        // 32K should be more than enough...
-        pthread_attr_setstacksize(&attr, 32 * 1024);
+	upsgi_log_initial("thunder lock watchdog diagnostics are enabled; no watchdog recovery thread is spawned\n");
+}
 
-        if (pthread_create(&tid, &attr, upsgi_robust_mutexes_watchdog_loop, NULL)) {
-                upsgi_error("upsgi_robust_mutexes_watchdog()/pthread_create()");
-		exit(1);
-        }
+static struct upsgi_lock_item *upsgi_thunder_lock_init(char *id) {
+	if (upsgi.thunder_lock_backend_request) {
+		if (!strcmp(upsgi.thunder_lock_backend_request, "auto")) {
+			/* keep default selection logic below */
+		}
+		else if (!strcmp(upsgi.thunder_lock_backend_request, "fdlock")) {
+			upsgi_set_thunder_lock_backend_state(UPSGI_THUNDER_LOCK_BACKEND_FDLOCK, "selected via --thunder-lock-backend=fdlock", 0);
+			return upsgi_lock_fd_init(id);
+		}
+		else {
+			upsgi_log("unsupported thunder-lock backend \"%s\" (supported: auto, fdlock)\n", upsgi.thunder_lock_backend_request);
+			exit(1);
+		}
+	}
+
+	if (upsgi.thunder_lock_backend == UPSGI_THUNDER_LOCK_BACKEND_PTHREAD_PLAIN) {
+		upsgi_set_thunder_lock_backend_state(UPSGI_THUNDER_LOCK_BACKEND_FDLOCK, "plain pthread mode has no owner-death recovery; using fd-lock compatibility backend", 0);
+		return upsgi_lock_fd_init(id);
+	}
+
+	return upsgi_lock_init(id);
 }
 
 void upsgi_setup_locking() {
@@ -691,10 +836,13 @@ void upsgi_setup_locking() {
 
 	if (upsgi.locking_setup) return;
 
+	upsgi_set_thunder_lock_backend_state(UPSGI_THUNDER_LOCK_BACKEND_NONE, NULL, 0);
+
 	// use the fastest available locking
 	if (upsgi.lock_engine) {
 		if (!strcmp(upsgi.lock_engine, "ipcsem")) {
 			upsgi_log_initial("lock engine: ipcsem\n");
+			upsgi_set_thunder_lock_backend_state(UPSGI_THUNDER_LOCK_BACKEND_IPCSEM, "selected via generic lock engine override", 0);
 			atexit(upsgi_ipcsem_clear);
 			upsgi.lock_ops.lock_init = upsgi_lock_ipcsem_init;
 			upsgi.lock_ops.lock_check = upsgi_lock_ipcsem_check;
@@ -729,6 +877,17 @@ void upsgi_setup_locking() {
 	upsgi.lock_size = UPSGI_LOCK_SIZE;
 	upsgi.rwlock_size = UPSGI_RWLOCK_SIZE;
 
+#ifdef EOWNERDEAD
+	if (upsgi_pthread_robust_mutexes_enabled) {
+		upsgi_set_thunder_lock_backend_state(UPSGI_THUNDER_LOCK_BACKEND_PTHREAD_ROBUST, "robust pthread mutex path active", 1);
+	}
+	else {
+		upsgi_set_thunder_lock_backend_state(UPSGI_THUNDER_LOCK_BACKEND_PTHREAD_PLAIN, "robust pthread mutexes unavailable before thunder-lock-specific fallback selection", 0);
+	}
+#else
+	upsgi_set_thunder_lock_backend_state(UPSGI_THUNDER_LOCK_BACKEND_PTHREAD_PLAIN, "robust pthread mutexes unavailable in this build before thunder-lock-specific fallback selection", 0);
+#endif
+
 ready:
 	// application generic lock
 	upsgi.user_lock = upsgi_malloc(sizeof(void *) * (upsgi.locks + 1));
@@ -762,27 +921,15 @@ ready:
 
 	if (upsgi.use_thunder_lock) {
 		// process shared thunder lock
-		upsgi.the_thunder_lock = upsgi_lock_init("thunder");	
+		upsgi.the_thunder_lock = upsgi_thunder_lock_init("thunder");
 		if (upsgi.use_thunder_lock_watchdog) {
-			// there is a bug on older libc where, when all of the workers die
-			// in the same moment, the pthread robust mutex is left in an
-			// inconsistent state and we have no way to recover. to workaround
-			// this we spawn a thread in the master to constantly ensure the
-			// lock is ok. see https://github.com/unbit/upsgi/issues/1571
 			upsgi_robust_mutexes_watchdog();
 		}
+
 	}
 
 	upsgi.rpc_table_lock = upsgi_lock_init("rpc");
 
-#ifdef UPSGI_SSL
-	// register locking for legions
-	struct upsgi_legion *ul = upsgi.legions;
-	while(ul) {
-		ul->lock = upsgi_lock_init(upsgi_concat2("legion_", ul->legion));
-		ul = ul->next;
-	}
-#endif
 	upsgi.locking_setup = 1;
 }
 

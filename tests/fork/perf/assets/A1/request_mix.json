@@ -1,0 +1,15 @@
+{
+  "sequence": [
+    {"method": "GET", "path": "/dashboard"},
+    {"method": "GET", "path": "/assets/css/app.css"},
+    {"method": "GET", "path": "/assets/js/app.js"},
+    {"method": "GET", "path": "/api/profile"},
+    {"method": "GET", "path": "/api/health"},
+    {
+      "method": "POST",
+      "path": "/submit",
+      "headers": {"Content-Type": "application/json"},
+      "body": "{\"action\":\"ping\",\"scenario\":\"A1\"}"
+    }
+  ]
+}

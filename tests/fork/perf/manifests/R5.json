@@ -1,0 +1,75 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/R/R5/r5_matrix.json",
+      "tests/fork/perf/assets/R/R5/run_r5_measured.sh",
+      "tests/fork/perf/assets/R/R5/run_r5_smoke.sh",
+      "tests/fork/perf/assets/R/common/generate_payloads.py",
+      "tests/fork/perf/assets/R/common/receiver_app.psgi",
+      "tests/fork/perf/assets/R/common/receiver_append_pressure.py",
+      "tests/fork/perf/assets/R/common/receiver_client.py"
+    ]
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "bounded backpressure"
+      ],
+      "source": "Kafka"
+    },
+    {
+      "ideas": [
+        "flow control"
+      ],
+      "source": "syslog-ng"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "R5",
+  "lane": "R",
+  "notes": [
+    "Blocked on receiver PSGI app bundle and append-path fixture contract.",
+    "See tests/fork/perf/assets/R/README.md.",
+    "Repo-local receiver asset pack is packaged.",
+    "Measured R5 runner uses append-delay pressure cases to expose sink saturation behavior."
+  ],
+  "parameters": {
+    "measurement_focus": [
+      "append latency",
+      "posts per second collapse point",
+      "log stalls",
+      "CPU idle despite latency rise",
+      "worker blocking signatures"
+    ]
+  },
+  "phase": "P5",
+  "purpose": "Measure when the receiver is valid but storage append becomes the choke point.",
+  "questions": [
+    "Is append pressure the true bottleneck before network or CPU?",
+    "Do we need bounded internal backpressure around sink behavior?"
+  ],
+  "schema_version": "1",
+  "status": "asset_packaged",
+  "title": "Queue-file append saturation",
+  "traffic_shape": {
+    "concurrency": "high sustained",
+    "duration_minutes": [
+      10,
+      30
+    ],
+    "payload_profile": "moderate valid payloads"
+  }
+}

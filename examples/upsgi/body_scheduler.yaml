@@ -1,0 +1,12 @@
+upsgi:
+  master: true
+  workers: 2
+  need-app: true
+  strict: true
+  vacuum: true
+  die-on-term: true
+  http-socket: 127.0.0.1:9092
+  psgi: examples/psgi/hello.psgi
+  logto: /tmp/upsgi-body-scheduler.log
+  # body-scheduler remains enabled by default.
+  # disable-body-scheduler: true

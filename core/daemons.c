@@ -42,31 +42,6 @@ void upsgi_daemons_smart_check() {
 
 	struct upsgi_daemon *ud = upsgi.daemons;
 	while (ud) {
-#ifdef UPSGI_SSL
-		if (ud->legion) {
-			if (upsgi_legion_i_am_the_lord(ud->legion)) {
-				// lord, spawn if not running
-				if (ud->pid <= 0) {
-					upsgi_spawn_daemon(ud);
-				}
-			}
-			else {
-				// not lord, kill daemon if running
-				if (ud->pid > 0) {
-					if (!kill(ud->pid, 0)) {
-						upsgi_log("[upsgi_daemons] stopping legion \"%s\" daemon: %s (pid: %d)\n", ud->legion, ud->command, ud->pid);
-						kill(-(ud->pid), ud->stop_signal);
-					}
-					else {
-						// pid already died
-						ud->pid = -1;
-					}
-				}
-				ud = ud->next;
-				continue;
-			}
-		}
-#endif
 		if (ud->pidfile) {
 			int checked_pid = upsgi_check_pidfile(ud->pidfile);
 			if (checked_pid <= 0) {
@@ -129,15 +104,6 @@ int upsgi_daemon_check_pid_death(pid_t diedpid) {
 int upsgi_daemon_check_pid_reload(pid_t diedpid) {
 	struct upsgi_daemon *ud = upsgi.daemons;
 	while (ud) {
-#ifdef UPSGI_SSL
-		if (ud->pid == diedpid && ud->legion && !upsgi_legion_i_am_the_lord(ud->legion)) {
-			// part of legion but not lord, don't respawn
-			ud->pid = -1;
-			upsgi_log("upsgi-daemons] legion \"%s\" daemon \"%s\" (pid: %d) annihilated\n", ud->legion, ud->command, (int) diedpid);
-			ud = ud->next;
-			continue;
-		}
-#endif
 		if (ud->pid == diedpid && !ud->pidfile) {
 			if (ud->control) {
 				gracefully_kill_them_all(0);
@@ -188,19 +154,6 @@ void upsgi_daemons_spawn_all() {
 	struct upsgi_daemon *ud = upsgi.daemons;
 	while (ud) {
 		if (!ud->registered) {
-#ifdef UPSGI_SSL
-			if (ud->legion && !upsgi_legion_i_am_the_lord(ud->legion)) {
-				// part of legion, register but don't spawn it yet
-				if (ud->pidfile) {
-					ud->pid = upsgi_check_pidfile(ud->pidfile);
-					if (ud->pid > 0)
-						upsgi_log("[upsgi-daemons] found valid/active pidfile for \"%s\" (pid: %d)\n", ud->command, (int) ud->pid);
-				}
-				ud->registered = 1;
-				ud = ud->next;
-				continue;
-			}
-#endif
 			ud->registered = 1;
 			if (ud->pidfile) {
 				int checked_pid = upsgi_check_pidfile(ud->pidfile);
@@ -224,13 +177,8 @@ void upsgi_daemons_spawn_all() {
 void upsgi_detach_daemons() {
 	struct upsgi_daemon *ud = upsgi.daemons;
 	while (ud) {
-#ifdef UPSGI_SSL
-		// stop any legion daemon, doesn't matter if dumb or smart
-		if (ud->pid > 0 && (ud->legion || !ud->pidfile)) {
-#else
 		// stop only dumb daemons
 		if (ud->pid > 0 && !ud->pidfile) {
-#endif
 			upsgi_log("[upsgi-daemons] stopping daemon (pid: %d): %s\n", (int) ud->pid, ud->command);
 			// try to stop daemon gracefully, kill it if it won't die
 			// if mercy is not set then wait up to 3 seconds
@@ -439,21 +387,8 @@ void upsgi_opt_add_daemon(char *opt, char *value, void *none) {
 
 	char *command = upsgi_str(value);
 
-#ifdef UPSGI_SSL
-	char *legion = NULL;
-	if (!upsgi_starts_with(opt, strlen(command), "legion-", 7)) {
-		space = strchr(command, ' ');
-		if (!space) {
-			upsgi_log("invalid legion daemon syntax: %s\n", command);
-			exit(1);
-		}
-		*space = 0;
-		legion = command;
-		command = space+1;
-	}
-#endif
 
-	if (!strcmp(opt, "smart-attach-daemon") || !strcmp(opt, "smart-attach-daemon2") || !strcmp(opt, "legion-smart-attach-daemon") || !strcmp(opt, "legion-smart-attach-daemon2")) {
+	if (!strcmp(opt, "smart-attach-daemon") || !strcmp(opt, "smart-attach-daemon2")) {
 		space = strchr(command, ' ');
 		if (!space) {
 			upsgi_log("invalid smart-attach-daemon syntax: %s\n", command);
@@ -468,7 +403,7 @@ void upsgi_opt_add_daemon(char *opt, char *value, void *none) {
 			freq = atoi(comma + 1);
 		}
 		command = space + 1;
-		if (!strcmp(opt, "smart-attach-daemon2") || !strcmp(opt, "legion-smart-attach-daemon2")) {
+		if (!strcmp(opt, "smart-attach-daemon2")) {
 			daemonize = 1;
 		}
 	}
@@ -503,9 +438,6 @@ void upsgi_opt_add_daemon(char *opt, char *value, void *none) {
 	if (!strcmp(opt, "attach-control-daemon")) {
 		upsgi_ud->control = 1;
 	}
-#ifdef UPSGI_SSL
-	upsgi_ud->legion = legion;
-#endif
 
 	upsgi.daemons_cnt++;
 
@@ -519,7 +451,6 @@ void upsgi_opt_add_daemon2(char *opt, char *value, void *none) {
 	char *d_freq = NULL;
 	char *d_pidfile = NULL;
 	char *d_control = NULL;
-	char *d_legion = NULL;
 	char *d_daemonize = NULL;
 	char *d_touch = NULL;
 	char *d_stopsignal = NULL;
@@ -565,13 +496,6 @@ void upsgi_opt_add_daemon2(char *opt, char *value, void *none) {
 		exit(1);
 	}
 
-#ifndef UPSGI_SSL
-	if (d_legion) {
-		upsgi_log("legion subsystem is not supported on this upsgi version, rebuild with ssl support\n");
-		exit(1);
-	}
-#endif
-
 
 
         if (!upsgi_ud) {
@@ -597,9 +521,6 @@ void upsgi_opt_add_daemon2(char *opt, char *value, void *none) {
 	upsgi_ud->uid = d_uid ? atoi(d_uid) : 0;
 	upsgi_ud->gid = d_gid ? atoi(d_gid) : 0;
 	upsgi_ud->honour_stdin = d_stdin ? 1 : 0;
-#ifdef UPSGI_SSL
-        upsgi_ud->legion = d_legion;
-#endif
         upsgi_ud->ns_pid = d_ns_pid ? 1 : 0;
 
 	upsgi_ud->chdir = d_chdir;

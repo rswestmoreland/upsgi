@@ -1,0 +1,73 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/A1/app_browser_mix.psgi",
+      "tests/fork/perf/assets/A1/static/",
+      "tests/fork/perf/assets/A1/request_mix.json",
+      "tests/fork/perf/assets/A1/keepalive_mix_client.py"
+    ]
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "keepalive discipline"
+      ],
+      "source": "Mojolicious"
+    },
+    {
+      "ideas": [
+        "fairness"
+      ],
+      "source": "HAProxy"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "A1",
+  "lane": "A",
+  "notes": [
+    "Repo-local browser-mix asset pack is packaged."
+  ],
+  "parameters": {
+    "measurement_focus": [
+      "tail latency",
+      "worker fairness",
+      "queue depth",
+      "static-request count"
+    ]
+  },
+  "phase": "P1",
+  "purpose": "Baseline realistic browser-style traffic with connection reuse.",
+  "questions": [
+    "Are keepalive-heavy browser patterns already good enough?",
+    "Do fairness knobs matter before accept-path work?"
+  ],
+  "schema_version": "1",
+  "status": "asset_packaged",
+  "title": "Warm keepalive UI mix",
+  "traffic_shape": {
+    "concurrency": [
+      50,
+      200,
+      500
+    ],
+    "connections": "keepalive on",
+    "mix": [
+      "70% authenticated GET/JSON",
+      "20% static assets",
+      "10% small POSTs"
+    ]
+  }
+}

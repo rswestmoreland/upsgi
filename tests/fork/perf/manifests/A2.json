@@ -1,0 +1,71 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/A2/config.yaml.in",
+      "tests/fork/perf/assets/A2/cold_connection_bench.py",
+      "tests/fork/perf/assets/A2/run_a2_measured.sh",
+      "tests/fork/perf/assets/A1/app_browser_mix.psgi",
+      "tests/fork/perf/assets/A1/request_mix.json",
+      "tests/fork/perf/assets/A1/static/"
+    ]
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "bounded accepts"
+      ],
+      "source": "HAProxy"
+    },
+    {
+      "ideas": [
+        "single-accept fairness"
+      ],
+      "source": "Mojolicious"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "A2",
+  "lane": "A",
+  "notes": [
+    "Repo-local A2 asset pack is packaged and reuses the A1 fixture app/static tree."
+  ],
+  "parameters": {
+    "measurement_focus": [
+      "listen queue growth",
+      "accept failures",
+      "CPU sys percent",
+      "p99 latency"
+    ]
+  },
+  "phase": "P2",
+  "purpose": "Isolate accept-path cost on a small host.",
+  "questions": [
+    "Do bounded accepts need priority?",
+    "Do multiple listeners or accept fairness move up next?"
+  ],
+  "schema_version": "1",
+  "status": "asset_packaged",
+  "title": "Cold connection churn",
+  "traffic_shape": {
+    "arrival_rate_ramp": [
+      200,
+      1000,
+      3000
+    ],
+    "connections": "keepalive off",
+    "mix": "same endpoint mix as A1"
+  }
+}

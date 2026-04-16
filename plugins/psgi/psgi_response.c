@@ -96,6 +96,87 @@ static int psgi_body_coalescer_write(struct wsgi_request *wsgi_req, struct psgi_
 	return UPSGI_OK;
 }
 
+static int psgi_output_state_capture_async_getline_chunk(struct wsgi_request *wsgi_req, char *chunk, size_t chunk_len) {
+	if (!wsgi_req->psgi_output_buf) {
+		wsgi_req->psgi_output_buf = upsgi_buffer_new(UMAX(chunk_len, (size_t) 1024));
+		if (!wsgi_req->psgi_output_buf) {
+			return -1;
+		}
+	}
+	wsgi_req->psgi_output_buf->pos = 0;
+	if (upsgi_buffer_append(wsgi_req->psgi_output_buf, chunk, chunk_len)) {
+		return -1;
+	}
+	wsgi_req->psgi_output_mode = UPSGI_PSGI_OUTPUT_ASYNC_GETLINE;
+	wsgi_req->psgi_output_flags = 0;
+	wsgi_req->psgi_chunk_owner_kind = UPSGI_PSGI_OWNER_REQUEST_BUFFER;
+	wsgi_req->psgi_output_resume_kind = UPSGI_PSGI_RESUME_OWNED_BUFFER;
+	wsgi_req->psgi_output_owner_ref = NULL;
+	wsgi_req->psgi_output_pos = 0;
+	wsgi_req->psgi_output_len = chunk_len;
+	return 0;
+}
+
+static int psgi_async_getline_step_owned_chunk(struct wsgi_request *wsgi_req) {
+	size_t remaining = 0;
+	size_t progressed = 0;
+	size_t old_write_pos = wsgi_req->write_pos;
+	int ret = -1;
+	if (!upsgi_psgi_output_active(wsgi_req)) {
+		return UPSGI_PSGI_STEP_CHUNK_DONE;
+	}
+	remaining = wsgi_req->psgi_output_len - wsgi_req->psgi_output_pos;
+	if (remaining == 0) {
+		upsgi_psgi_output_state_reset(wsgi_req);
+		return UPSGI_PSGI_STEP_CHUNK_DONE;
+	}
+	if (!wsgi_req->headers_sent || wsgi_req->transformations) {
+		ret = upsgi_response_write_body_do(
+			wsgi_req,
+			wsgi_req->psgi_output_buf->buf + wsgi_req->psgi_output_pos,
+			remaining
+		);
+		if (ret == UPSGI_AGAIN) {
+			return UPSGI_PSGI_STEP_CHUNK_PARTIAL;
+		}
+		upsgi_pl_check_write_errors {
+			upsgi_psgi_output_state_release(wsgi_req);
+			return UPSGI_PSGI_STEP_HARD_FAIL;
+		}
+		upsgi_psgi_output_state_reset(wsgi_req);
+		return UPSGI_PSGI_STEP_CHUNK_DONE;
+	}
+	wsgi_req->write_pos = 0;
+	errno = 0;
+	ret = wsgi_req->socket->proto_write(
+		wsgi_req,
+		wsgi_req->psgi_output_buf->buf + wsgi_req->psgi_output_pos,
+		remaining
+	);
+	progressed = wsgi_req->write_pos;
+	wsgi_req->write_pos = old_write_pos;
+	if (progressed > remaining) {
+		progressed = remaining;
+	}
+	if (progressed > 0) {
+		wsgi_req->psgi_output_pos += progressed;
+		wsgi_req->response_size += progressed;
+	}
+	if (ret < 0) {
+		if (!upsgi.ignore_write_errors) {
+			upsgi_req_error("psgi_async_getline_step_owned_chunk()/proto_write");
+		}
+		wsgi_req->write_errors++;
+		upsgi_psgi_output_state_release(wsgi_req);
+		return UPSGI_PSGI_STEP_HARD_FAIL;
+	}
+	if (wsgi_req->psgi_output_pos >= wsgi_req->psgi_output_len) {
+		upsgi_psgi_output_state_reset(wsgi_req);
+		return UPSGI_PSGI_STEP_CHUNK_DONE;
+	}
+	return UPSGI_PSGI_STEP_CHUNK_PARTIAL;
+}
+
 static int psgi_validate_status(SV *status_sv, int *status_code) {
 	STRLEN status_len = 0;
 	char *status_str = NULL;
@@ -108,7 +189,7 @@ static int psgi_validate_status(SV *status_sv, int *status_code) {
 	return 0;
 }
 
-static int psgi_validate_headers(AV *headers, int status_code, int *has_content_type, int *has_content_length) {
+static int psgi_validate_headers(AV *headers, int status_code, int *has_content_type, int *has_content_length, int *has_transfer_encoding) {
 	int i = 0;
 	int headers_len = 0;
 	SV **hitem = NULL;
@@ -138,6 +219,9 @@ static int psgi_validate_headers(AV *headers, int status_code, int *has_content_
 		else if (key_len == 14 && !upsgi_strnicmp(key, key_len, "Content-Length", 14)) {
 			*has_content_length = 1;
 		}
+		else if (key_len == 17 && !upsgi_strnicmp(key, key_len, "Transfer-Encoding", 17)) {
+			*has_transfer_encoding = 1;
+		}
 	}
 
 	if (psgi_status_forbids_entity_headers(status_code)) {
@@ -151,41 +235,18 @@ static int psgi_validate_headers(AV *headers, int status_code, int *has_content_
 	return 0;
 }
 
-static int psgi_validate_body_slot(SV **body_item, int body_optional) {
-	SV *rv = NULL;
-	IO *io = NULL;
-	AV *body = NULL;
-	SV **hitem = NULL;
-	int i = 0;
-
-	if (!body_item) {
-		return body_optional ? 0 : -1;
-	}
-	if (!*body_item || !SvOK(*body_item) || !SvROK(*body_item)) {
+static int psgi_write_simple_body_chunk(struct wsgi_request *wsgi_req, SV *chunk) {
+	STRLEN chunk_len = 0;
+	char *chunk_buf = NULL;
+	if (!chunk || !psgi_body_chunk_is_valid(chunk)) {
 		return -1;
 	}
-
-	rv = SvRV(*body_item);
-	if (!rv) return -1;
-
-	io = GvIO(rv);
-	if (io) return 0;
-
-	if (SvOBJECT(rv)) {
-		if (upsgi_perl_obj_can(*body_item, "path", 4)) return 0;
-		if (upsgi_perl_obj_can(*body_item, STR_WITH_LEN("getline"))) return 0;
-		return -1;
+	chunk_buf = SvPV(chunk, chunk_len);
+	upsgi_response_write_body_do(wsgi_req, chunk_buf, chunk_len);
+	upsgi_pl_check_write_errors {
+		return UPSGI_OK;
 	}
-
-	if (SvTYPE(rv) != SVt_PVAV) return -1;
-
-	body = (AV *) rv;
-	for (i = 0; i <= av_len(body); i++) {
-		hitem = av_fetch(body, i, 0);
-		if (!hitem || !psgi_body_chunk_is_valid(*hitem)) return -1;
-	}
-
-	return 0;
+	return UPSGI_OK;
 }
 
 static int psgi_write_raw_buffer(struct wsgi_request *wsgi_req, struct upsgi_buffer *ub) {
@@ -238,6 +299,7 @@ int psgi_informational_response(struct wsgi_request *wsgi_req, int status, AV *h
 	int i = 0;
 	int has_content_type = 0;
 	int has_content_length = 0;
+	int has_transfer_encoding = 0;
 	int header_validation = 0;
 
 	if (!wsgi_req || !headers) return -1;
@@ -247,7 +309,7 @@ int psgi_informational_response(struct wsgi_request *wsgi_req, int status, AV *h
 	}
 	if (status < 100 || status >= 200 || status == 101) return -1;
 
-	header_validation = psgi_validate_headers(headers, status, &has_content_type, &has_content_length);
+	header_validation = psgi_validate_headers(headers, status, &has_content_type, &has_content_length, &has_transfer_encoding);
 	if (header_validation != 0) return -1;
 
 	upsgi_num2str2(status, status_buf);
@@ -304,23 +366,39 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 	int status = 0;
 	int has_content_type = 0;
 	int has_content_length = 0;
+	int has_transfer_encoding = 0;
 	int header_validation = 0;
 	int body_optional = 0;
+	uint64_t known_content_length = 0;
+	int known_content_length_valid = 0;
 
 	/* Resume an async body iterator previously parked by the response layer. */
 	if (wsgi_req->async_force_again) {
 
 		wsgi_req->async_force_again = 0;
 
+		if (upsgi_psgi_output_active(wsgi_req) &&
+			wsgi_req->psgi_output_mode == UPSGI_PSGI_OUTPUT_ASYNC_GETLINE &&
+			wsgi_req->psgi_output_resume_kind == UPSGI_PSGI_RESUME_OWNED_BUFFER) {
+			int step = psgi_async_getline_step_owned_chunk(wsgi_req);
+			if (step == UPSGI_PSGI_STEP_HARD_FAIL) {
+				return UPSGI_OK;
+			}
+			wsgi_req->async_force_again = 1;
+			return UPSGI_AGAIN;
+		}
+
 		wsgi_req->switches++;
 		SV *chunk = upsgi_perl_obj_call(wsgi_req->async_placeholder, "getline");
 		if (!chunk) {
+			upsgi_psgi_output_state_release(wsgi_req);
 			upsgi_500(wsgi_req);
 			return UPSGI_OK;
 		}
 
 		if (!SvOK(chunk)) {
 			SvREFCNT_dec(chunk);
+			upsgi_psgi_output_state_release(wsgi_req);
 			SV *closed = upsgi_perl_obj_call(wsgi_req->async_placeholder, "close");
 			if (closed) {
 				SvREFCNT_dec(closed);
@@ -337,6 +415,7 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 
 		if (!psgi_body_chunk_is_valid(chunk)) {
 			SvREFCNT_dec(chunk);
+			upsgi_psgi_output_state_release(wsgi_req);
 			return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
 		}
 
@@ -344,6 +423,7 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 
 		if (hlen <= 0) {
 			SvREFCNT_dec(chunk);
+			upsgi_psgi_output_state_release(wsgi_req);
 			SV *closed = upsgi_perl_obj_call(wsgi_req->async_placeholder, "close");
 			if (closed) {
 				SvREFCNT_dec(closed);
@@ -359,12 +439,18 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 			return UPSGI_OK;
 		}
 
-		upsgi_response_write_body_do(wsgi_req, chitem, hlen);
-		upsgi_pl_check_write_errors {
+		if (psgi_output_state_capture_async_getline_chunk(wsgi_req, chitem, hlen)) {
 			SvREFCNT_dec(chunk);
+			upsgi_psgi_output_state_release(wsgi_req);
+			upsgi_500(wsgi_req);
 			return UPSGI_OK;
 		}
+
+		int step = psgi_async_getline_step_owned_chunk(wsgi_req);
 		SvREFCNT_dec(chunk);
+		if (step == UPSGI_PSGI_STEP_HARD_FAIL) {
+			return UPSGI_OK;
+		}
 		wsgi_req->async_force_again = 1;
 		return UPSGI_AGAIN;
 	}
@@ -402,7 +488,7 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 		return psgi_invalid_response(wsgi_req, "invalid PSGI headers");
 	}
 
-	header_validation = psgi_validate_headers(headers, status, &has_content_type, &has_content_length);
+	header_validation = psgi_validate_headers(headers, status, &has_content_type, &has_content_length, &has_transfer_encoding);
 	if (header_validation == -1) {
 		return psgi_invalid_response(wsgi_req, "invalid PSGI headers");
 	}
@@ -417,12 +503,74 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 	}
 
 	body_item = av_fetch(response, 2, 0);
-	if (psgi_validate_body_slot(body_item, body_optional)) {
+
+	SV *single_body_chunk = NULL;
+	int body_last = -1;
+	if (!body_item && body_optional) {
+		/* no body */
+	}
+	else if (!body_item) {
 		return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
+	}
+	else {
+		SV *body_rv = SvRV(*body_item);
+		IO *body_io = NULL;
+		if (!body_rv) {
+			return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
+		}
+		body_io = GvIO(body_rv);
+		if (!body_io) {
+			if (SvOBJECT(body_rv)) {
+				if (!upsgi_perl_obj_can(*body_item, "path", 4) && !upsgi_perl_obj_can(*body_item, STR_WITH_LEN("getline"))) {
+					return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
+				}
+			}
+			else if (SvTYPE(body_rv) == SVt_PVAV) {
+				body = (AV *) body_rv;
+				body_last = (int) av_len(body);
+				if (body_last < 0) {
+					known_content_length_valid = 1;
+					known_content_length = 0;
+				}
+				else if (body_last == 0) {
+					hitem = av_fetch(body, 0, 0);
+					if (!hitem || !psgi_body_chunk_is_valid(*hitem)) {
+						return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
+					}
+					single_body_chunk = *hitem;
+					known_content_length_valid = 1;
+					SvPV(single_body_chunk, hlen);
+					known_content_length = (uint64_t) hlen;
+				}
+				else {
+					uint64_t total_body_len = 0;
+					for (i = 0; i <= body_last; i++) {
+						hitem = av_fetch(body, i, 0);
+						if (!hitem || !psgi_body_chunk_is_valid(*hitem)) {
+							return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
+						}
+						SvPV(*hitem, hlen);
+						if ((uint64_t) hlen > UINT64_MAX - total_body_len) {
+							return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
+						}
+						total_body_len += (uint64_t) hlen;
+					}
+					known_content_length_valid = 1;
+					known_content_length = total_body_len;
+				}
+			}
+			else {
+				return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
+			}
+		}
 	}
 
 	if (upsgi_response_prepare_headers_int(wsgi_req, status)) {
 		return UPSGI_OK;
+	}
+
+	if (!has_content_length && !has_transfer_encoding && !wsgi_req->transformations && known_content_length_valid) {
+		if (upsgi_response_add_content_length(wsgi_req, known_content_length)) return UPSGI_OK;
 	}
 
 	for (i = 0; i <= (int) av_len(headers); i += 2) {
@@ -501,6 +649,7 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 				chitem = SvPV(chunk, hlen);
 				if (hlen <= 0) {
 					SvREFCNT_dec(chunk);
+					upsgi_psgi_output_state_release(wsgi_req);
 					if (upsgi.async > 0 && wsgi_req->async_force_again) {
 						wsgi_req->async_placeholder = (SV *) *body_item;
 						return UPSGI_AGAIN;
@@ -509,8 +658,14 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 				}
 
 				if (upsgi.async > 0) {
-					upsgi_response_write_body_do(wsgi_req, chitem, hlen);
-					upsgi_pl_check_write_errors {
+					if (psgi_output_state_capture_async_getline_chunk(wsgi_req, chitem, hlen)) {
+						SvREFCNT_dec(chunk);
+						upsgi_psgi_output_state_release(wsgi_req);
+						upsgi_500(wsgi_req);
+						break;
+					}
+					int step = psgi_async_getline_step_owned_chunk(wsgi_req);
+					if (step == UPSGI_PSGI_STEP_HARD_FAIL) {
 						SvREFCNT_dec(chunk);
 						break;
 					}
@@ -541,27 +696,38 @@ static int psgi_response_do(struct wsgi_request *wsgi_req, AV *response, int all
 			if (closed) {
 				SvREFCNT_dec(closed);
 			}
+			upsgi_psgi_output_state_release(wsgi_req);
 		}
 	}
 	else if (SvTYPE(rv) == SVt_PVAV) {
-		struct psgi_body_coalescer coalescer;
-		coalescer.len = 0;
 		body = (AV *) rv;
-		for (i = 0; i <= av_len(body); i++) {
-			hitem = av_fetch(body, i, 0);
-			if (!hitem || !psgi_body_chunk_is_valid(*hitem)) {
+		if (body_last < 0) {
+			return UPSGI_OK;
+		}
+		if (body_last == 0) {
+			if (!single_body_chunk || psgi_write_simple_body_chunk(wsgi_req, single_body_chunk) != UPSGI_OK) {
 				return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
 			}
-			chitem = SvPV(*hitem, hlen);
-			if (psgi_body_coalescer_write(wsgi_req, &coalescer, chitem, hlen) != UPSGI_OK) {
-				break;
-			}
-			upsgi_pl_check_write_errors {
-				break;
-			}
 		}
-		if (psgi_body_coalescer_flush(wsgi_req, &coalescer) != UPSGI_OK) {
-			return UPSGI_OK;
+		else {
+			struct psgi_body_coalescer coalescer;
+			coalescer.len = 0;
+			for (i = 0; i <= body_last; i++) {
+				hitem = av_fetch(body, i, 0);
+				if (!hitem || !psgi_body_chunk_is_valid(*hitem)) {
+					return psgi_invalid_response(wsgi_req, "invalid PSGI response body");
+				}
+				chitem = SvPV(*hitem, hlen);
+				if (psgi_body_coalescer_write(wsgi_req, &coalescer, chitem, hlen) != UPSGI_OK) {
+					break;
+				}
+				upsgi_pl_check_write_errors {
+					break;
+				}
+			}
+			if (psgi_body_coalescer_flush(wsgi_req, &coalescer) != UPSGI_OK) {
+				return UPSGI_OK;
+			}
 		}
 	}
 	else {

@@ -1,0 +1,13 @@
+{
+  "content_type": "application/json",
+  "payload_sizes_bytes": [
+    8192,
+    32768,
+    65536
+  ],
+  "senders": [
+    50,
+    200,
+    1000
+  ]
+}

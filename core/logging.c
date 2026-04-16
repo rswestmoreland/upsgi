@@ -964,6 +964,7 @@ void upsgi_register_logger(char *name, ssize_t(*func) (struct upsgi_logger *, ch
 		old_ul->next = ul;
 	}
 
+	memset(ul, 0, sizeof(struct upsgi_logger));
 	ul->name = name;
 	ul->func = func;
 	ul->next = NULL;
@@ -976,6 +977,17 @@ void upsgi_register_logger(char *name, ssize_t(*func) (struct upsgi_logger *, ch
 #ifdef UPSGI_DEBUG
 	upsgi_log("[upsgi-logger] registered \"%s\"\n", ul->name);
 #endif
+}
+
+void upsgi_logger_set_reset(char *name, int(*reset)(struct upsgi_logger *)) {
+	struct upsgi_logger *ul = upsgi.loggers;
+	while (ul) {
+		if (!strcmp(ul->name, name)) {
+			ul->reset = reset;
+			return;
+		}
+		ul = ul->next;
+	}
 }
 
 void upsgi_append_logger(struct upsgi_logger *ul) {
@@ -1488,11 +1500,392 @@ static int upsgi_log_fd_has_pending(int fd) {
 	return 0;
 }
 
+static void upsgi_log_sink_note_recovery_attempt(int is_req_log) {
+	if (is_req_log) {
+		upsgi.shared->req_log_sink_recovery_attempts++;
+	}
+	else {
+		upsgi.shared->log_sink_recovery_attempts++;
+	}
+}
+
+static void upsgi_log_sink_note_recovery_success(int is_req_log) {
+	if (is_req_log) {
+		upsgi.shared->req_log_sink_recovery_successes++;
+	}
+	else {
+		upsgi.shared->log_sink_recovery_successes++;
+	}
+}
+
+static int upsgi_log_sink_should_recover(int err) {
+	switch (err) {
+		case EBADF:
+		case EPIPE:
+		case ECONNRESET:
+		case ECONNREFUSED:
+		case ENOTCONN:
+		case ENOENT:
+		case ENXIO:
+		case ECONNABORTED:
+			return 1;
+		default:
+			return 0;
+	}
+}
+
+static ssize_t upsgi_log_sink_write(struct upsgi_logger *ul, char *msg, size_t len, int is_req_log) {
+	ssize_t written;
+
+	if (!ul) {
+		return write(upsgi.original_log_fd, msg, len);
+	}
+
+	if (ul->recovery_needed && ul->reset) {
+		upsgi_log_sink_note_recovery_attempt(is_req_log);
+		ul->reset(ul);
+	}
+
+	written = ul->func(ul, msg, len);
+	if (written >= 0 && (size_t) written == len) {
+		if (ul->recovery_needed) {
+			ul->recovery_needed = 0;
+			upsgi_log_sink_note_recovery_success(is_req_log);
+		}
+		return written;
+	}
+
+	if (written < 0 && ul->reset && upsgi_log_sink_should_recover(errno)) {
+		ul->recovery_needed = 1;
+		upsgi_log_sink_note_recovery_attempt(is_req_log);
+		if (!ul->reset(ul)) {
+			written = ul->func(ul, msg, len);
+			if (written >= 0 && (size_t) written == len) {
+				ul->recovery_needed = 0;
+				upsgi_log_sink_note_recovery_success(is_req_log);
+			}
+		}
+	}
+
+	return written;
+}
+
+#define UPSGI_LOG_QUEUE_BATCH_IOV_MAX 16
+#define UPSGI_LOG_QUEUE_BATCH_BYTES_MAX 65536
+
+static int upsgi_log_sink_prepare_batchable(struct upsgi_logger *ul) {
+	if (!ul) {
+		return upsgi.original_log_fd >= 0;
+	}
+	if (ul->batch_writes && ul->configured && ul->fd >= 0) {
+		return 1;
+	}
+	if (ul->configured) {
+		return 0;
+	}
+	if (!ul->func) {
+		return 0;
+	}
+	(void) ul->func(ul, "", 0);
+	return ul->batch_writes && ul->configured && ul->fd >= 0;
+}
+
+static int upsgi_log_sink_is_batchable(struct upsgi_logger *ul) {
+	return upsgi_log_sink_prepare_batchable(ul);
+}
+
+static ssize_t upsgi_log_sink_writev(struct upsgi_logger *ul, struct iovec *iov, int iovcnt, size_t len, int is_req_log) {
+	ssize_t written;
+
+	if (!ul) {
+		return writev(upsgi.original_log_fd, iov, iovcnt);
+	}
+
+	if (!upsgi_log_sink_is_batchable(ul)) {
+		errno = ENOTSUP;
+		return -1;
+	}
+
+	if (ul->recovery_needed && ul->reset) {
+		upsgi_log_sink_note_recovery_attempt(is_req_log);
+		ul->reset(ul);
+	}
+
+	written = writev(ul->fd, iov, iovcnt);
+	if (written >= 0 && (size_t) written == len) {
+		if (ul->recovery_needed) {
+			ul->recovery_needed = 0;
+			upsgi_log_sink_note_recovery_success(is_req_log);
+		}
+		return written;
+	}
+
+	if (written < 0 && ul->reset && upsgi_log_sink_should_recover(errno)) {
+		ul->recovery_needed = 1;
+		upsgi_log_sink_note_recovery_attempt(is_req_log);
+		if (!ul->reset(ul) && upsgi_log_sink_is_batchable(ul)) {
+			written = writev(ul->fd, iov, iovcnt);
+			if (written >= 0 && (size_t) written == len) {
+				ul->recovery_needed = 0;
+				upsgi_log_sink_note_recovery_success(is_req_log);
+			}
+		}
+	}
+
+	return written;
+}
+
+static struct upsgi_log_queue *upsgi_log_queue_for_type(int is_req_log) {
+	if (is_req_log) {
+		return &upsgi.req_logger_queue;
+	}
+	return &upsgi.logger_queue;
+}
+
+static void upsgi_log_queue_sync_shared(struct upsgi_log_queue *queue, int is_req_log) {
+	if (is_req_log) {
+		upsgi.shared->req_log_queue_depth = queue->depth;
+		upsgi.shared->req_log_queue_bytes = queue->bytes;
+		if (queue->depth > upsgi.shared->req_log_queue_depth_max) {
+			upsgi.shared->req_log_queue_depth_max = queue->depth;
+		}
+		if (queue->bytes > upsgi.shared->req_log_queue_bytes_max) {
+			upsgi.shared->req_log_queue_bytes_max = queue->bytes;
+		}
+		return;
+	}
+	upsgi.shared->log_queue_depth = queue->depth;
+	upsgi.shared->log_queue_bytes = queue->bytes;
+	if (queue->depth > upsgi.shared->log_queue_depth_max) {
+		upsgi.shared->log_queue_depth_max = queue->depth;
+	}
+	if (queue->bytes > upsgi.shared->log_queue_bytes_max) {
+		upsgi.shared->log_queue_bytes_max = queue->bytes;
+	}
+}
+
+static int upsgi_log_queue_has_room(struct upsgi_log_queue *queue, size_t len) {
+	if (queue->depth >= queue->records_cap) {
+		return 0;
+	}
+	if (queue->bytes + len > queue->bytes_cap) {
+		return 0;
+	}
+	return 1;
+}
+
+static void upsgi_log_queue_push(struct upsgi_log_queue *queue, struct upsgi_log_queue_item *item, int is_req_log) {
+	item->next = NULL;
+	if (queue->tail) {
+		queue->tail->next = item;
+	}
+	else {
+		queue->head = item;
+	}
+	queue->tail = item;
+	queue->depth++;
+	queue->bytes += item->len;
+	if (is_req_log) {
+		upsgi.shared->req_log_queue_enqueue_events++;
+	}
+	else {
+		upsgi.shared->log_queue_enqueue_events++;
+	}
+	upsgi_log_queue_sync_shared(queue, is_req_log);
+}
+
+static void upsgi_log_queue_note_flushes(int is_req_log, uint64_t count) {
+	if (!count) {
+		return;
+	}
+	if (is_req_log) {
+		upsgi.shared->req_log_queue_flush_events += count;
+	}
+	else {
+		upsgi.shared->log_queue_flush_events += count;
+	}
+}
+
+static void upsgi_log_queue_pop_head_internal(struct upsgi_log_queue *queue) {
+	struct upsgi_log_queue_item *item = queue->head;
+	if (!item) {
+		return;
+	}
+	queue->head = item->next;
+	if (!queue->head) {
+		queue->tail = NULL;
+	}
+	if (queue->depth > 0) {
+		queue->depth--;
+	}
+	if (queue->bytes >= item->len) {
+		queue->bytes -= item->len;
+	}
+	else {
+		queue->bytes = 0;
+	}
+	free(item->buf);
+	free(item);
+}
+
+static void upsgi_log_queue_note_sink_wait(int is_req_log) {
+	if (is_req_log) {
+		upsgi.shared->req_log_sink_stall_events++;
+		upsgi.shared->req_log_queue_sink_retry_events++;
+		upsgi.shared->req_log_queue_backpressure_events++;
+	}
+	else {
+		upsgi.shared->log_sink_stall_events++;
+		upsgi.shared->log_queue_sink_retry_events++;
+		upsgi.shared->log_queue_backpressure_events++;
+	}
+}
+
+static void upsgi_log_queue_note_partial_retry(int is_req_log) {
+	if (is_req_log) {
+		upsgi.shared->req_log_queue_sink_retry_events++;
+	}
+	else {
+		upsgi.shared->log_queue_sink_retry_events++;
+	}
+}
+
+static void upsgi_log_queue_note_full(int is_req_log) {
+	if (is_req_log) {
+		upsgi.shared->req_log_queue_full_events++;
+		upsgi.shared->req_log_queue_backpressure_events++;
+	}
+	else {
+		upsgi.shared->log_queue_full_events++;
+		upsgi.shared->log_queue_backpressure_events++;
+	}
+}
+
+static void upsgi_log_queue_note_batch_flush(int is_req_log, uint64_t items) {
+	if (items < 2) {
+		return;
+	}
+	if (is_req_log) {
+		upsgi.shared->req_log_queue_batch_flush_events++;
+		upsgi.shared->req_log_queue_batch_items += items;
+	}
+	else {
+		upsgi.shared->log_queue_batch_flush_events++;
+		upsgi.shared->log_queue_batch_items += items;
+	}
+}
+
+static void upsgi_log_queue_consume_written(struct upsgi_log_queue *queue, size_t written, int is_req_log) {
+	uint64_t flushed = 0;
+	while (queue->head && written > 0) {
+		struct upsgi_log_queue_item *item = queue->head;
+		size_t remaining = item->len - item->pos;
+		if (written >= remaining) {
+			written -= remaining;
+			item->pos = item->len;
+			upsgi_log_queue_pop_head_internal(queue);
+			flushed++;
+			continue;
+		}
+		item->pos += written;
+		written = 0;
+	}
+	if (flushed) {
+		upsgi_log_queue_note_flushes(is_req_log, flushed);
+	}
+	upsgi_log_queue_sync_shared(queue, is_req_log);
+}
+
+static void upsgi_log_queue_flush_blocking(struct upsgi_log_queue *queue, int is_req_log) {
+	while (queue->head) {
+		struct upsgi_log_queue_item *item = queue->head;
+		ssize_t written;
+
+		if (item->pos == 0 && upsgi_log_sink_is_batchable(item->logger)) {
+			struct iovec iov[UPSGI_LOG_QUEUE_BATCH_IOV_MAX];
+			struct upsgi_log_queue_item *cursor = item;
+			struct upsgi_logger *logger = item->logger;
+			size_t batch_len = 0;
+			uint64_t batch_items = 0;
+
+			while (cursor && batch_items < UPSGI_LOG_QUEUE_BATCH_IOV_MAX) {
+				if (cursor->logger != logger || cursor->pos != 0) {
+					break;
+				}
+				if (batch_items > 0 && batch_len + cursor->len > UPSGI_LOG_QUEUE_BATCH_BYTES_MAX) {
+					break;
+				}
+				iov[batch_items].iov_base = cursor->buf;
+				iov[batch_items].iov_len = cursor->len;
+				batch_len += cursor->len;
+				batch_items++;
+				cursor = cursor->next;
+			}
+
+			if (batch_items > 1) {
+				written = upsgi_log_sink_writev(logger, iov, (int) batch_items, batch_len, is_req_log);
+				if (written > 0) {
+					upsgi_log_queue_note_batch_flush(is_req_log, batch_items);
+					upsgi_log_queue_consume_written(queue, (size_t) written, is_req_log);
+					if ((size_t) written < batch_len) {
+						upsgi_log_queue_note_partial_retry(is_req_log);
+					}
+					continue;
+				}
+				upsgi_log_queue_note_sink_wait(is_req_log);
+				usleep(1000);
+				continue;
+			}
+		}
+
+		written = upsgi_log_sink_write(item->logger, item->buf + item->pos, item->len - item->pos, is_req_log);
+		if (written > 0) {
+			upsgi_log_queue_consume_written(queue, (size_t) written, is_req_log);
+			if (queue->head == item) {
+				upsgi_log_queue_note_partial_retry(is_req_log);
+			}
+			continue;
+		}
+		upsgi_log_queue_note_sink_wait(is_req_log);
+		usleep(1000);
+	}
+}
+
+static void upsgi_log_queue_submit(struct upsgi_logger *ul, char *msg, size_t len, int is_req_log, int owns_buffer) {
+	struct upsgi_log_queue *queue = upsgi_log_queue_for_type(is_req_log);
+	struct upsgi_log_queue_item *item;
+
+	if (len > queue->bytes_cap) {
+		item = upsgi_calloc(sizeof(struct upsgi_log_queue_item));
+		item->logger = ul;
+		item->is_req_log = is_req_log;
+		item->len = len;
+		item->buf = owns_buffer ? msg : upsgi_concat2n(msg, len, "", 0);
+		upsgi_log_queue_push(queue, item, is_req_log);
+		upsgi_log_queue_note_full(is_req_log);
+		upsgi_log_queue_flush_blocking(queue, is_req_log);
+		return;
+	}
+
+	while (!upsgi_log_queue_has_room(queue, len)) {
+		upsgi_log_queue_note_full(is_req_log);
+		upsgi_log_queue_flush_blocking(queue, is_req_log);
+	}
+
+	item = upsgi_calloc(sizeof(struct upsgi_log_queue_item));
+	item->logger = ul;
+	item->is_req_log = is_req_log;
+	item->len = len;
+	item->buf = owns_buffer ? msg : upsgi_concat2n(msg, len, "", 0);
+	upsgi_log_queue_push(queue, item, is_req_log);
+}
+
 static void upsgi_log_func_do(struct upsgi_string_list *encoders, struct upsgi_logger *ul, char *msg, size_t len, int is_req_log) {
 	struct upsgi_string_list *usl = encoders;
 	// note: msg must not be freed !!!
 	char *new_msg = msg;
 	size_t new_msg_len = len;
+	int owns_buffer = 0;
 	while(usl) {
 		struct upsgi_log_encoder *ule = (struct upsgi_log_encoder *) usl->custom_ptr;
 		if (ule->use_for) {
@@ -1507,23 +1900,22 @@ static void upsgi_log_func_do(struct upsgi_string_list *encoders, struct upsgi_l
 		}
 		size_t rlen = 0;
 		char *buf = ule->func(ule, new_msg, new_msg_len, &rlen);
-		if (new_msg != msg) {
+		if (owns_buffer) {
 			free(new_msg);
 		}
 		new_msg = buf;
 		new_msg_len = rlen;
+		owns_buffer = 1;
 next:
 		usl = usl->next;
 	}
-	ssize_t written = 0;
-	if (ul) {
-		written = ul->func(ul, new_msg, new_msg_len);
+	if (upsgi.log_queue_enabled) {
+		upsgi_log_queue_submit(ul, new_msg, new_msg_len, is_req_log, owns_buffer);
+		return;
 	}
-	else {
-		written = write(upsgi.original_log_fd, new_msg, new_msg_len);
-	}
+	ssize_t written = upsgi_log_sink_write(ul, new_msg, new_msg_len, is_req_log);
 	upsgi_log_record_sink_issue(is_req_log, written, new_msg_len);
-	if (new_msg != msg) {
+	if (owns_buffer) {
 		free(new_msg);
 	}
 
@@ -1661,6 +2053,9 @@ int upsgi_master_log_drain(int max_records) {
 		}
 		drained++;
 	}
+	if (upsgi.log_queue_enabled && upsgi.logger_queue.head) {
+		upsgi_log_queue_flush_blocking(&upsgi.logger_queue, 0);
+	}
 	if (drained >= max_records && upsgi_log_fd_has_pending(upsgi.shared->worker_log_pipe[0])) {
 		upsgi.shared->log_backpressure_events++;
 	}
@@ -1677,6 +2072,9 @@ int upsgi_master_req_log_drain(int max_records) {
 			break;
 		}
 		drained++;
+	}
+	if (upsgi.log_queue_enabled && upsgi.req_logger_queue.head) {
+		upsgi_log_queue_flush_blocking(&upsgi.req_logger_queue, 1);
 	}
 	if (drained >= max_records && upsgi_log_fd_has_pending(upsgi.shared->worker_req_log_pipe[0])) {
 		upsgi.shared->req_log_backpressure_events++;

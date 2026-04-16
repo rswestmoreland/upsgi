@@ -81,8 +81,10 @@ static struct upsgi_option upsgi_base_options[] = {
 	{"undeferred-shared-socket", required_argument, 0, "create a shared socket for advanced jailing or ipc (undeferred mode)", upsgi_opt_add_shared_socket, NULL, 0},
 	{"processes", required_argument, 'p', "spawn the specified number of workers/processes", upsgi_opt_set_int, &upsgi.numproc, 0},
 	{"workers", required_argument, 'p', "spawn the specified number of workers/processes", upsgi_opt_set_int, &upsgi.numproc, 0},
-	{"thunder-lock", no_argument, 0, "serialize accept() usage (if possible)", upsgi_opt_true, &upsgi.use_thunder_lock, 0},
-	{"thunder-lock-watchdog", no_argument, 0, "watchdog for buggy pthread robust mutexes", upsgi_opt_true, &upsgi.use_thunder_lock_watchdog, 0},
+	{"thunder-lock", no_argument, 0, "enable shared-listener accept serialization (enabled by default)", upsgi_opt_true, &upsgi.use_thunder_lock, 0},
+	{"disable-thunder-lock", no_argument, 0, "disable shared-listener accept serialization", upsgi_opt_false, &upsgi.use_thunder_lock, 0},
+	{"thunder-lock-watchdog", no_argument, 0, "diagnostic-only watchdog flag for thunder-lock troubleshooting", upsgi_opt_true, &upsgi.use_thunder_lock_watchdog, 0},
+	{"thunder-lock-backend", required_argument, 0, "set thunder-lock backend: auto|fdlock", upsgi_opt_set_str, &upsgi.thunder_lock_backend_request, 0},
 	{"harakiri", required_argument, 't', "set harakiri timeout", upsgi_opt_set_int, &upsgi.harakiri_options.workers, 0},
 	{"harakiri-verbose", no_argument, 0, "enable verbose mode for harakiri", upsgi_opt_true, &upsgi.harakiri_verbose, 0},
 	{"harakiri-graceful-timeout", required_argument, 0, "interval between graceful harakiri attempt and a sigkill", upsgi_opt_set_int, &upsgi.harakiri_graceful_timeout, 0},
@@ -92,7 +94,6 @@ static struct upsgi_option upsgi_base_options[] = {
 	{"no-harakiri-arh", no_argument, 0, "do not enable harakiri during after-request-hook", upsgi_opt_true, &upsgi.harakiri_no_arh, 0},
 	{"no-harakiri-after-req-hook", no_argument, 0, "do not enable harakiri during after-request-hook", upsgi_opt_true, &upsgi.harakiri_no_arh, 0},
 	{"backtrace-depth", required_argument, 0, "set backtrace depth", upsgi_opt_set_int, &upsgi.backtrace_depth, 0},
-	{"mule-harakiri", required_argument, 0, "set harakiri timeout for mule tasks", upsgi_opt_set_int, &upsgi.harakiri_options.mules, 0},
 #ifdef UPSGI_XML
 	{"xmlconfig", required_argument, 'x', "load config from xml file", upsgi_opt_load_xml, NULL, UPSGI_OPT_IMMEDIATE},
 	{"xml", required_argument, 'x', "load config from xml file", upsgi_opt_load_xml, NULL, UPSGI_OPT_IMMEDIATE},
@@ -291,7 +292,6 @@ static struct upsgi_option upsgi_base_options[] = {
 	{"reload-mercy", required_argument, 0, "set the maximum time (in seconds) we wait for workers and other processes to die during reload/shutdown", upsgi_opt_set_int, &upsgi.reload_mercy, 0},
 	{"worker-reload-mercy", required_argument, 0, "set the maximum time (in seconds) a worker can take to reload/shutdown (default is 60)", upsgi_opt_set_int, &upsgi.worker_reload_mercy, 0},
 	{"chain-reload-delay", required_argument, 0, "wait the specified seconds between chain reload worker turnovers", upsgi_opt_set_int, &upsgi.chain_reload_delay, UPSGI_OPT_MASTER},
-	{"mule-reload-mercy", required_argument, 0, "set the maximum time (in seconds) a mule can take to reload/shutdown (default is 60)", upsgi_opt_set_int, &upsgi.mule_reload_mercy, 0},
 	{"exit-on-reload", no_argument, 0, "force exit even if a reload is requested", upsgi_opt_true, &upsgi.exit_on_reload, 0},
 	{"die-on-term", no_argument, 0, "exit instead of brutal reload on SIGTERM (no more needed)", upsgi_opt_deprecated, &upsgi.die_on_term, 0},
 	{"force-gateway", no_argument, 0, "force the spawn of the first registered gateway without a master", upsgi_opt_true, &upsgi.force_gateway, 0},
@@ -314,55 +314,16 @@ static struct upsgi_option upsgi_base_options[] = {
 	{"lock-engine", required_argument, 0, "set the lock engine", upsgi_opt_set_str, &upsgi.lock_engine, 0},
 	{"ftok", required_argument, 0, "set the ipcsem key via ftok() for avoiding duplicates", upsgi_opt_set_str, &upsgi.ftok, 0},
 	{"persistent-ipcsem", no_argument, 0, "do not remove ipcsem's on shutdown", upsgi_opt_true, &upsgi.persistent_ipcsem, 0},
-	{"sharedarea", required_argument, 'A', "create a raw shared memory area of specified pages (note: it supports keyval too)", upsgi_opt_add_string_list, &upsgi.sharedareas_list, 0},
 
 	{"safe-fd", required_argument, 0, "do not close the specified file descriptor", upsgi_opt_safe_fd, NULL, 0},
 	{"fd-safe", required_argument, 0, "do not close the specified file descriptor", upsgi_opt_safe_fd, NULL, 0},
 
-	{"cache", required_argument, 0, "create a shared cache containing given elements", upsgi_opt_set_64bit, &upsgi.cache_max_items, 0},
-	{"cache-blocksize", required_argument, 0, "set cache blocksize", upsgi_opt_set_64bit, &upsgi.cache_blocksize, 0},
-	{"cache-store", required_argument, 0, "enable persistent cache to disk", upsgi_opt_set_str, &upsgi.cache_store, UPSGI_OPT_MASTER},
-	{"cache-store-sync", required_argument, 0, "set frequency of sync for persistent cache", upsgi_opt_set_int, &upsgi.cache_store_sync, 0},
-	{"cache-no-expire", no_argument, 0, "disable auto sweep of expired items", upsgi_opt_true, &upsgi.cache_no_expire, 0},
-	{"cache-expire-freq", required_argument, 0, "set the frequency of cache sweeper scans (default 3 seconds)", upsgi_opt_set_int, &upsgi.cache_expire_freq, 0},
-	{"cache-report-freed-items", no_argument, 0, "constantly report the cache item freed by the sweeper (use only for debug)", upsgi_opt_true, &upsgi.cache_report_freed_items, 0},
-	{"cache-udp-server", required_argument, 0, "bind the cache udp server (used only for set/update/delete) to the specified socket", upsgi_opt_add_string_list, &upsgi.cache_udp_server, UPSGI_OPT_MASTER},
-	{"cache-udp-node", required_argument, 0, "send cache update/deletion to the specified cache udp server", upsgi_opt_add_string_list, &upsgi.cache_udp_node, UPSGI_OPT_MASTER},
-	{"cache-sync", required_argument, 0, "copy the whole content of another upsgi cache server on server startup", upsgi_opt_set_str, &upsgi.cache_sync, 0},
-	{"cache-use-last-modified", no_argument, 0, "update last_modified_at timestamp on every cache item modification (default is disabled)", upsgi_opt_true, &upsgi.cache_use_last_modified, 0},
-
-	{"add-cache-item", required_argument, 0, "add an item in the cache", upsgi_opt_add_string_list, &upsgi.add_cache_item, 0},
-	{"load-file-in-cache", required_argument, 0, "load a static file in the cache", upsgi_opt_add_string_list, &upsgi.load_file_in_cache, 0},
-#ifdef UPSGI_ZLIB
-	{"load-file-in-cache-gzip", required_argument, 0, "load a static file in the cache with gzip compression", upsgi_opt_add_string_list, &upsgi.load_file_in_cache_gzip, 0},
-#endif
-
-	{"cache2", required_argument, 0, "create a new generation shared cache (keyval syntax)", upsgi_opt_add_string_list, &upsgi.cache2, 0},
+	{"cache2", required_argument, 0, "define a retained local cache for internal runtime consumers", upsgi_opt_add_string_list, &upsgi.cache2, 0},
 
 
-	{"queue", required_argument, 0, "enable shared queue", upsgi_opt_set_int, &upsgi.queue_size, 0},
-	{"queue-blocksize", required_argument, 0, "set queue blocksize", upsgi_opt_set_int, &upsgi.queue_blocksize, 0},
-	{"queue-store", required_argument, 0, "enable persistent queue to disk", upsgi_opt_set_str, &upsgi.queue_store, UPSGI_OPT_MASTER},
-	{"queue-store-sync", required_argument, 0, "set frequency of sync for persistent queue", upsgi_opt_set_int, &upsgi.queue_store_sync, 0},
 
-	{"spooler", required_argument, 'Q', "run a spooler on the specified directory", upsgi_opt_add_spooler, NULL, UPSGI_OPT_MASTER},
-	{"spooler-external", required_argument, 0, "map spoolers requests to a spooler directory managed by an external instance", upsgi_opt_add_spooler, (void *) UPSGI_SPOOLER_EXTERNAL, UPSGI_OPT_MASTER},
-	{"spooler-ordered", no_argument, 0, "try to order the execution of spooler tasks", upsgi_opt_true, &upsgi.spooler_ordered, 0},
-	{"spooler-chdir", required_argument, 0, "chdir() to specified directory before each spooler task", upsgi_opt_set_str, &upsgi.spooler_chdir, 0},
-	{"spooler-processes", required_argument, 0, "set the number of processes for spoolers", upsgi_opt_set_int, &upsgi.spooler_numproc, UPSGI_OPT_IMMEDIATE},
-	{"spooler-quiet", no_argument, 0, "do not be verbose with spooler tasks", upsgi_opt_true, &upsgi.spooler_quiet, 0},
-	{"spooler-max-tasks", required_argument, 0, "set the maximum number of tasks to run before recycling a spooler", upsgi_opt_set_int, &upsgi.spooler_max_tasks, 0},
-	{"spooler-signal-as-task", no_argument, 0, "treat signal events as tasks in spooler, combine used with spooler-max-tasks", upsgi_opt_true, &upsgi.spooler_signal_as_task, 0},
-	{"spooler-harakiri", required_argument, 0, "set harakiri timeout for spooler tasks", upsgi_opt_set_int, &upsgi.harakiri_options.spoolers, 0},
-	{"spooler-frequency", required_argument, 0, "set spooler frequency", upsgi_opt_set_int, &upsgi.spooler_frequency, 0},
-	{"spooler-freq", required_argument, 0, "set spooler frequency", upsgi_opt_set_int, &upsgi.spooler_frequency, 0},
-	{"spooler-cheap", no_argument, 0, "set spooler cheap mode", upsgi_opt_true, &upsgi.spooler_cheap, 0},
 
-	{"mule", optional_argument, 0, "add a mule", upsgi_opt_add_mule, NULL, UPSGI_OPT_MASTER},
-	{"mules", required_argument, 0, "add the specified number of mules", upsgi_opt_add_mules, NULL, UPSGI_OPT_MASTER},
-	{"farm", required_argument, 0, "add a mule farm", upsgi_opt_add_farm, NULL, UPSGI_OPT_MASTER},
-	{"mule-msg-size", required_argument, 0, "set mule message buffer size", upsgi_opt_set_int, &upsgi.mule_msg_size, UPSGI_OPT_MASTER},
-	{"mule-msg-recv-size", required_argument, 0, "set mule message recv buffer size", upsgi_opt_set_int, &upsgi.mule_msg_recv_size, UPSGI_OPT_MASTER},
+
 
 	{"signal", required_argument, 0, "send a upsgi signal to a server", upsgi_opt_signal, NULL, UPSGI_OPT_IMMEDIATE},
 	{"signal-bufsize", required_argument, 0, "set buffer size for signal queue", upsgi_opt_set_int, &upsgi.signal_bufsize, 0},
@@ -469,7 +430,6 @@ static struct upsgi_option upsgi_base_options[] = {
 
         {"hook-as-emperor-setns", required_argument, 0, "run the specified hook in the emperor entering vassal namespace", upsgi_opt_add_string_list, &upsgi.hook_as_emperor_setns, 0},
 
-        {"hook-as-mule", required_argument, 0, "run the specified hook in each mule", upsgi_opt_add_string_list, &upsgi.hook_as_mule, 0},
 
         {"hook-as-gateway", required_argument, 0, "run the specified hook in each gateway", upsgi_opt_add_string_list, &upsgi.hook_as_gateway, 0},
 
@@ -597,8 +557,6 @@ static struct upsgi_option upsgi_base_options[] = {
 	{"never-swap", no_argument, 0, "lock all memory pages avoiding swapping", upsgi_opt_true, &upsgi.never_swap, 0},
 	{"touch-reload", required_argument, 0, "reload upsgi if the specified file is modified/touched", upsgi_opt_add_string_list, &upsgi.touch_reload, UPSGI_OPT_MASTER},
 	{"touch-workers-reload", required_argument, 0, "trigger reload of (only) workers if the specified file is modified/touched", upsgi_opt_add_string_list, &upsgi.touch_workers_reload, UPSGI_OPT_MASTER},
-	{"touch-mules-reload", required_argument, 0, "reload mules if the specified file is modified/touched", upsgi_opt_add_string_list, &upsgi.touch_mules_reload, UPSGI_OPT_MASTER},
-	{"touch-spoolers-reload", required_argument, 0, "reload spoolers if the specified file is modified/touched", upsgi_opt_add_string_list, &upsgi.touch_spoolers_reload, UPSGI_OPT_MASTER},
 	{"touch-chain-reload", required_argument, 0, "trigger chain reload if the specified file is modified/touched", upsgi_opt_add_string_list, &upsgi.touch_chain_reload, UPSGI_OPT_MASTER},
 	{"touch-logrotate", required_argument, 0, "trigger logrotation if the specified file is modified/touched", upsgi_opt_add_string_list, &upsgi.touch_logrotate, UPSGI_OPT_MASTER | UPSGI_OPT_LOG_MASTER},
 	{"touch-logreopen", required_argument, 0, "trigger log reopen if the specified file is modified/touched", upsgi_opt_add_string_list, &upsgi.touch_logreopen, UPSGI_OPT_MASTER | UPSGI_OPT_LOG_MASTER},
@@ -622,6 +580,8 @@ static struct upsgi_option upsgi_base_options[] = {
 	{"post-buffering", required_argument, 0, "set size in bytes after which request bodies spill to disk instead of staying fully in memory", upsgi_opt_set_64bit, &upsgi.post_buffering, 0},
 	{"post-buffering-bufsize", required_argument, 0, "set read chunk buffer size used while post buffering; independent from the in-memory spill threshold", upsgi_opt_set_64bit, &upsgi.post_buffering_bufsize, 0},
 	{"body-read-warning", required_argument, 0, "set the amount of allowed memory allocation (in megabytes) for request body before starting printing a warning", upsgi_opt_set_64bit, &upsgi.body_read_warning, 0},
+	{"body-scheduler", no_argument, 0, "enable request-body scheduler fairness (enabled by default)", upsgi_opt_true, &upsgi.body_scheduler, 0},
+	{"disable-body-scheduler", no_argument, 0, "disable request-body scheduler fairness", upsgi_opt_false, &upsgi.body_scheduler, 0},
 	{"upload-progress", required_argument, 0, "enable creation of .json files in the specified directory during a file upload", upsgi_opt_set_str, &upsgi.upload_progress, 0},
 	{"no-default-app", no_argument, 0, "do not fallback to default app", upsgi_opt_true, &upsgi.no_default_app, 0},
 	{"manage-script-name", no_argument, 0, "automatically rewrite SCRIPT_NAME and PATH_INFO", upsgi_opt_true, &upsgi.manage_script_name, 0},
@@ -663,50 +623,8 @@ static struct upsgi_option upsgi_base_options[] = {
 	{"master-fifo", required_argument, 0, "enable the master fifo", upsgi_opt_add_string_list, &upsgi.master_fifo, UPSGI_OPT_MASTER},
 
 	{"notify-socket", required_argument, 0, "enable the notification socket", upsgi_opt_set_str, &upsgi.notify_socket, UPSGI_OPT_MASTER},
-	{"subscription-notify-socket", required_argument, 0, "set the notification socket for subscriptions", upsgi_opt_set_str, &upsgi.subscription_notify_socket, UPSGI_OPT_MASTER},
-	{"subscription-mountpoints", required_argument, 0, "enable mountpoints support for subscription system", upsgi_opt_set_int, &upsgi.subscription_mountpoints, UPSGI_OPT_MASTER},
-	{"subscription-mountpoint", required_argument, 0, "enable mountpoints support for subscription system", upsgi_opt_set_int, &upsgi.subscription_mountpoints, UPSGI_OPT_MASTER},
-	{"subscription-vassal-required", no_argument, 0, "require a vassal field for each subscription packet", upsgi_opt_true, &upsgi.subscription_vassal_required, UPSGI_OPT_MASTER},
 
-#ifdef UPSGI_SSL
-	{"legion", required_argument, 0, "became a member of a legion", upsgi_opt_legion, NULL, UPSGI_OPT_MASTER},
-	{"legion-mcast", required_argument, 0, "became a member of a legion (shortcut for multicast)", upsgi_opt_legion_mcast, NULL, UPSGI_OPT_MASTER},
-	{"legion-node", required_argument, 0, "add a node to a legion", upsgi_opt_legion_node, NULL, UPSGI_OPT_MASTER},
-	{"legion-freq", required_argument, 0, "set the frequency of legion packets", upsgi_opt_set_int, &upsgi.legion_freq, UPSGI_OPT_MASTER},
-	{"legion-tolerance", required_argument, 0, "set the tolerance of legion subsystem", upsgi_opt_set_int, &upsgi.legion_tolerance, UPSGI_OPT_MASTER},
-	{"legion-death-on-lord-error", required_argument, 0, "declare itself as a dead node for the specified amount of seconds if one of the lord hooks fails", upsgi_opt_set_int, &upsgi.legion_death_on_lord_error, UPSGI_OPT_MASTER},
-	{"legion-skew-tolerance", required_argument, 0, "set the clock skew tolerance of legion subsystem (default 60 seconds)", upsgi_opt_set_int, &upsgi.legion_skew_tolerance, UPSGI_OPT_MASTER},
-	{"legion-lord", required_argument, 0, "action to call on Lord election", upsgi_opt_legion_hook, NULL, UPSGI_OPT_MASTER},
-	{"legion-unlord", required_argument, 0, "action to call on Lord dismiss", upsgi_opt_legion_hook, NULL, UPSGI_OPT_MASTER},
-	{"legion-setup", required_argument, 0, "action to call on legion setup", upsgi_opt_legion_hook, NULL, UPSGI_OPT_MASTER},
-	{"legion-death", required_argument, 0, "action to call on legion death (shutdown of the instance)", upsgi_opt_legion_hook, NULL, UPSGI_OPT_MASTER},
-	{"legion-join", required_argument, 0, "action to call on legion join (first time quorum is reached)", upsgi_opt_legion_hook, NULL, UPSGI_OPT_MASTER},
-	{"legion-node-joined", required_argument, 0, "action to call on new node joining legion", upsgi_opt_legion_hook, NULL, UPSGI_OPT_MASTER},
-	{"legion-node-left", required_argument, 0, "action to call node leaving legion", upsgi_opt_legion_hook, NULL, UPSGI_OPT_MASTER},
-	{"legion-quorum", required_argument, 0, "set the quorum of a legion", upsgi_opt_legion_quorum, NULL, UPSGI_OPT_MASTER},
-	{"legion-scroll", required_argument, 0, "set the scroll of a legion", upsgi_opt_legion_scroll, NULL, UPSGI_OPT_MASTER},
-	{"legion-scroll-max-size", required_argument, 0, "set max size of legion scroll buffer", upsgi_opt_set_16bit, &upsgi.legion_scroll_max_size, 0},
-	{"legion-scroll-list-max-size", required_argument, 0, "set max size of legion scroll list buffer", upsgi_opt_set_64bit, &upsgi.legion_scroll_list_max_size, 0},
-	{"subscriptions-sign-check", required_argument, 0, "set digest algorithm and certificate directory for secured subscription system", upsgi_opt_scd, NULL, UPSGI_OPT_MASTER},
-	{"subscriptions-sign-check-tolerance", required_argument, 0, "set the maximum tolerance (in seconds) of clock skew for secured subscription system", upsgi_opt_set_int, &upsgi.subscriptions_sign_check_tolerance, UPSGI_OPT_MASTER},
-	{"subscriptions-sign-skip-uid", required_argument, 0, "skip signature check for the specified uid when using unix sockets credentials", upsgi_opt_add_string_list, &upsgi.subscriptions_sign_skip_uid, UPSGI_OPT_MASTER},
-#endif
-	{"subscriptions-credentials-check", required_argument, 0, "add a directory to search for subscriptions key credentials", upsgi_opt_add_string_list, &upsgi.subscriptions_credentials_check_dir, UPSGI_OPT_MASTER},
-	{"subscriptions-use-credentials", no_argument, 0, "enable management of SCM_CREDENTIALS in subscriptions UNIX sockets", upsgi_opt_true, &upsgi.subscriptions_use_credentials, 0},
-	{"subscription-algo", required_argument, 0, "set load balancing algorithm for the subscription system", upsgi_opt_ssa, NULL, 0},
-	{"subscription-dotsplit", no_argument, 0, "try to fallback to the next part (dot based) in subscription key", upsgi_opt_true, &upsgi.subscription_dotsplit, 0},
-	{"subscribe-to", required_argument, 0, "subscribe to the specified subscription server", upsgi_opt_add_string_list, &upsgi.subscriptions, UPSGI_OPT_MASTER},
-	{"st", required_argument, 0, "subscribe to the specified subscription server", upsgi_opt_add_string_list, &upsgi.subscriptions, UPSGI_OPT_MASTER},
-	{"subscribe", required_argument, 0, "subscribe to the specified subscription server", upsgi_opt_add_string_list, &upsgi.subscriptions, UPSGI_OPT_MASTER},
-	{"subscribe2", required_argument, 0, "subscribe to the specified subscription server using advanced keyval syntax", upsgi_opt_add_string_list, &upsgi.subscriptions2, UPSGI_OPT_MASTER},
-	{"subscribe-freq", required_argument, 0, "send subscription announce at the specified interval", upsgi_opt_set_int, &upsgi.subscribe_freq, 0},
-	{"subscription-tolerance", required_argument, 0, "set tolerance for subscription servers", upsgi_opt_set_int, &upsgi.subscription_tolerance, 0},
-	{"subscription-tolerance-inactive", required_argument, 0, "set tolerance for subscription servers for inactive vassals", upsgi_opt_set_int, &upsgi.subscription_tolerance_inactive, 0},
-	{"unsubscribe-on-graceful-reload", no_argument, 0, "force unsubscribe request even during graceful reload", upsgi_opt_true, &upsgi.unsubscribe_on_graceful_reload, 0},
-	{"start-unsubscribed", no_argument, 0, "configure subscriptions but do not send them (useful with master fifo)", upsgi_opt_true, &upsgi.subscriptions_blocked, 0},
-	{"subscription-clear-on-shutdown", no_argument, 0, "force clear instead of unsubscribe during shutdown", upsgi_opt_true, &upsgi.subscription_clear_on_shutdown, 0},
 
-	{"subscribe-with-modifier1", required_argument, 0, "force the specified modifier1 when subscribing", upsgi_opt_set_str, &upsgi.subscribe_with_modifier1, UPSGI_OPT_MASTER},
 
 	{"snmp", optional_argument, 0, "enable the embedded snmp server", upsgi_opt_snmp, NULL, 0},
 	{"snmp-community", required_argument, 0, "set the snmp community string", upsgi_opt_snmp_community, NULL, 0},
@@ -802,6 +720,10 @@ static struct upsgi_option upsgi_base_options[] = {
 	{"log-master", no_argument, 0, "delegate logging to master process", upsgi_opt_true, &upsgi.log_master, UPSGI_OPT_MASTER|UPSGI_OPT_LOG_MASTER},
 	{"log-master-bufsize", required_argument, 0, "set the buffer size for the master logger. bigger log messages will be truncated", upsgi_opt_set_64bit, &upsgi.log_master_bufsize, 0},
 	{"log-drain-burst", required_argument, 0, "set the maximum number of log records drained per wake before yielding back to the event loop", upsgi_opt_log_drain_burst, &upsgi.log_drain_burst, 0},
+	{"log-queue-enabled", no_argument, 0, "explicitly enable the bounded logger queues (enabled by default)", upsgi_opt_true, &upsgi.log_queue_enabled, 0},
+	{"disable-log-queue", no_argument, 0, "disable the bounded logger queues for troubleshooting", upsgi_opt_false, &upsgi.log_queue_enabled, 0},
+	{"log-queue-records", required_argument, 0, "set the maximum number of records buffered by each lossless logger queue", upsgi_opt_set_64bit, &upsgi.log_queue_records, 0},
+	{"log-queue-bytes", required_argument, 0, "set the maximum total bytes buffered by each lossless logger queue", upsgi_opt_set_64bit, &upsgi.log_queue_bytes, 0},
 	{"log-master-stream", no_argument, 0, "create the master logpipe as SOCK_STREAM", upsgi_opt_true, &upsgi.log_master_stream, 0},
 	{"log-master-req-stream", no_argument, 0, "create the master requests logpipe as SOCK_STREAM", upsgi_opt_true, &upsgi.log_master_req_stream, 0},
 	{"log-reopen", no_argument, 0, "reopen log after reload", upsgi_opt_true, &upsgi.log_reopen, 0},
@@ -1010,7 +932,6 @@ static struct upsgi_option upsgi_base_options[] = {
 
 	{"disable-sendfile", no_argument, 0, "disable sendfile() and rely on boring read()/write()", upsgi_opt_true, &upsgi.disable_sendfile, 0},
 
-	{"check-cache", optional_argument, 0, "check for response data in the specified cache (empty for default cache)", upsgi_opt_set_str, &upsgi.use_check_cache, 0},
 	{"close-on-exec", no_argument, 0, "set close-on-exec on connection sockets (could be required for spawning processes in requests)", upsgi_opt_true, &upsgi.close_on_exec, 0},
 	{"close-on-exec2", no_argument, 0, "set close-on-exec on server sockets (could be required for spawning processes in requests)", upsgi_opt_true, &upsgi.close_on_exec2, 0},
 	{"mode", required_argument, 0, "set upsgi custom mode", upsgi_opt_set_str, &upsgi.mode, 0},
@@ -1045,12 +966,6 @@ static struct upsgi_option upsgi_base_options[] = {
 	{"cron2", required_argument, 0, "add a cron task (key=val syntax)", upsgi_opt_add_cron2, NULL, UPSGI_OPT_MASTER},
 	{"unique-cron", required_argument, 0, "add a unique cron task", upsgi_opt_add_unique_cron, NULL, UPSGI_OPT_MASTER},
 	{"cron-harakiri", required_argument, 0, "set the maximum time (in seconds) we wait for cron command to complete", upsgi_opt_set_int, &upsgi.cron_harakiri, 0},
-#ifdef UPSGI_SSL
-	{"legion-cron", required_argument, 0, "add a cron task runnable only when the instance is a lord of the specified legion", upsgi_opt_add_legion_cron, NULL, UPSGI_OPT_MASTER},
-	{"cron-legion", required_argument, 0, "add a cron task runnable only when the instance is a lord of the specified legion", upsgi_opt_add_legion_cron, NULL, UPSGI_OPT_MASTER},
-	{"unique-legion-cron", required_argument, 0, "add a unique cron task runnable only when the instance is a lord of the specified legion", upsgi_opt_add_unique_legion_cron, NULL, UPSGI_OPT_MASTER},
-	{"unique-cron-legion", required_argument, 0, "add a unique cron task runnable only when the instance is a lord of the specified legion", upsgi_opt_add_unique_legion_cron, NULL, UPSGI_OPT_MASTER},
-#endif
 	{"loop", required_argument, 0, "select the upsgi loop engine", upsgi_opt_set_str, &upsgi.loop, 0},
 	{"loop-list", no_argument, 0, "list enabled loop engines", upsgi_opt_true, &upsgi.loop_list, 0},
 	{"loops-list", no_argument, 0, "list enabled loop engines", upsgi_opt_true, &upsgi.loop_list, 0},
@@ -1060,11 +975,6 @@ static struct upsgi_option upsgi_base_options[] = {
 	{"attach-control-daemon", required_argument, 0, "attach a command/daemon to the master process (the command has to not go in background), when the daemon dies, the master dies too", upsgi_opt_add_daemon, NULL, UPSGI_OPT_MASTER},
 	{"smart-attach-daemon", required_argument, 0, "attach a command/daemon to the master process managed by a pidfile (the command has to daemonize)", upsgi_opt_add_daemon, NULL, UPSGI_OPT_MASTER},
 	{"smart-attach-daemon2", required_argument, 0, "attach a command/daemon to the master process managed by a pidfile (the command has to NOT daemonize)", upsgi_opt_add_daemon, NULL, UPSGI_OPT_MASTER},
-#ifdef UPSGI_SSL
-	{"legion-attach-daemon", required_argument, 0, "same as --attach-daemon but daemon runs only on legion lord node", upsgi_opt_add_daemon, NULL, UPSGI_OPT_MASTER},
-	{"legion-smart-attach-daemon", required_argument, 0, "same as --smart-attach-daemon but daemon runs only on legion lord node", upsgi_opt_add_daemon, NULL, UPSGI_OPT_MASTER},
-	{"legion-smart-attach-daemon2", required_argument, 0, "same as --smart-attach-daemon2 but daemon runs only on legion lord node", upsgi_opt_add_daemon, NULL, UPSGI_OPT_MASTER},
-#endif
 	{"daemons-honour-stdin", no_argument, 0, "do not change the stdin of external daemons to /dev/null", upsgi_opt_true, &upsgi.daemons_honour_stdin, UPSGI_OPT_MASTER},
 	{"attach-daemon2", required_argument, 0, "attach-daemon keyval variant (supports smart modes too)", upsgi_opt_add_daemon2, NULL, UPSGI_OPT_MASTER},
 	{"plugins", required_argument, 0, "load upsgi plugins", upsgi_opt_load_plugin, NULL, UPSGI_OPT_IMMEDIATE},
@@ -1371,9 +1281,6 @@ void kill_them_all(int signum) {
 	if (upsgi_instance_is_dying) return;
 	upsgi.status.brutally_destroying = 1;
 
-	// unsubscribe if needed
-	upsgi_unsubscribe_all();
-
 	upsgi_log("SIGINT/SIGTERM received...killing workers...\n");
 
 	int i;
@@ -1382,12 +1289,6 @@ void kill_them_all(int signum) {
                         upsgi_curse(i, SIGINT);
                 }
         }
-	for (i = 0; i < upsgi.mules_cnt; i++) {
-		if (upsgi.mules[i].pid > 0) {
-			upsgi_curse_mule(i, SIGINT);
-		}
-	}
-
 	upsgi_destroy_processes();
 }
 
@@ -1396,9 +1297,6 @@ void gracefully_kill_them_all(int signum) {
 	if (upsgi_instance_is_dying) return;
 	upsgi.status.gracefully_destroying = 1;
 
-	// unsubscribe if needed
-	upsgi_unsubscribe_all();
-
 	upsgi_log_verbose("graceful shutdown triggered...\n");
 
 	int i;
@@ -1406,12 +1304,6 @@ void gracefully_kill_them_all(int signum) {
 		if (upsgi.workers[i].pid > 0) {
 			upsgi.workers[i].shutdown_sockets = 1;
 			upsgi_curse(i, SIGHUP);
-		}
-	}
-
-	for (i = 0; i < upsgi.mules_cnt; i++) {
-		if (upsgi.mules[i].pid > 0) {
-			upsgi_curse_mule(i, SIGHUP);
 		}
 	}
 
@@ -1469,23 +1361,10 @@ void grace_them_all(int signum) {
 
 	upsgi_log("...gracefully killing workers...\n");
 
-#ifdef UPSGI_SSL
-	upsgi_legion_announce_death();
-#endif
-
-	if (upsgi.unsubscribe_on_graceful_reload) {
-		upsgi_unsubscribe_all();
-	}
 
 	for (i = 1; i <= upsgi.numproc; i++) {
 		if (upsgi.workers[i].pid > 0) {
 			upsgi_curse(i, SIGHUP);
-		}
-	}
-
-	for (i = 0; i < upsgi.mules_cnt; i++) {
-		if (upsgi.mules[i].pid > 0) {
-			upsgi_curse_mule(i, SIGHUP);
 		}
 	}
 }
@@ -1522,22 +1401,11 @@ void reap_them_all(int signum) {
 
 	upsgi_log("...brutally killing workers...\n");
 
-#ifdef UPSGI_SSL
-        upsgi_legion_announce_death();
-#endif
-
-	// unsubscribe if needed
-	upsgi_unsubscribe_all();
 
 	int i;
 	for (i = 1; i <= upsgi.numproc; i++) {
 		if (upsgi.workers[i].pid > 0)
 			upsgi_curse(i, SIGTERM);
-	}
-	for (i = 0; i < upsgi.mules_cnt; i++) {
-		if (upsgi.mules[i].pid > 0) {
-			upsgi_curse_mule(i, SIGTERM);
-		}
 	}
 }
 
@@ -2204,10 +2072,6 @@ void upsgi_setup(int argc, char *argv[], char *envp[]) {
 	atexit(vacuum);
 	// call user scripts
 	atexit(upsgi_exec_atexit);
-#ifdef UPSGI_SSL
-	// call legions death hooks
-	atexit(upsgi_legion_atexit);
-#endif
 
 	// allocate main shared memory
 	upsgi.shared = (struct upsgi_shared *) upsgi_calloc_shared(sizeof(struct upsgi_shared));
@@ -2890,53 +2754,56 @@ int upsgi_start(void *v_argv) {
 
 	// setup locking
 	upsgi_setup_locking();
-	if (upsgi.use_thunder_lock && upsgi.use_thunder_lock_watchdog) {
-		upsgi_log_initial("thunder lock: enabled (with robust mutex watchdog)\n");
-	}
-	else if (upsgi.use_thunder_lock) {
+	if (upsgi.use_thunder_lock) {
+		const char *backend_name = "unknown";
+		switch (upsgi.thunder_lock_backend) {
+		case UPSGI_THUNDER_LOCK_BACKEND_PTHREAD_ROBUST:
+			backend_name = "robust-pthread";
+			break;
+		case UPSGI_THUNDER_LOCK_BACKEND_PTHREAD_PLAIN:
+			backend_name = "plain-pthread";
+			break;
+		case UPSGI_THUNDER_LOCK_BACKEND_IPCSEM:
+			backend_name = "ipcsem";
+			break;
+		case UPSGI_THUNDER_LOCK_BACKEND_FDLOCK:
+			backend_name = "fd-lock";
+			break;
+		default:
+			break;
+		}
+
 		upsgi_log_initial("thunder lock: enabled\n");
+		upsgi_log_initial("thunder lock backend: %s\n", backend_name);
+		upsgi_log_initial("thunder lock robust recovery: %s\n", upsgi.thunder_lock_backend_has_owner_dead_recovery ? "yes" : "no");
+		upsgi_log_initial("thunder lock watchdog diagnostics: %s\n", upsgi.use_thunder_lock_watchdog ? "enabled" : "disabled");
+		if (upsgi.thunder_lock_backend_reason) {
+			upsgi_log_initial("thunder lock backend note: %s\n", upsgi.thunder_lock_backend_reason);
+		}
+		if (upsgi.thunder_lock_backend == UPSGI_THUNDER_LOCK_BACKEND_PTHREAD_PLAIN) {
+			upsgi_log_initial("thunder lock warning: plain pthread fallback has no owner-death recovery; fd-lock compatibility backend is preferred for fragile environments\n");
+		}
+		if (upsgi.use_thunder_lock_watchdog) {
+			upsgi_log_initial("thunder lock watchdog note: diagnostics only; no recovery thread is spawned\n");
+		}
 	}
 	else {
-		upsgi_log_initial("thunder lock: disabled (you can enable it with --thunder-lock)\n");
+		upsgi_log_initial("thunder lock: disabled by configuration\n");
 	}
 
 	// allocate rpc structures
         upsgi_rpc_init();
 
-	// initialize sharedareas
-	upsgi_sharedareas_init();
-
 	upsgi.snmp_lock = upsgi_lock_init("snmp");
-
-	// setup queue
-	if (upsgi.queue_size > 0) {
-		upsgi_init_queue();
-	}
 
 	upsgi_cache_create_all();
 
-	if (upsgi.use_check_cache) {
-		upsgi.check_cache = upsgi_cache_by_name(upsgi.use_check_cache);
-		if (!upsgi.check_cache) {
-			upsgi_log("unable to find cache \"%s\"\n", upsgi.use_check_cache);
-			exit(1);
-		}
-	}
-
 	if (upsgi.use_static_cache_paths) {
 		if (upsgi.static_cache_paths_name) {
-			upsgi.static_cache_paths = upsgi_cache_by_name(upsgi.static_cache_paths_name);
-			if (!upsgi.static_cache_paths) {
-				upsgi_log("unable to find cache \"%s\"\n", upsgi.static_cache_paths_name);
-				exit(1);
-			}
+			upsgi.static_cache_paths = upsgi_cache_ensure_named_local(upsgi.static_cache_paths_name, 64, 4096);
 		}
 		else {
-			if (!upsgi.caches) {
-                		upsgi_log("caching of static paths requires upsgi caching !!!\n");
-                		exit(1);
-			}
-			upsgi.static_cache_paths = upsgi.caches;
+			upsgi.static_cache_paths = upsgi_cache_ensure_named_local("staticpaths", 64, 4096);
 		}
         }
 
@@ -3059,13 +2926,9 @@ int upsgi_start(void *v_argv) {
 		!upsgi.command_mode &&
 		!upsgi.daemons_cnt &&
 		!upsgi.crons &&
-		!upsgi.spoolers &&
 		!upsgi.emperor_proxy
 #ifdef __linux__
 		&& !upsgi.setns_socket
-#endif
-#ifdef UPSGI_SSL
-&& !upsgi.legions
 #endif
 		) {
 		upsgi_log("The -s/--socket option is missing and stdin is not a socket.\n");
@@ -3146,13 +3009,6 @@ unsafe:
 	if (upsgi.crons) {
 		struct upsgi_cron *ucron = upsgi.crons;
 		while (ucron) {
-#ifdef UPSGI_SSL
-			if (ucron->legion) {
-				upsgi_log("[upsgi-cron] command \"%s\" registered as cron task for legion \"%s\"\n", ucron->command, ucron->legion);
-				ucron = ucron->next;
-				continue;
-			}
-#endif
 			upsgi_log("[upsgi-cron] command \"%s\" registered as cron task\n", ucron->command);
 			ucron = ucron->next;
 		}
@@ -3180,8 +3036,6 @@ unsafe:
 	masterpid = upsgi.mypid;
 	upsgi.workers[0].pid = masterpid;
 
-	// initialize mules and farms
-	upsgi_setup_mules_and_farms();
 
 	if (upsgi.command_mode) {
 		upsgi_log("*** Operational MODE: command ***\n");
@@ -3230,20 +3084,6 @@ unsafe:
 		}
 	}
 
-	// initialize locks and socket as soon as possible, as the master could enqueue tasks
-	if (upsgi.spoolers != NULL) {
-		create_signal_pipe(upsgi.shared->spooler_signal_pipe);
-		struct upsgi_spooler *uspool = upsgi.spoolers;
-		while (uspool) {
-			// lock is required even in EXTERNAL mode
-			uspool->lock = upsgi_lock_init(upsgi_concat2("spooler on ", uspool->dir));
-			if (uspool->mode == UPSGI_SPOOLER_EXTERNAL)
-				goto next;
-			create_signal_pipe(uspool->signal_pipe);
-next:
-			uspool = uspool->next;
-		}
-	}
 
 	// preinit apps (create the language environment)
 	for (i = 0; i < 256; i++) {
@@ -3373,17 +3213,6 @@ next:
 	}
 
 
-
-	struct upsgi_spooler *uspool = upsgi.spoolers;
-	while (uspool) {
-		if (uspool->mode == UPSGI_SPOOLER_EXTERNAL)
-			goto next2;
-		// skip spooler start on cheap mode
-		if (upsgi.spooler_cheap) goto next2;
-		uspool->pid = spooler_start(uspool);
-next2:
-		uspool = uspool->next;
-	}
 
 	if (!upsgi.master_process) {
 		if (upsgi.numproc == 1) {
@@ -4482,10 +4311,6 @@ void upsgi_opt_set_placeholder(char *opt, char *value, void *ph) {
 	add_exported_option_do(upsgi_str(value), p + 1, 0, ph ? 1 : 0);
 	p[0] = '=';
 
-}
-
-void upsgi_opt_ssa(char *opt, char *value, void *foobar) {
-	upsgi_subscription_set_algo(value);
 }
 
 #ifdef UPSGI_SSL

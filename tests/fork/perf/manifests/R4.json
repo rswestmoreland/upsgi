@@ -1,0 +1,82 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/R/common/receiver_app.psgi",
+      "tests/fork/perf/assets/R/common/generate_payloads.py",
+      "tests/fork/perf/assets/R/common/receiver_client.py",
+      "tests/fork/perf/assets/R/R4/r4_matrix.json",
+      "tests/fork/perf/assets/R/R4/run_r4_smoke.sh",
+      "tests/fork/perf/assets/R/common/slow_uploader_client.py",
+      "tests/fork/perf/assets/R/R4/run_r4_measured.sh",
+      "tests/fork/perf/assets/R/common/slow_uploader_flood.py"
+    ]
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "anti-flood thresholds"
+      ],
+      "source": "Wazuh"
+    },
+    {
+      "ideas": [
+        "slow-client handling"
+      ],
+      "source": "nginx"
+    },
+    {
+      "ideas": [
+        "pacing/window thinking"
+      ],
+      "source": "WANProxy"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "R4",
+  "lane": "R",
+  "notes": [
+    "Blocked on receiver PSGI app bundle and slow-uploader harness.",
+    "See tests/fork/perf/assets/R/README.md.",
+    "Repo-local receiver asset pack is packaged.",
+    "Focused measured slow-uploader flood runner added with control POSTs during active slow uploads."
+  ],
+  "parameters": {
+    "measurement_focus": [
+      "socket occupancy",
+      "accept starvation",
+      "read timeouts",
+      "backlog growth",
+      "impact on good clients"
+    ]
+  },
+  "phase": "P4",
+  "purpose": "Simulate many remote hosts that connect and upload slowly.",
+  "questions": [
+    "Can slow uploaders starve normal clients?",
+    "Do we need stronger read-side flood controls or overload states?"
+  ],
+  "schema_version": "1",
+  "status": "measured_runner_added",
+  "title": "Slow uploader flood",
+  "traffic_shape": {
+    "client_type": "many valid slow senders",
+    "upload_rates_bytes_per_sec": [
+      8192,
+      65536,
+      262144
+    ]
+  }
+}

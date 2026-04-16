@@ -11,11 +11,6 @@ void upsgi_master_check_death() {
 				return;
 			}
 		}
-		for(i=0;i<upsgi.mules_cnt;i++) {
-			if (upsgi.mules[i].pid > 0) {
-				return;
-			}
-		}
 		upsgi_log("goodbye to upsgi.\n");
 		exit(upsgi.status.dying_for_need_app ? UPSGI_FAILED_APP_CODE : 0);
 	}
@@ -30,11 +25,6 @@ int upsgi_master_check_reload(char **argv) {
                                 return 0;
                         }
                 }
-		for(i=0;i<upsgi.mules_cnt;i++) {
-			if (upsgi.mules[i].pid > 0) {
-				return 0;
-			}
-		}
 		upsgi_reload(argv);
 		// never here (unless in shared library mode)
 		return -1;
@@ -307,100 +297,10 @@ int upsgi_master_check_gateways_deadline() {
 	return ret;
 }
 
-int upsgi_master_check_mules_deadline() {
-	int i;
-	int ret = 0;
-
-	for (i = 0; i < upsgi.mules_cnt; i++) {
-		if (upsgi.mules[i].harakiri > 0) {
-			if (upsgi.mules[i].harakiri < (time_t) upsgi.current_time) {
-				upsgi_log("*** HARAKIRI ON MULE %d HANDLING SIGNAL %d (pid: %d) ***\n", i + 1, upsgi.mules[i].signum, upsgi.mules[i].pid);
-				kill(upsgi.mules[i].pid, SIGKILL);
-				upsgi.mules[i].harakiri = 0;
-				ret = 1;
-			}
-		}
-		// user harakiri
-		if (upsgi.mules[i].user_harakiri > 0) {
-                        if (upsgi.mules[i].user_harakiri < (time_t) upsgi.current_time) {
-                                upsgi_log("*** HARAKIRI ON MULE %d (pid: %d) ***\n", i + 1, upsgi.mules[i].pid);
-                                kill(upsgi.mules[i].pid, SIGKILL);
-                                upsgi.mules[i].user_harakiri = 0;
-				ret = 1;
-                        }
-                }
-	}
-	return ret;
-}
-
-int upsgi_master_check_spoolers_deadline() {
-	int ret = 0;
-	struct upsgi_spooler *uspool = upsgi.spoolers;
-	while (uspool) {
-		if (uspool->harakiri > 0 && uspool->harakiri < (time_t) upsgi.current_time) {
-			upsgi_log("*** HARAKIRI ON THE SPOOLER (pid: %d) ***\n", uspool->pid);
-			kill(uspool->pid, SIGKILL);
-			uspool->harakiri = 0;
-			ret = 1;
-		}
-		if (uspool->user_harakiri > 0 && uspool->user_harakiri < (time_t) upsgi.current_time) {
-                        upsgi_log("*** HARAKIRI ON THE SPOOLER (pid: %d) ***\n", uspool->pid);
-                        kill(uspool->pid, SIGKILL);
-                        uspool->user_harakiri = 0;
-			ret = 1;
-                }
-		uspool = uspool->next;
-	}
-	return ret;
-}
-
-
-int upsgi_master_check_spoolers_death(int diedpid) {
-
-	struct upsgi_spooler *uspool = upsgi.spoolers;
-
-	while (uspool) {
-		if (uspool->pid > 0 && diedpid == uspool->pid) {
-			if (uspool->cursed_at) {
-				uspool->pid = 0;
-				uspool->cursed_at = 0;
-				uspool->no_mercy_at = 0;
-			}
-			if (upsgi.spooler_cheap) {
-				upsgi_log_verbose("spooler %s ended\n", uspool->dir);
-				uspool->pid = 0;
-			}
-			else {
-				upsgi_log("OOOPS the spooler is no more...trying respawn...\n");
-				uspool->respawned++;
-				uspool->pid = spooler_start(uspool);
-			}
-			return -1;
-		}
-		uspool = uspool->next;
-	}
-	return 0;
-}
-
 int upsgi_master_check_emperor_death(int diedpid) {
 	if (upsgi.emperor_pid >= 0 && diedpid == upsgi.emperor_pid) {
 		upsgi_log_verbose("!!! Emperor died !!!\n");
 		upsgi_emperor_start();
-		return -1;
-	}
-	return 0;
-}
-
-int upsgi_master_check_mules_death(int diedpid) {
-	int i;
-	for (i = 0; i < upsgi.mules_cnt; i++) {
-		if (!(upsgi.mules[i].pid == diedpid)) continue;
-		if (!upsgi.mules[i].cursed_at) {
-			upsgi_log("OOOPS mule %d (pid: %d) crippled...trying respawn...\n", i + 1, upsgi.mules[i].pid);
-		}
-		upsgi.mules[i].no_mercy_at = 0;
-		upsgi.mules[i].cursed_at = 0;
-		upsgi_mule(i + 1);
 		return -1;
 	}
 	return 0;

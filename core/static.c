@@ -2,6 +2,78 @@
 
 extern struct upsgi_server upsgi;
 
+static inline struct upsgi_core *upsgi_static_core(struct wsgi_request *wsgi_req) {
+	return &upsgi.workers[upsgi.mywid].cores[wsgi_req->async_id];
+}
+
+static inline void upsgi_static_cache_store(char *key, size_t key_len, char *value, size_t value_len) {
+	if (!upsgi.static_cache_paths) return;
+
+	upsgi_wlock(upsgi.static_cache_paths->lock);
+	upsgi_cache_set2(upsgi.static_cache_paths, key, key_len, value, value_len, upsgi.use_static_cache_paths, UPSGI_CACHE_FLAG_UPDATE);
+	upsgi_rwunlock(upsgi.static_cache_paths->lock);
+}
+
+static inline int upsgi_static_skip_ext_match(char *filename, size_t filename_len) {
+	struct upsgi_string_list *sse = upsgi.static_skip_ext;
+
+	while (sse) {
+		if (filename_len >= sse->len) {
+			if (!upsgi_strncmp(filename + (filename_len - sse->len), sse->len, sse->value, sse->len)) {
+				return 1;
+			}
+		}
+		sse = sse->next;
+	}
+
+	return 0;
+}
+
+static inline int upsgi_static_is_precompressed_target(char *filename, size_t filename_len) {
+	if (filename_len >= 3) {
+		if (!upsgi_strncmp(filename + (filename_len - 3), 3, ".br", 3)) {
+			return 1;
+		}
+	}
+
+	if (filename_len >= 3) {
+		if (!upsgi_strncmp(filename + (filename_len - 3), 3, ".gz", 3)) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+static inline int upsgi_static_open_fd(struct wsgi_request *wsgi_req, char *filename) {
+	struct upsgi_core *uc = upsgi_static_core(wsgi_req);
+	uc->static_open_calls++;
+	int fd = open(filename, O_RDONLY);
+	if (fd < 0) {
+		uc->static_open_failures++;
+	}
+	return fd;
+}
+
+static int upsgi_static_try_open_regular(struct wsgi_request *wsgi_req, char *filename, struct stat *st) {
+	int fd = upsgi_static_open_fd(wsgi_req, filename);
+	if (fd < 0) {
+		return -1;
+	}
+
+	if (fstat(fd, st)) {
+		close(fd);
+		return -1;
+	}
+
+	if (!S_ISREG(st->st_mode)) {
+		close(fd);
+		return -1;
+	}
+
+	return fd;
+}
+
+
 /*
  * Static-serving ownership for upsgi v1.
  *
@@ -13,6 +85,12 @@ extern struct upsgi_server upsgi;
 
 int upsgi_static_want_gzip(struct wsgi_request *wsgi_req, char *filename, size_t *filename_len, struct stat *st) {
 	char can_gzip = 0, can_br = 0;
+
+	/*
+	 * Direct requests for already-compressed assets should not probe for
+	 * nested compression variants like .gz.gz or .br.br.
+	 */
+	if (upsgi_static_is_precompressed_target(filename, *filename_len)) return 0;
 
 	// check for filename size
 	if (*filename_len + 4 > PATH_MAX) return 0;
@@ -61,6 +139,7 @@ gzip:
 	if(can_br) {
 		memcpy(filename + *filename_len, ".br\0", 4);
 		*filename_len += 3;
+		upsgi_static_core(wsgi_req)->static_stat_calls++;
 		if (!stat(filename, st)) return 2;
 		*filename_len -= 3;
 		filename[*filename_len] = 0;
@@ -69,6 +148,7 @@ gzip:
 	if(can_gzip) {
 		memcpy(filename + *filename_len, ".gz\0", 4);
 		*filename_len += 3;
+		upsgi_static_core(wsgi_req)->static_stat_calls++;
 		if (!stat(filename, st)) return 1;
 		*filename_len -= 3;
 		filename[*filename_len] = 0;
@@ -432,6 +512,8 @@ ssize_t upsgi_append_static_path(char *dir, size_t dir_len, char *file, size_t f
 
 static int upsgi_static_stat(struct wsgi_request *wsgi_req, char *filename, size_t *filename_len, struct stat *st, struct upsgi_string_list **index) {
 
+	struct upsgi_core *uc = upsgi_static_core(wsgi_req);
+	uc->static_stat_calls++;
 	int ret = stat(filename, st);
 	// if non-existent return -1
 	if (ret < 0)
@@ -449,6 +531,8 @@ static int upsgi_static_stat(struct wsgi_request *wsgi_req, char *filename, size
 #ifdef UPSGI_DEBUG
 				upsgi_log("checking for %s\n", filename);
 #endif
+				uc->static_index_checks++;
+				uc->static_stat_calls++;
 				if (upsgi_is_file2(filename, st)) {
 					*index = usl;
 					*filename_len = new_len;
@@ -469,7 +553,7 @@ void upsgi_request_fix_range_for_size(struct wsgi_request *wsgi_req, int64_t siz
 			&wsgi_req->range_from, &wsgi_req->range_to, size);
 }
 
-int upsgi_real_file_serve(struct wsgi_request *wsgi_req, char *real_filename, size_t real_filename_len, struct stat *st) {
+int upsgi_real_file_serve(struct wsgi_request *wsgi_req, char *real_filename, size_t real_filename_len, struct stat *st, int fd) {
 
 	size_t mime_type_size = 0;
 	char http_last_modified[49];
@@ -479,6 +563,10 @@ int upsgi_real_file_serve(struct wsgi_request *wsgi_req, char *real_filename, si
 
 	// here we need to choose if we want the gzip variant;
 	use_gzip = upsgi_static_want_gzip(wsgi_req, real_filename, &real_filename_len, st);
+	if (use_gzip && fd >= 0) {
+		close(fd);
+		fd = -1;
+	}
 
 	if (wsgi_req->if_modified_since_len) {
 		time_t ims = parse_http_date(wsgi_req->if_modified_since, wsgi_req->if_modified_since_len);
@@ -578,8 +666,10 @@ int upsgi_real_file_serve(struct wsgi_request *wsgi_req, char *real_filename, si
 
 		// Ok, the file must be transferred from upsgi
 		// offloading will be automatically managed
-		int fd = open(real_filename, O_RDONLY);
-		if (fd < 0) return -1;
+		if (fd < 0) {
+			fd = upsgi_static_open_fd(wsgi_req, real_filename);
+			if (fd < 0) return -1;
+		}
 		// fd will be closed in the following function
 		upsgi_response_sendfile_do(wsgi_req, fd, wsgi_req->range_from, fsize);
 	}
@@ -606,8 +696,21 @@ int upsgi_file_serve(struct wsgi_request *wsgi_req, char *document_root, uint16_
 	char *filename = NULL;
 	size_t filename_len = 0;
 	int filename_needs_free = 0;
+	int cache_hit = 0;
+	int cache_refreshed = 0;
+	int ret = -1;
 
 	struct upsgi_string_list *index = NULL;
+
+	/*
+	 * Static serving only produces direct responses for GET and HEAD.
+	 * Other methods must continue toward PSGI unchanged, so bypass the
+	 * filesystem path entirely before any cache, realpath, or stat work.
+	 */
+	if (upsgi_strncmp(wsgi_req->method, wsgi_req->method_len, "GET", 3) &&
+	    upsgi_strncmp(wsgi_req->method, wsgi_req->method_len, "HEAD", 4)) {
+		goto cleanup;
+	}
 
 	if (!is_a_file) {
 		filename_len = document_root_len + 1 + path_info_len;
@@ -640,38 +743,49 @@ int upsgi_file_serve(struct wsgi_request *wsgi_req, char *document_root, uint16_
 	upsgi_log("[upsgi-fileserve] checking for %s\n", filename);
 #endif
 
-	if (upsgi.static_cache_paths) {
+	/*
+	 * Skip-extension filtering for obvious candidate targets.
+	 *
+	 * This avoids cache and realpath work when a static-map file target or
+	 * direct candidate path already ends with a blocked extension, while the
+	 * request PATH_INFO itself does not reveal that suffix.
+	 */
+	if (upsgi_static_skip_ext_match(filename, filename_len)) {
+		goto cleanup;
+	}
+
+resolve_target:
+	index = NULL;
+
+	if (upsgi.static_cache_paths && !cache_refreshed) {
+		struct upsgi_core *uc = upsgi_static_core(wsgi_req);
 		upsgi_rlock(upsgi.static_cache_paths->lock);
 		uint64_t item_len;
 		char *item = upsgi_cache_get2(upsgi.static_cache_paths, filename, filename_len, &item_len);
 		if (item && item_len > 0 && item_len <= PATH_MAX) {
+			uc->static_path_cache_hits++;
+			cache_hit = 1;
 			memcpy(real_filename, item, item_len);
 			real_filename_len = item_len;
 			real_filename[real_filename_len] = 0;
 			upsgi_rwunlock(upsgi.static_cache_paths->lock);
 			goto found;
 		}
+		uc->static_path_cache_misses++;
 		upsgi_rwunlock(upsgi.static_cache_paths->lock);
 	}
 
+	upsgi_static_core(wsgi_req)->static_realpath_calls++;
 	if (!realpath(filename, real_filename)) {
 #ifdef UPSGI_DEBUG
 		upsgi_log("[upsgi-fileserve] unable to get realpath() of the static file\n");
 #endif
-		if (filename_needs_free) free(filename);
-		return -1;
+		goto cleanup;
 	}
 	real_filename_len = strlen(real_filename);
-
-	if (upsgi.static_cache_paths) {
-		upsgi_wlock(upsgi.static_cache_paths->lock);
-		upsgi_cache_set2(upsgi.static_cache_paths, filename, filename_len, real_filename, real_filename_len, upsgi.use_static_cache_paths, UPSGI_CACHE_FLAG_UPDATE);
-		upsgi_rwunlock(upsgi.static_cache_paths->lock);
-	}
+	upsgi_static_cache_store(filename, filename_len, real_filename, real_filename_len);
 
 found:
-	if (filename_needs_free) free(filename);
-
 	/*
 	 * Containment check.
 	 *
@@ -688,10 +802,21 @@ found:
 			safe = safe->next;
 		}
 		upsgi_log("[upsgi-fileserve] security error: %s is not under %.*s or a safe path\n", real_filename, document_root_len, document_root);
-		return -1;
+		goto cleanup;
 	}
 
 safe:
+
+	/*
+	 * Skip-extension filtering for direct resolved targets.
+	 *
+	 * core/protocol.c already rejects obvious PATH_INFO suffix matches. This
+	 * second check works on the resolved filesystem target so static-map file
+	 * targets and cached final paths can bypass metadata work before stat().
+	 */
+	if (upsgi_static_skip_ext_match(real_filename, real_filename_len)) {
+		goto cleanup;
+	}
 
 	/*
 	 * Static metadata and response emission.
@@ -700,43 +825,67 @@ safe:
 	 * method checks, optional route pre-send hooks, and final file response
 	 * emission. Missing files simply return control to the caller so the request
 	 * path can continue toward PSGI.
+	 *
+	 * For direct GET hits, prefer open()+fstat() as a narrow fast path so the
+	 * final transfer can reuse the opened fd instead of doing stat()+open().
+	 * HEAD and directory/index resolution still use the conservative stat path.
 	 */
+	if (!upsgi_strncmp(wsgi_req->method, wsgi_req->method_len, "GET", 3)) {
+		int fd = upsgi_static_try_open_regular(wsgi_req, real_filename, &st);
+		if (fd >= 0) {
+#ifdef UPSGI_ROUTING
+			// before sending the file, we need to check if some rule applies
+			if (!wsgi_req->is_routing && upsgi_apply_routes_do(upsgi.routes, wsgi_req, NULL, 0) == UPSGI_ROUTE_BREAK) {
+				close(fd);
+				ret = 0;
+				goto cleanup;
+			}
+			wsgi_req->routes_applied = 1;
+#endif
+
+			ret = upsgi_real_file_serve(wsgi_req, real_filename, real_filename_len, &st, fd);
+			goto cleanup;
+		}
+	}
+
 	if (!upsgi_static_stat(wsgi_req, real_filename, &real_filename_len, &st, &index)) {
 
 		if (index) {
+			upsgi_static_cache_store(filename, filename_len, real_filename, real_filename_len);
+
 			// if we are here the PATH_INFO need to be changed
 			if (upsgi_req_append_path_info_with_index(wsgi_req, index->value, index->len)) {
-				return -1;
+				goto cleanup;
 			}
 		}
 
-		// skip methods other than GET and HEAD
-		if (upsgi_strncmp(wsgi_req->method, wsgi_req->method_len, "GET", 3) && upsgi_strncmp(wsgi_req->method, wsgi_req->method_len, "HEAD", 4)) {
-			return -1;
-		}
 
-		// check for skippable ext
-		struct upsgi_string_list *sse = upsgi.static_skip_ext;
-		while (sse) {
-			if (real_filename_len >= sse->len) {
-				if (!upsgi_strncmp(real_filename + (real_filename_len - sse->len), sse->len, sse->value, sse->len)) {
-					return -1;
-				}
-			}
-			sse = sse->next;
+		if (upsgi_static_skip_ext_match(real_filename, real_filename_len)) {
+			goto cleanup;
 		}
 
 #ifdef UPSGI_ROUTING
 		// before sending the file, we need to check if some rule applies
 		if (!wsgi_req->is_routing && upsgi_apply_routes_do(upsgi.routes, wsgi_req, NULL, 0) == UPSGI_ROUTE_BREAK) {
-			return 0;
+			ret = 0;
+			goto cleanup;
 		}
 		wsgi_req->routes_applied = 1;
 #endif
 
-		return upsgi_real_file_serve(wsgi_req, real_filename, real_filename_len, &st);
+		ret = upsgi_real_file_serve(wsgi_req, real_filename, real_filename_len, &st, -1);
+		goto cleanup;
 	}
 
-	return -1;
+	if (cache_hit && !cache_refreshed) {
+		cache_refreshed = 1;
+		cache_hit = 0;
+		goto resolve_target;
+	}
+
+cleanup:
+	if (filename_needs_free) free(filename);
+	return ret;
 
 }
+

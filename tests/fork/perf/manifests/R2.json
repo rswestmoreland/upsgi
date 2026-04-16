@@ -1,0 +1,80 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/R/common/receiver_app.psgi",
+      "tests/fork/perf/assets/R/common/generate_payloads.py",
+      "tests/fork/perf/assets/R/common/receiver_client.py",
+      "tests/fork/perf/assets/R/R2/r2_matrix.json",
+      "tests/fork/perf/assets/R/R2/run_r2_smoke.sh",
+      "tests/fork/perf/assets/R/common/corpus/",
+      "tests/fork/perf/assets/R/common/generate_ratio_payload.py",
+      "tests/fork/perf/assets/R/common/receiver_bench_ab.py",
+      "tests/fork/perf/assets/R/R2/run_r2_measured.sh"
+    ]
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "body buffering"
+      ],
+      "source": "nginx"
+    },
+    {
+      "ideas": [
+        "request-body limits"
+      ],
+      "source": "H2O"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "R2",
+  "lane": "R",
+  "notes": [
+    "Blocked on receiver PSGI app bundle and compressed payload corpus.",
+    "See tests/fork/perf/assets/R/README.md.",
+    "Repo-local receiver asset pack is packaged."
+  ],
+  "parameters": {
+    "measurement_focus": [
+      "RSS spikes",
+      "CPU user/sys",
+      "p99",
+      "timeout rate"
+    ]
+  },
+  "phase": "P2",
+  "purpose": "Stress inflate-in-memory behavior directly.",
+  "questions": [
+    "Is inflation memory amplification the first major body-path problem?",
+    "Do we need request-body caps or staged buffering?"
+  ],
+  "schema_version": "1",
+  "status": "asset_packaged",
+  "title": "Compressed burst ingest",
+  "traffic_shape": {
+    "burst_pattern": "30 second bursts with idle gaps",
+    "compressed_sizes_bytes": [
+      32768,
+      131072,
+      524288
+    ],
+    "content_type": "application/octet-stream",
+    "inflate_ratios": [
+      4,
+      10
+    ]
+  }
+}

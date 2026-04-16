@@ -6,6 +6,15 @@
  */
 extern struct upsgi_server upsgi;
 
+static int upsgi_socket_logger_reset(struct upsgi_logger *ul) {
+	if (ul->fd >= 0) {
+		close(ul->fd);
+	}
+	ul->fd = -1;
+	ul->configured = 0;
+	return 0;
+}
+
 ssize_t upsgi_socket_logger(struct upsgi_logger *ul, char *message, size_t len) {
 
 	int family = AF_UNIX;
@@ -38,14 +47,18 @@ ssize_t upsgi_socket_logger(struct upsgi_logger *ul, char *message, size_t len) 
 		ul->msg.msg_name = &ul->addr;
 		ul->msg.msg_namelen = ul->addr_len;
 		if (ul->data) {
-			ul->msg.msg_iov = upsgi_malloc(sizeof(struct iovec) * 2);
+			if (!ul->msg.msg_iov) {
+				ul->msg.msg_iov = upsgi_malloc(sizeof(struct iovec) * 2);
+			}
 			ul->msg.msg_iov[0].iov_base = ul->data;
 			ul->msg.msg_iov[0].iov_len = strlen(ul->data);
 			ul->msg.msg_iovlen = 2;
 			ul->count = 1;
 		}
 		else {
-			ul->msg.msg_iov = upsgi_malloc(sizeof(struct iovec));
+			if (!ul->msg.msg_iov) {
+				ul->msg.msg_iov = upsgi_malloc(sizeof(struct iovec));
+			}
 			ul->msg.msg_iovlen = 1;
 			ul->count = 0;
 		}
@@ -68,6 +81,7 @@ ssize_t upsgi_socket_logger(struct upsgi_logger *ul, char *message, size_t len) 
 /* Register the socket logger backend used by --logger socket:... */
 void upsgi_logsocket_register() {
 	upsgi_register_logger("socket", upsgi_socket_logger);
+	upsgi_logger_set_reset("socket", upsgi_socket_logger_reset);
 }
 
 struct upsgi_plugin logsocket_plugin = {

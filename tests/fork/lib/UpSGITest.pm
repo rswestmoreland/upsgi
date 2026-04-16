@@ -26,11 +26,13 @@ our @EXPORT_OK = qw(
     wait_http
     http_get
     http_request
+    raw_upsgi_request
     slurp
     run_ok
     reload_server
     pick_port
     append_yaml_options
+    fetch_stats_json
 );
 
 sub fork_root {
@@ -174,6 +176,51 @@ sub http_get {
     return $resp;
 }
 
+
+sub fetch_stats_json {
+    my (%args) = @_;
+    my $host = $args{host} || '127.0.0.1';
+    my $port = $args{port} || die "port is required for fetch_stats_json\n";
+    my $attempts = $args{attempts} || 40;
+    my $sleep_seconds = defined $args{sleep_seconds} ? $args{sleep_seconds} : 0.10;
+    my $last_error = 'no stats response';
+
+    for (1 .. $attempts) {
+        my $sock = IO::Socket::INET->new(
+            PeerAddr => $host,
+            PeerPort => $port,
+            Proto => 'tcp',
+            Timeout => ($args{timeout} || 5),
+        );
+        if (!$sock) {
+            $last_error = "unable to connect to stats socket on $host:$port: $!";
+            select undef, undef, undef, $sleep_seconds;
+            next;
+        }
+
+        my $json = '';
+        while (1) {
+            my $buf = '';
+            my $read = sysread($sock, $buf, 4096);
+            last if !defined($read) || $read == 0;
+            $json .= $buf;
+        }
+        close $sock;
+
+        if (length $json) {
+            my $decoded = eval { require JSON::PP; JSON::PP::decode_json($json) };
+            return $decoded if $decoded;
+            $last_error = $@ || 'stats payload was not valid JSON';
+        }
+        else {
+            $last_error = 'stats socket returned an empty payload';
+        }
+
+        select undef, undef, undef, $sleep_seconds;
+    }
+
+    die "$last_error\n";
+}
 sub http_request {
     my (%args) = @_;
     local @ENV{qw(HTTP_PROXY http_proxy HTTPS_PROXY https_proxy ALL_PROXY all_proxy NO_PROXY no_proxy)};
@@ -184,6 +231,61 @@ sub http_request {
     $options->{content} = $args{content} if exists $args{content};
     my $method = $args{method} || 'GET';
     return $http->request($method, $url, $options);
+}
+
+sub raw_upsgi_request {
+    my (%args) = @_;
+    my $vars = $args{vars} || {};
+    my $sock = IO::Socket::INET->new(
+        PeerAddr => $args{host},
+        PeerPort => $args{port},
+        Proto => 'tcp',
+        Timeout => ($args{timeout} || 5),
+    ) or die "unable to connect to upsgi socket on $args{host}:$args{port}: $!\n";
+
+    my $body = '';
+    for my $key (sort keys %{$vars}) {
+        my $value = defined $vars->{$key} ? $vars->{$key} : '';
+        $body .= pack('v', length($key)) . $key . pack('v', length($value)) . $value;
+    }
+
+    my $packet = pack('CvC', ($args{modifier1} || 0), length($body), ($args{modifier2} || 0)) . $body;
+    print {$sock} $packet or die "unable to write upsgi request: $!\n";
+    shutdown($sock, 1);
+
+    my $raw = '';
+    while (1) {
+        my $chunk = '';
+        my $read = sysread($sock, $chunk, 4096);
+        last if !defined($read) || $read == 0;
+        $raw .= $chunk;
+    }
+    close $sock;
+
+    my ($head, $content) = split(/\r\n\r\n/, $raw, 2);
+    my @lines = defined($head) ? split(/\r\n/, $head) : ();
+    my $status_line = shift @lines // '';
+    my ($http_version, $status, $reason) = $status_line =~ m/^(HTTP\/\d+\.\d+)\s+(\d+)\s*(.*)$/;
+
+    my %headers;
+    for my $line (@lines) {
+        next unless $line =~ /:/;
+        my ($name, $value) = split(/:\s*/, $line, 2);
+        $value =~ s/\r\z// if defined $value;
+        $headers{lc $name} = $value;
+    }
+
+    $reason =~ s/\r\z// if defined $reason;
+
+    return {
+        raw => $raw,
+        http_version => $http_version,
+        status => defined($status) ? int($status) : 0,
+        reason => defined($reason) ? $reason : '',
+        headers => \%headers,
+        content => defined($content) ? $content : '',
+        success => defined($status) && $status =~ /^2/ ? 1 : 0,
+    };
 }
 
 sub reload_server {

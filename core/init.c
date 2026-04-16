@@ -98,9 +98,6 @@ void upsgi_init_default() {
 	upsgi.emperor_max_throttle = 1000 * 180;
 	upsgi.emperor_pid = -1;
 
-	upsgi.subscribe_freq = 10;
-	upsgi.subscription_tolerance = 17;
-	upsgi.subscription_tolerance_inactive = 17;
 
 	upsgi.cores = 1;
 	upsgi.threads = 1;
@@ -129,9 +126,18 @@ void upsgi_init_default() {
 
 	upsgi.log_master_bufsize = 8192;
 	upsgi.log_drain_burst = 8;
+	upsgi.log_queue_enabled = 1;
+	upsgi.log_queue_records = 512;
+	upsgi.log_queue_bytes = 512 * 1024;
+	/* default-on request handling posture */
+	upsgi.use_thunder_lock = 1;
+	upsgi.body_scheduler = 1;
+	upsgi.logger_queue.records_cap = upsgi.log_queue_records;
+	upsgi.logger_queue.bytes_cap = upsgi.log_queue_bytes;
+	upsgi.req_logger_queue.records_cap = upsgi.log_queue_records;
+	upsgi.req_logger_queue.bytes_cap = upsgi.log_queue_bytes;
 
 	upsgi.worker_reload_mercy = 60;
-	upsgi.mule_reload_mercy = 60;
 
 	upsgi.max_vars = MAX_VARS;
 	upsgi.vec_size = 4 + 1 + (4 * MAX_VARS);
@@ -142,16 +148,9 @@ void upsgi_init_default() {
 	// a workers hould be running for at least 10 seconds
 	upsgi.min_worker_lifetime = 10;
 
-	upsgi.spooler_frequency = 30;
 
-	upsgi.shared->spooler_signal_pipe[0] = -1;
-	upsgi.shared->spooler_signal_pipe[1] = -1;
 
-	upsgi.shared->mule_signal_pipe[0] = -1;
-	upsgi.shared->mule_signal_pipe[1] = -1;
 
-	upsgi.shared->mule_queue_pipe[0] = -1;
-	upsgi.shared->mule_queue_pipe[1] = -1;
 
 	upsgi.shared->worker_log_pipe[0] = -1;
 	upsgi.shared->worker_log_pipe[1] = -1;
@@ -206,7 +205,6 @@ void upsgi_init_default() {
 
 	upsgi.notify_socket_fd = -1;
 
-	upsgi.mule_msg_recv_size = 65536;
 
 	upsgi.harakiri_graceful_signal = SIGTERM;
 }
@@ -534,12 +532,9 @@ void sanitize_args() {
 		if (!upsgi.mem_collector_freq) upsgi.mem_collector_freq = 3;
 	}
 
-	/* here we try to choose if thunder lock is a good thing */
-#ifdef UNBIT
-	if (upsgi.numproc > 1 && !upsgi.map_socket) {
-		upsgi.use_thunder_lock = 1;
-	}
-#endif
+	/* thunder lock defaults are now handled in upsgi_init_default();
+	   explicit disable options must remain authoritative. */
+
 }
 
 const char *upsgi_http_status_msg(char *status, uint16_t *len) {

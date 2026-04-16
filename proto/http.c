@@ -268,18 +268,36 @@ typedef struct http_header_table {
 	http_header_slot *slots;
 	size_t pos;
 	size_t size;
+	int owns_slots;
 } http_header_table;
 
+static void http_header_table_init(http_header_table *table, http_header_slot *scratch_slots, size_t scratch_size) {
+	table->slots = scratch_slots;
+	table->pos = 0;
+	table->size = scratch_size;
+	table->owns_slots = 0;
+}
+
 static int http_header_table_reserve(http_header_table *table) {
+	http_header_slot *new_slots;
+	size_t new_size;
+
 	if (table->pos < table->size) return 0;
-	size_t new_size = table->size ? table->size * 2 : 16;
-	http_header_slot *new_slots = realloc(table->slots, sizeof(http_header_slot) * new_size);
+	new_size = table->size ? table->size * 2 : 16;
+	new_slots = upsgi_malloc(sizeof(http_header_slot) * new_size);
 	if (!new_slots) {
-		upsgi_error("realloc()");
+		upsgi_error("upsgi_malloc()");
 		return -1;
+	}
+	if (table->slots && table->pos > 0) {
+		memcpy(new_slots, table->slots, sizeof(http_header_slot) * table->pos);
+	}
+	if (table->owns_slots) {
+		free(table->slots);
 	}
 	table->slots = new_slots;
 	table->size = new_size;
+	table->owns_slots = 1;
 	return 0;
 }
 
@@ -301,10 +319,13 @@ static void http_header_table_free(http_header_table *table) {
 			free(table->slots[i].value);
 		}
 	}
-	free(table->slots);
+	if (table->owns_slots) {
+		free(table->slots);
+	}
 	table->slots = NULL;
 	table->pos = 0;
 	table->size = 0;
+	table->owns_slots = 0;
 }
 
 
@@ -566,7 +587,8 @@ static int http_parse(struct wsgi_request *wsgi_req, char *watermark) {
 	base = ptr;
 
 	http_header_table headers;
-	memset(&headers, 0, sizeof(headers));
+	http_header_slot scratch_header_slots[16];
+	http_header_table_init(&headers, scratch_header_slots, 16);
 
 	while (ptr < watermark) {
 		if (*ptr == '\r') {
@@ -574,11 +596,10 @@ static int http_parse(struct wsgi_request *wsgi_req, char *watermark) {
 				return -1;
 			if (*(ptr + 1) != '\n')
 				return -1;
-			// multiline header ?
 			if (ptr + 2 < watermark) {
 				if (*(ptr + 2) == ' ' || *(ptr + 2) == '\t') {
-					ptr += 2;
-					continue;
+					upsgi_log("invalid HTTP request: folded headers are unsupported\n");
+					goto clear;
 				}
 			}
 			size_t key_len = 0, value_len = 0;

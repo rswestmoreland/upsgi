@@ -11,6 +11,15 @@ struct logfile_data {
 	uint64_t maxsize;
 };
 
+static int upsgi_file_logger_reset(struct upsgi_logger *ul) {
+	if (ul->fd >= 0) {
+		close(ul->fd);
+	}
+	ul->fd = -1;
+	ul->configured = 0;
+	return 0;
+}
+
 static ssize_t upsgi_file_logger(struct upsgi_logger *ul, char *message, size_t len) {
 
 	if (!ul->configured) {
@@ -51,6 +60,7 @@ static ssize_t upsgi_file_logger(struct upsgi_logger *ul, char *message, size_t 
 			ul->fd = open(logfile, O_RDWR | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP);
 			if (ul->fd >= 0) {
 				ul->configured = 1;
+				ul->batch_writes = 1;
 			}	
 		}
 	}
@@ -79,6 +89,7 @@ static ssize_t upsgi_fd_logger(struct upsgi_logger *ul, char *message, size_t le
 		ul->fd = -1;
                 if (ul->arg) ul->fd = atoi(ul->arg);
                 ul->configured = 1;
+                ul->batch_writes = 1;
         }
 
         if (ul->fd >= 0) {
@@ -91,6 +102,7 @@ static ssize_t upsgi_fd_logger(struct upsgi_logger *ul, char *message, size_t le
 static ssize_t upsgi_stdio_logger(struct upsgi_logger *ul, char *message, size_t len) {
 
         if (upsgi.original_log_fd >= 0) {
+                ul->batch_writes = 1;
                 return write(upsgi.original_log_fd, message, len);
         }
         return 0;
@@ -100,6 +112,7 @@ static ssize_t upsgi_stdio_logger(struct upsgi_logger *ul, char *message, size_t
 /* Register the file-oriented sink family: file, fd, and stdio. */
 void upsgi_file_logger_register() {
 	upsgi_register_logger("file", upsgi_file_logger);
+	upsgi_logger_set_reset("file", upsgi_file_logger_reset);
 	upsgi_register_logger("fd", upsgi_fd_logger);
 	upsgi_register_logger("stdio", upsgi_stdio_logger);
 }

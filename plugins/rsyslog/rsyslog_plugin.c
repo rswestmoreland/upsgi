@@ -21,6 +21,15 @@ struct upsgi_option rsyslog_options[] = {
 };
 
 
+static int upsgi_rsyslog_logger_reset(struct upsgi_logger *ul) {
+	if (ul->fd >= 0) {
+		close(ul->fd);
+	}
+	ul->fd = -1;
+	ul->configured = 0;
+	return 0;
+}
+
 ssize_t upsgi_rsyslog_logger(struct upsgi_logger *ul, char *message, size_t len) {
 
 	char ctime_storage[26];
@@ -61,7 +70,9 @@ ssize_t upsgi_rsyslog_logger(struct upsgi_logger *ul, char *message, size_t len)
 			}
 		}
 		else {
-			ul->data = upsgi_concat2(upsgi.hostname," upsgi");
+			if (!ul->data) {
+				ul->data = upsgi_concat2(upsgi.hostname," upsgi");
+			}
 		}
 
 
@@ -84,7 +95,9 @@ ssize_t upsgi_rsyslog_logger(struct upsgi_logger *ul, char *message, size_t len)
 		if (!u_rsyslog.packet_size) u_rsyslog.packet_size = 1024;
 		if (!u_rsyslog.msg_size) u_rsyslog.msg_size = u_rsyslog.packet_size - 30;
 
-		ul->buf = upsgi_malloc(upsgi.log_master_bufsize);
+		if (!ul->buf) {
+			ul->buf = upsgi_malloc(upsgi.log_master_bufsize);
+		}
 
                 ul->configured = 1;
         }
@@ -120,6 +133,7 @@ ssize_t upsgi_rsyslog_logger(struct upsgi_logger *ul, char *message, size_t len)
 /* Register the rsyslog sink backend and its plugin-local options. */
 void upsgi_rsyslog_register() {
 	upsgi_register_logger("rsyslog", upsgi_rsyslog_logger);
+	upsgi_logger_set_reset("rsyslog", upsgi_rsyslog_logger_reset);
 }
 
 struct upsgi_plugin rsyslog_plugin = {

@@ -1,0 +1,12 @@
+upsgi:
+  master: true
+  workers: 2
+  need-app: true
+  strict: true
+  vacuum: true
+  die-on-term: true
+  http-socket: 127.0.0.1:9094
+  psgi: examples/psgi/hello.psgi
+  logto: /tmp/upsgi-chatty.log
+  log-queue-records: 1024
+  log-queue-bytes: 1048576

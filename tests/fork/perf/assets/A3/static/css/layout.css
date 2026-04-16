@@ -1,0 +1,2 @@
+body { display:grid; grid-template-columns: 1fr; max-width: 72rem; margin: 0 auto; }
+img { max-width: 100%; height: auto; }

@@ -1,0 +1,74 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/A6/app_async_getline.psgi",
+      "tests/fork/perf/assets/A6/config.yaml.in",
+      "tests/fork/perf/assets/A6/slow_reader_client.py",
+      "tests/fork/perf/assets/A6/normal_mix_requests.txt",
+      "tests/fork/perf/assets/A6/slow_reader_flood.py",
+      "tests/fork/perf/assets/A6/run_a6_measured.sh"
+    ],
+    "runner": "tests/fork/perf/assets/A6/run_a6_smoke.sh"
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "slow-client protection"
+      ],
+      "source": "nginx"
+    },
+    {
+      "ideas": [
+        "pacing/window thinking"
+      ],
+      "source": "WANProxy"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "A6",
+  "lane": "A",
+  "notes": [
+    "Reuses the accepted W4 async getline validation app as the A6 scenario seed.",
+    "Turns the slow-reader validation pattern into a reusable scenario asset pack.",
+    "Focused measured A6 runner added with 8 KiB/s and 64 KiB/s slow-reader cases and control GET checks."
+  ],
+  "parameters": {
+    "measurement_focus": [
+      "worker occupancy",
+      "queue growth",
+      "p99 for normal requests"
+    ]
+  },
+  "phase": "P4",
+  "purpose": "Determine whether a few slow clients can pin workers and harm everyone else.",
+  "questions": [
+    "Did W4 solve enough of the slow-reader pain?",
+    "Do we need further write-path pacing ideas?"
+  ],
+  "schema_version": "1",
+  "status": "asset_packaged",
+  "title": "Slow-reader clients",
+  "traffic_shape": {
+    "mix": [
+      "95% normal traffic",
+      "5% slow readers"
+    ],
+    "reader_rates_bytes_per_sec": [
+      8192,
+      65536
+    ]
+  }
+}

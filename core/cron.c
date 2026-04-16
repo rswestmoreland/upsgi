@@ -43,31 +43,6 @@ void upsgi_opt_add_unique_cron(char *opt, char *value, void *foobar) {
 }
 
 
-#ifdef UPSGI_SSL
-void upsgi_opt_add_legion_cron(char *opt, char *value, void *foobar) {
-        char *space = strchr(value, ' ');
-        if (!space) {
-                upsgi_log("invalid %s syntax, must be prefixed with a legion name\n", opt);
-                exit(1);
-        }
-        char *legion = upsgi_concat2n(value, space-value, "", 0);
-        struct upsgi_cron *uc = upsgi_cron_add(space+1);
-        uc->legion = legion;
-}
-
-
-void upsgi_opt_add_unique_legion_cron(char *opt, char *value, void *foobar) {
-        char *space = strchr(value, ' ');
-        if (!space) {
-                upsgi_log("invalid %s syntax, must be prefixed with a legion name\n", opt);
-                exit(1);
-        }
-        char *legion = upsgi_concat2n(value, space-value, "", 0);
-        struct upsgi_cron *uc = upsgi_cron_add(space+1);
-        uc->legion = legion;
-        uc->unique = 1;
-}
-#endif
 
 
 void upsgi_opt_add_cron2(char *opt, char *value, void *foobar) {
@@ -79,7 +54,6 @@ void upsgi_opt_add_cron2(char *opt, char *value, void *foobar) {
 	char *c_week = NULL;
 	char *c_unique = NULL;
 	char *c_harakiri = NULL;
-	char *c_legion = NULL;
 
 	char *c_command = value;
 
@@ -100,7 +74,6 @@ void upsgi_opt_add_cron2(char *opt, char *value, void *foobar) {
 			"week", &c_week,
 			"unique", &c_unique,
 			"harakiri", &c_harakiri,
-			"legion", &c_legion,
 			NULL)) {
 			upsgi_log("unable to parse cron definition: %s\n", value);
 			exit(1);
@@ -150,9 +123,6 @@ void upsgi_opt_add_cron2(char *opt, char *value, void *foobar) {
 	uc->harakiri = 0;
 	uc->pid = -1;
 
-#ifdef UPSGI_SSL
-	uc->legion = c_legion;
-#endif
 
 	if (c_minute)
 		uc->minute = atoi(c_minute);
@@ -272,13 +242,6 @@ void upsgi_manage_command_cron(time_t now) {
 
         while (current_cron) {
 
-#ifdef UPSGI_SSL
-                // check for legion cron
-                if (current_cron->legion) {
-                        if (!upsgi_legion_i_am_the_lord(current_cron->legion))
-                            goto next;
-                }
-#endif
 
 		// skip unique crons that are still running
 		if (current_cron->unique && current_cron->pid >= 0)

@@ -1,0 +1,59 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [
+      "tiny request mix",
+      "large transfer assets"
+    ],
+    "repo_fixtures": []
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "send fairness"
+      ],
+      "source": "nginx"
+    },
+    {
+      "ideas": [
+        "fairness"
+      ],
+      "source": "HAProxy"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "X4",
+  "lane": "X",
+  "parameters": {
+    "measurement_focus": [
+      "p99 and max latency for tiny requests",
+      "worker utilization skew"
+    ]
+  },
+  "phase": "P8",
+  "purpose": "Determine whether a few large transfers poison tiny requests.",
+  "questions": [
+    "Are small requests trapped behind big ones?",
+    "Should fairness work move back onto the roadmap?"
+  ],
+  "schema_version": "1",
+  "status": "planned",
+  "title": "Head-of-line blocking probe",
+  "traffic_shape": {
+    "mix": [
+      "99% tiny requests",
+      "1% large uploads or downloads"
+    ]
+  }
+}

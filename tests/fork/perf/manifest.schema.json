@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "artifacts": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "assets": {
+      "type": "object"
+    },
+    "borrowed_ideas": {
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "collectors": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "id": {
+      "type": "string"
+    },
+    "lane": {
+      "enum": [
+        "A",
+        "R",
+        "X"
+      ],
+      "type": "string"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "parameters": {
+      "type": "object"
+    },
+    "phase": {
+      "type": "string"
+    },
+    "purpose": {
+      "type": "string"
+    },
+    "questions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "planned",
+        "partial",
+        "completed",
+        "asset_packaged",
+        "blocked_on_assets"
+      ],
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "traffic_shape": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "phase",
+    "lane",
+    "title",
+    "status",
+    "purpose",
+    "traffic_shape",
+    "collectors",
+    "borrowed_ideas",
+    "questions",
+    "artifacts"
+  ],
+  "title": "upsgi perf scenario manifest",
+  "type": "object"
+}

@@ -1,0 +1,1 @@
+window.upsgiPerfScenario = 'A1';

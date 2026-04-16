@@ -1,0 +1,2 @@
+fixture=icon-64
+scenario=A3

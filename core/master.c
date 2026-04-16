@@ -141,9 +141,6 @@ void suspend_resume_them_all(int signum) {
 		upsgi.workers[0].suspended = 1;
 	}
 
-	// subscribe/unsubscribe if needed
-	upsgi_subscribe_all(suspend, 1);
-
 	for (i = 1; i <= upsgi.numproc; i++) {
 		upsgi.workers[i].suspended = suspend;
 		if (upsgi.workers[i].pid > 0) {
@@ -169,23 +166,6 @@ void upsgi_master_check_mercy() {
 		}
 	}
 
-	for (i = 0; i < upsgi.mules_cnt; i++) {
-		if (upsgi.mules[i].pid > 0 && upsgi.mules[i].cursed_at) {
-			if (upsgi_now() > upsgi.mules[i].no_mercy_at) {
-				upsgi_log_verbose("mule %d (pid: %d) is taking too much time to die...NO MERCY !!!\n", i + 1, upsgi.mules[i].pid);
-				upsgi_curse_mule(i, SIGKILL);
-			}
-		}
-	}
-
-
-	struct upsgi_spooler *us;
-	for (us = upsgi.spoolers; us; us = us->next) {
-		if (us->pid > 0 && us->cursed_at && upsgi_now() > us->no_mercy_at) {
-				upsgi_log_verbose("spooler %d (pid: %d) is taking too much time to die...NO MERCY !!!\n", i + 1, us->pid);
-				kill(us->pid, SIGKILL);
-		}
-	}
 }
 
 
@@ -394,13 +374,6 @@ int master_loop(char **argv, char **environ) {
 		event_queue_add_fd_read(upsgi.master_queue, upsgi.notify_socket_fd);
 	}
 
-	if (upsgi.spoolers) {
-		event_queue_add_fd_read(upsgi.master_queue, upsgi.shared->spooler_signal_pipe[0]);
-	}
-
-	if (upsgi.mules_cnt > 0) {
-		event_queue_add_fd_read(upsgi.master_queue, upsgi.shared->mule_signal_pipe[0]);
-	}
 
 	if (upsgi.log_master) {
 		upsgi.log_master_buf = upsgi_malloc(upsgi.log_master_bufsize);
@@ -419,9 +392,6 @@ int master_loop(char **argv, char **environ) {
 
 	}
 
-#ifdef UPSGI_SSL
-	upsgi_start_legions();
-#endif
 	upsgi_metrics_start_collector();
 
 	upsgi_add_reload_fds();
@@ -511,12 +481,6 @@ int master_loop(char **argv, char **environ) {
 	}
 
 
-	// spawn mules
-	for (i = 0; i < upsgi.mules_cnt; i++) {
-		size_t mule_patch_size = 0;
-		upsgi.mules[i].patch = upsgi_string_get_list(&upsgi.mules_patches, i, &mule_patch_size);
-		upsgi_mule(i + 1);
-	}
 
 	// spawn gateways
 	for (i = 0; i < ushared->gateways_cnt; i++) {
@@ -528,17 +492,8 @@ int master_loop(char **argv, char **environ) {
 	// spawn daemons
 	upsgi_daemons_spawn_all();
 
-	// first subscription
-	upsgi_subscribe_all(0, 1);
-
 	// sync the cache store if needed
 	upsgi_cache_sync_all();
-
-	if (upsgi.queue_store && upsgi.queue_filesize) {
-		if (msync(upsgi.queue_header, upsgi.queue_filesize, MS_ASYNC)) {
-			upsgi_error("msync()");
-		}
-	}
 
 	// update touches timestamps
 	upsgi_check_touches(upsgi.touch_reload);
@@ -673,13 +628,6 @@ int master_loop(char **argv, char **environ) {
 		if (upsgi.cheaper && !upsgi.status.is_cheap && !upsgi_instance_is_reloading && !upsgi_instance_is_dying && !upsgi.workers[0].suspended) {
 			if (!upsgi_calc_cheaper())
 				return 0;
-		}
-
-		// spooler cheap management
-		if (upsgi.spooler_cheap) {
-			if ((upsgi.master_cycles % upsgi.spooler_frequency) == 0) {
-				upsgi_spooler_cheap_check();
-			}
 		}
 
 
@@ -822,8 +770,6 @@ int master_loop(char **argv, char **environ) {
 			// check if some worker has to die (harakiri, evil checks...)
 			if (upsgi_master_check_workers_deadline()) someone_killed++;
 			if (upsgi_master_check_gateways_deadline()) someone_killed++;
-			if (upsgi_master_check_mules_deadline()) someone_killed++;
-			if (upsgi_master_check_spoolers_deadline()) someone_killed++;
 			if (upsgi_master_check_crons_deadline()) someone_killed++;
 
 			// this could trigger a complete exit...
@@ -837,18 +783,8 @@ int master_loop(char **argv, char **environ) {
 #endif
 #endif
 
-			// resubscribe every 10 cycles by default
-			if (((upsgi.subscriptions || upsgi.subscriptions2) && ((upsgi.master_cycles % upsgi.subscribe_freq) == 0 || upsgi.master_cycles == 1)) && !upsgi_instance_is_reloading && !upsgi_instance_is_dying && !upsgi.workers[0].suspended) {
-				upsgi_subscribe_all(0, 0);
-			}
-
 			upsgi_cache_sync_all();
 
-			if (upsgi.queue_store && upsgi.queue_filesize && upsgi.queue_store_sync && ((upsgi.master_cycles % upsgi.queue_store_sync) == 0)) {
-				if (msync(upsgi.queue_header, upsgi.queue_filesize, MS_ASYNC)) {
-					upsgi_error("msync()");
-				}
-			}
 
 			// check touch_reload
 			if (!upsgi_instance_is_reloading && !upsgi_instance_is_dying) {
@@ -864,18 +800,6 @@ int master_loop(char **argv, char **environ) {
 				if (touched) {
 					upsgi_log_verbose("*** %s has been touched... workers reload !!! ***\n", touched);
 					upsgi_reload_workers();
-					continue;
-				}
-				touched = upsgi_check_touches(upsgi.touch_mules_reload);
-				if (touched) {
-					upsgi_log_verbose("*** %s has been touched... mules reload !!! ***\n", touched);
-					upsgi_reload_mules();
-					continue;
-				}
-				touched = upsgi_check_touches(upsgi.touch_spoolers_reload);
-				if (touched) {
-					upsgi_log_verbose("*** %s has been touched... spoolers reload !!! ***\n", touched);
-					upsgi_reload_spoolers();
 					continue;
 				}
 				touched = upsgi_check_touches(upsgi.touch_chain_reload);
@@ -947,10 +871,6 @@ int master_loop(char **argv, char **environ) {
 
 			if (upsgi_master_check_emperor_death(diedpid))
 				continue;
-			if (upsgi_master_check_spoolers_death(diedpid))
-				continue;
-			if (upsgi_master_check_mules_death(diedpid))
-				continue;
 			if (upsgi_master_check_gateways_death(diedpid))
 				continue;
 			if (upsgi_master_check_daemons_death(diedpid))
@@ -972,24 +892,7 @@ int master_loop(char **argv, char **environ) {
 
 		int thewid = find_worker_id(diedpid);
 		if (thewid <= 0) {
-			// check spooler, mules, gateways and daemons
-			struct upsgi_spooler *uspool = upsgi.spoolers;
-			while (uspool) {
-				if (uspool->pid > 0 && diedpid == uspool->pid) {
-					upsgi_log("spooler (pid: %d) annihilated\n", (int) diedpid);
-					goto next;
-				}
-				uspool = uspool->next;
-			}
-
-			for (i = 0; i < upsgi.mules_cnt; i++) {
-				if (upsgi.mules[i].pid == diedpid) {
-					upsgi_log("mule %d (pid: %d) annihilated\n", i + 1, (int) diedpid);
-					upsgi.mules[i].pid = 0;
-					goto next;
-				}
-			}
-
+			// check gateways and daemons
 			for (i = 0; i < ushared->gateways_cnt; i++) {
 				if (ushared->gateways[i].pid == diedpid) {
 					upsgi_log("gateway %d (%s, pid: %d) annihilated\n", i + 1, ushared->gateways[i].fullname, (int) diedpid);
@@ -1126,32 +1029,6 @@ void upsgi_reload_workers() {
 	for (i = 1; i <= upsgi.numproc; i++) {
 		if (upsgi.workers[i].pid > 0) {
 			upsgi_curse(i, SIGHUP);
-		}
-	}
-	upsgi_unblock_signal(SIGHUP);
-}
-
-void upsgi_reload_mules() {
-	int i;
-
-	upsgi_block_signal(SIGHUP);
-	for (i = 0; i <= upsgi.mules_cnt; i++) {
-		if (upsgi.mules[i].pid > 0) {
-			upsgi_curse_mule(i, SIGHUP);
-		}
-	}
-	upsgi_unblock_signal(SIGHUP);
-}
-
-void upsgi_reload_spoolers() {
-	struct upsgi_spooler *us;
-
-	upsgi_block_signal(SIGHUP);
-	for (us = upsgi.spoolers; us; us = us->next) {
-		if (us->pid > 0) {
-			kill(us->pid, SIGHUP);
-			us->cursed_at = upsgi_now();
-			us->no_mercy_at = us->cursed_at + upsgi.spooler_reload_mercy;
 		}
 	}
 	upsgi_unblock_signal(SIGHUP);

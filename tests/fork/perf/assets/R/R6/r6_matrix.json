@@ -1,0 +1,12 @@
+{
+  "cases": [
+    "wrong method",
+    "wrong path",
+    "invalid JSON",
+    "broken inflate stream",
+    "mixed chunked bodies",
+    "too-large bodies",
+    "header abuse",
+    "random disconnects"
+  ]
+}

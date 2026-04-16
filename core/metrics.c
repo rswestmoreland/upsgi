@@ -750,7 +750,6 @@ void upsgi_setup_metrics() {
 	upsgi_register_metric("core.busy_workers", "5.3", UPSGI_METRIC_GAUGE, "ptr", &upsgi.shared->busy_workers, 0, NULL);
 	upsgi_register_metric("core.idle_workers", "5.4", UPSGI_METRIC_GAUGE, "ptr", &upsgi.shared->idle_workers, 0, NULL);
 	upsgi_register_metric("core.overloaded", "5.5", UPSGI_METRIC_COUNTER, "ptr", &upsgi.shared->overloaded, 0, NULL);
-
 	// parents are appended only at the end
 	struct upsgi_metric *total_tx = upsgi_register_metric_do("core.total_tx", "5.100", UPSGI_METRIC_COUNTER, "sum", NULL, 0, NULL, 1);
 	struct upsgi_metric *total_rss = upsgi_register_metric_do("core.total_rss", "5.101", UPSGI_METRIC_GAUGE, "sum", NULL, 0, NULL, 1);
@@ -777,8 +776,7 @@ void upsgi_setup_metrics() {
 		upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].respawn_count, 0, NULL);
 
 		upsgi_metric_name("worker.%d.avg_response_time", i) ; upsgi_metric_oid("3.%d.8", i);
-		struct upsgi_metric *avg_rt = upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi.workers[i].avg_response_time, 0, NULL);
-		if (i > 0) upsgi_metric_add_child(total_avg_rt, avg_rt);
+		struct upsgi_metric *avg_rt = upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi.workers[i].avg_response_time, 0, NULL);		if (i > 0) upsgi_metric_add_child(total_avg_rt, avg_rt);
 
 		upsgi_metric_name("worker.%d.total_tx", i) ; upsgi_metric_oid("3.%d.9", i);
 		struct upsgi_metric *tx = upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].tx, 0, NULL);
@@ -792,9 +790,25 @@ void upsgi_setup_metrics() {
 		struct upsgi_metric *vsz = upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi.workers[i].vsz_size, 0, NULL);
 		if (i > 0) upsgi_metric_add_child(total_vsz, vsz);
 
-		upsgi_metric_name("worker.%d.running_time", i) ; upsgi_metric_oid("3.%d.13", i);
+		upsgi_metric_name("worker.%d.running_time", i) ; upsgi_metric_oid("3.%d.15", i);
 		struct upsgi_metric *running_time = upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].running_time, 0, NULL);
 		if (i > 0) upsgi_metric_add_child(total_running_time, running_time);
+
+		upsgi_metric_name("worker.%d.thunder_lock_acquires", i) ; upsgi_metric_oid("3.%d.16", i);
+		upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].thunder_lock_acquires, 0, NULL);
+
+		upsgi_metric_name("worker.%d.thunder_lock_contention_events", i) ; upsgi_metric_oid("3.%d.17", i);
+		upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].thunder_lock_contention_events, 0, NULL);
+
+		upsgi_metric_name("worker.%d.thunder_lock_wait_us", i) ; upsgi_metric_oid("3.%d.18", i);
+		upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].thunder_lock_wait_us, 0, NULL);
+
+		upsgi_metric_name("worker.%d.thunder_lock_hold_us", i) ; upsgi_metric_oid("3.%d.19", i);
+		upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].thunder_lock_hold_us, 0, NULL);
+
+		upsgi_metric_name("worker.%d.thunder_lock_bypass_count", i) ; upsgi_metric_oid("3.%d.20", i);
+		upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].thunder_lock_bypass_count, 0, NULL);
+
 
 		// skip core metrics for worker 0
 		if (i == 0) continue;
@@ -823,6 +837,88 @@ void upsgi_setup_metrics() {
 
 			upsgi_metric_name2("worker.%d.core.%d.read_errors", i, j) ; upsgi_metric_oid2("3.%d.2.%d.8", i, j);
 			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].read_errors, 0, NULL);
+
+			upsgi_metric_name2("worker.%d.core.%d.static_path_cache_hits", i, j) ; upsgi_metric_oid2("3.%d.2.%d.9", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].static_path_cache_hits, 0, NULL);
+
+			upsgi_metric_name2("worker.%d.core.%d.static_path_cache_misses", i, j) ; upsgi_metric_oid2("3.%d.2.%d.10", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].static_path_cache_misses, 0, NULL);
+
+			upsgi_metric_name2("worker.%d.core.%d.static_realpath_calls", i, j) ; upsgi_metric_oid2("3.%d.2.%d.11", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].static_realpath_calls, 0, NULL);
+
+			upsgi_metric_name2("worker.%d.core.%d.static_stat_calls", i, j) ; upsgi_metric_oid2("3.%d.2.%d.12", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].static_stat_calls, 0, NULL);
+
+			upsgi_metric_name2("worker.%d.core.%d.static_open_calls", i, j) ; upsgi_metric_oid2("3.%d.2.%d.14", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].static_open_calls, 0, NULL);
+
+			upsgi_metric_name2("worker.%d.core.%d.static_open_failures", i, j) ; upsgi_metric_oid2("3.%d.2.%d.15", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].static_open_failures, 0, NULL);
+
+			upsgi_metric_name2("worker.%d.core.%d.static_index_checks", i, j) ; upsgi_metric_oid2("3.%d.2.%d.13", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].static_index_checks, 0, NULL);
+
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_rounds", i, j) ; upsgi_metric_oid2("3.%d.2.%d.16", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_rounds, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_interactive_turns", i, j) ; upsgi_metric_oid2("3.%d.2.%d.17", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_interactive_turns, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_bulk_turns", i, j) ; upsgi_metric_oid2("3.%d.2.%d.18", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_bulk_turns, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_requeues", i, j) ; upsgi_metric_oid2("3.%d.2.%d.19", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_requeues, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_promotions_to_bulk", i, j) ; upsgi_metric_oid2("3.%d.2.%d.20", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_promotions_to_bulk, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_no_credit_skips", i, j) ; upsgi_metric_oid2("3.%d.2.%d.21", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_no_credit_skips, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_empty_read_events", i, j) ; upsgi_metric_oid2("3.%d.2.%d.22", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_empty_read_events, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_eagain_events", i, j) ; upsgi_metric_oid2("3.%d.2.%d.23", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_eagain_events, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_completed_items", i, j) ; upsgi_metric_oid2("3.%d.2.%d.24", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_completed_items, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_bytes_interactive", i, j) ; upsgi_metric_oid2("3.%d.2.%d.25", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_bytes_interactive, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_bytes_bulk", i, j) ; upsgi_metric_oid2("3.%d.2.%d.26", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_bytes_bulk, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_bytes_total", i, j) ; upsgi_metric_oid2("3.%d.2.%d.27", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_bytes_total, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_credit_granted_bytes", i, j) ; upsgi_metric_oid2("3.%d.2.%d.28", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_credit_granted_bytes, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_credit_unused_bytes", i, j) ; upsgi_metric_oid2("3.%d.2.%d.29", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_credit_unused_bytes, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_active_items", i, j) ; upsgi_metric_oid2("3.%d.2.%d.30", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi.workers[i].cores[j].body_sched_active_items, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_interactive_depth_max", i, j) ; upsgi_metric_oid2("3.%d.2.%d.31", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi.workers[i].cores[j].body_sched_interactive_depth_max, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_bulk_depth_max", i, j) ; upsgi_metric_oid2("3.%d.2.%d.32", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi.workers[i].cores[j].body_sched_bulk_depth_max, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_residency_us_max", i, j) ; upsgi_metric_oid2("3.%d.2.%d.33", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi.workers[i].cores[j].body_sched_residency_us_max, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_residency_us_p50_sample", i, j) ; upsgi_metric_oid2("3.%d.2.%d.34", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi.workers[i].cores[j].body_sched_residency_us_p50_sample, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_residency_us_p95_sample", i, j) ; upsgi_metric_oid2("3.%d.2.%d.35", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_GAUGE, "ptr", &upsgi.workers[i].cores[j].body_sched_residency_us_p95_sample, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_items_promoted_by_bytes", i, j) ; upsgi_metric_oid2("3.%d.2.%d.36", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_items_promoted_by_bytes, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_items_promoted_by_rounds", i, j) ; upsgi_metric_oid2("3.%d.2.%d.37", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_items_promoted_by_rounds, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_items_promoted_by_residency", i, j) ; upsgi_metric_oid2("3.%d.2.%d.38", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_items_promoted_by_residency, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_near_complete_fastfinishes", i, j) ; upsgi_metric_oid2("3.%d.2.%d.39", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_near_complete_fastfinishes, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_overflow_protection_hits", i, j) ; upsgi_metric_oid2("3.%d.2.%d.40", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_overflow_protection_hits, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_queue_full_events", i, j) ; upsgi_metric_oid2("3.%d.2.%d.41", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_queue_full_events, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_disabled_fallbacks", i, j) ; upsgi_metric_oid2("3.%d.2.%d.42", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_disabled_fallbacks, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_full_budget_turns", i, j) ; upsgi_metric_oid2("3.%d.2.%d.43", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_full_budget_turns, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_wait_relief_events", i, j) ; upsgi_metric_oid2("3.%d.2.%d.44", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_wait_relief_events, 0, NULL);
+			upsgi_metric_name2("worker.%d.core.%d.body_sched_yield_hints", i, j) ; upsgi_metric_oid2("3.%d.2.%d.45", i, j);
+			upsgi_register_metric(buf, buf2, UPSGI_METRIC_COUNTER, "ptr", &upsgi.workers[i].cores[j].body_sched_yield_hints, 0, NULL);
 
 		}
 	}

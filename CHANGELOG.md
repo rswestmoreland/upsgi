@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+## 0.1.3 - 2026-04-15
+### Added
+- curated operator docs under `docs/upsgi/`, including quickstart, configuration, logging, hardening, runtime defaults, argument reference, packaging, migration, and support-boundary guides
+- shipped YAML examples under `examples/upsgi/` for baseline startup, exception debugging, body-scheduler notes, and logging queue sizing
+- explicit regression coverage for `psgix.io` keepalive safety and core `IO::Socket` method behavior
+
+### Changed
+- pruned unconditional Perl startup loads so `IO::Socket`, `IO::Handle`, and `IO::File` are no longer paid for in the default PSGI path when they are not needed
+- fixed `psgix.io` to wrap a duplicated client fd instead of the live server-owned fd, preserving normal keepalive behavior when the feature is enabled but unused
+- forced `autoflush(1)` on the wrapped `psgix.io` handle and replaced Perl-level `IO::Socket->new_from_fd(...)` dispatch with direct Perl core handle construction
+- refreshed top-level README, install guidance, examples, and public repo packaging for the official `0.1.3` release
+
+### Removed
+- stale release artifacts, internal summary files, and generated build leftovers from the public source tree
+
 ## 0.1.2 - 2026-04-06
 ### Added
 - maintained delayed-responder callback coverage for the non-writer PSGI path
@@ -29,17 +46,13 @@
 - PSGI-first default build profile and default embedded logging bundle
 - explicit `--log-exceptions` PSGI debug flag
 - fork-owned regression, fault, and initial soak harness under `tests/fork/`
-- upsgi-specific quickstart, option-surface, packaging, migration, and deferred
-  scope docs
+- upsgi-specific quickstart, option-surface, packaging, migration, and deferred scope docs
 - upsgi example configs and example PSGI app under `examples/upsgi/`
 
 ### Changed
 - public binary name is now `upsgi`
 - public version string is now `0.1.0`
-- `--http-modifier*`, `--http-socket-modifier*`, and `--https-socket-modifier*`
-  are now compatibility-only parse shims in the fork
+- `--http-modifier*`, `--http-socket-modifier*`, and `--https-socket-modifier*` are now compatibility-only parse shims in the fork
 - `--perl-no-die-catch` is now a compatibility-only parse shim in the fork
-- default PSGI exception catch/logging is off; explicit exception visibility is
-  opt-in via `--log-exceptions`
-- default repo story is now centered on PSGI hosting rather than upstream
-  multi-runtime breadth
+- default PSGI exception catch/logging is off; explicit exception visibility is opt-in via `--log-exceptions`
+- default repo story is now centered on PSGI hosting rather than upstream multi-runtime breadth

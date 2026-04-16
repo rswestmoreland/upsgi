@@ -1,0 +1,59 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [
+      "mixed traffic assets"
+    ],
+    "repo_fixtures": []
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "buffering discipline"
+      ],
+      "source": "nginx"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "X3",
+  "lane": "X",
+  "parameters": {
+    "measurement_focus": [
+      "RSS/USS/PSS drift by worker",
+      "latency drift over time",
+      "restart necessity"
+    ]
+  },
+  "phase": "P7",
+  "purpose": "Look for long-run RSS creep.",
+  "questions": [
+    "Is long-uptime memory drift a practical problem?",
+    "Do mixed request sizes create fragmentation pain?"
+  ],
+  "schema_version": "1",
+  "status": "planned",
+  "title": "Memory-fragmentation soak",
+  "traffic_shape": {
+    "duration_minutes": [
+      30,
+      60
+    ],
+    "mix": [
+      "small requests",
+      "large uploads",
+      "static hits",
+      "downloads"
+    ]
+  }
+}

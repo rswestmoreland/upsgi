@@ -1,0 +1,67 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/A4/app_download_mix.psgi",
+      "tests/fork/perf/assets/A4/download_matrix.json",
+      "tests/fork/perf/assets/A4/download_mix_client.py"
+    ]
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "send fairness"
+      ],
+      "source": "nginx"
+    },
+    {
+      "ideas": [
+        "X-Sendfile-style thinking"
+      ],
+      "source": "lighttpd"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "A4",
+  "lane": "A",
+  "parameters": {
+    "measurement_focus": [
+      "p99 for normal traffic during downloads",
+      "worker monopolization",
+      "write stalls",
+      "RSS"
+    ]
+  },
+  "phase": "P8",
+  "purpose": "Measure large body sends where response bodies may sit in Perl or user-space instead of clean sendfile paths.",
+  "questions": [
+    "Do large downloads poison tiny requests?",
+    "Do app-assisted send-path changes need to move up later?"
+  ],
+  "schema_version": "1",
+  "status": "asset_packaged",
+  "title": "Download-heavy path",
+  "traffic_shape": {
+    "download_sizes_bytes": [
+      262144,
+      1048576,
+      8388608
+    ],
+    "mix": [
+      "90% normal UI/API traffic",
+      "10% downloads"
+    ]
+  }
+}

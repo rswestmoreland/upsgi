@@ -15,6 +15,119 @@ uint64_t upsgi_worker_exceptions(int wid) {
 	return total;
 }
 
+uint64_t upsgi_worker_static_path_cache_hits(int wid) {
+	uint64_t total = 0;
+	int i;
+	for(i=0;i<upsgi.cores;i++) {
+		total += upsgi.workers[wid].cores[i].static_path_cache_hits;
+	}
+
+	return total;
+}
+
+uint64_t upsgi_worker_static_path_cache_misses(int wid) {
+	uint64_t total = 0;
+	int i;
+	for(i=0;i<upsgi.cores;i++) {
+		total += upsgi.workers[wid].cores[i].static_path_cache_misses;
+	}
+
+	return total;
+}
+
+uint64_t upsgi_worker_static_realpath_calls(int wid) {
+	uint64_t total = 0;
+	int i;
+	for(i=0;i<upsgi.cores;i++) {
+		total += upsgi.workers[wid].cores[i].static_realpath_calls;
+	}
+
+	return total;
+}
+
+uint64_t upsgi_worker_static_stat_calls(int wid) {
+	uint64_t total = 0;
+	int i;
+	for(i=0;i<upsgi.cores;i++) {
+		total += upsgi.workers[wid].cores[i].static_stat_calls;
+	}
+
+	return total;
+}
+
+uint64_t upsgi_worker_static_open_calls(int wid) {
+	uint64_t total = 0;
+	int i;
+	for(i=0;i<upsgi.cores;i++) {
+		total += upsgi.workers[wid].cores[i].static_open_calls;
+	}
+
+	return total;
+}
+
+uint64_t upsgi_worker_static_open_failures(int wid) {
+	uint64_t total = 0;
+	int i;
+	for(i=0;i<upsgi.cores;i++) {
+		total += upsgi.workers[wid].cores[i].static_open_failures;
+	}
+
+	return total;
+}
+
+uint64_t upsgi_worker_static_index_checks(int wid) {
+	uint64_t total = 0;
+	int i;
+	for(i=0;i<upsgi.cores;i++) {
+		total += upsgi.workers[wid].cores[i].static_index_checks;
+	}
+
+	return total;
+}
+
+#define UPSGI_WORKER_CORE_TOTAL(field) \
+uint64_t upsgi_worker_##field(int wid) { \
+	uint64_t total = 0; \
+	int i; \
+	for(i=0;i<upsgi.cores;i++) { \
+		total += upsgi.workers[wid].cores[i].field; \
+	} \
+	return total; \
+}
+
+UPSGI_WORKER_CORE_TOTAL(body_sched_rounds)
+UPSGI_WORKER_CORE_TOTAL(body_sched_interactive_turns)
+UPSGI_WORKER_CORE_TOTAL(body_sched_bulk_turns)
+UPSGI_WORKER_CORE_TOTAL(body_sched_requeues)
+UPSGI_WORKER_CORE_TOTAL(body_sched_promotions_to_bulk)
+UPSGI_WORKER_CORE_TOTAL(body_sched_no_credit_skips)
+UPSGI_WORKER_CORE_TOTAL(body_sched_empty_read_events)
+UPSGI_WORKER_CORE_TOTAL(body_sched_eagain_events)
+UPSGI_WORKER_CORE_TOTAL(body_sched_completed_items)
+UPSGI_WORKER_CORE_TOTAL(body_sched_bytes_interactive)
+UPSGI_WORKER_CORE_TOTAL(body_sched_bytes_bulk)
+UPSGI_WORKER_CORE_TOTAL(body_sched_bytes_total)
+UPSGI_WORKER_CORE_TOTAL(body_sched_credit_granted_bytes)
+UPSGI_WORKER_CORE_TOTAL(body_sched_credit_unused_bytes)
+UPSGI_WORKER_CORE_TOTAL(body_sched_active_items)
+UPSGI_WORKER_CORE_TOTAL(body_sched_interactive_depth_max)
+UPSGI_WORKER_CORE_TOTAL(body_sched_bulk_depth_max)
+UPSGI_WORKER_CORE_TOTAL(body_sched_residency_us_max)
+UPSGI_WORKER_CORE_TOTAL(body_sched_residency_us_p50_sample)
+UPSGI_WORKER_CORE_TOTAL(body_sched_residency_us_p95_sample)
+UPSGI_WORKER_CORE_TOTAL(body_sched_items_promoted_by_bytes)
+UPSGI_WORKER_CORE_TOTAL(body_sched_items_promoted_by_rounds)
+UPSGI_WORKER_CORE_TOTAL(body_sched_items_promoted_by_residency)
+UPSGI_WORKER_CORE_TOTAL(body_sched_near_complete_fastfinishes)
+UPSGI_WORKER_CORE_TOTAL(body_sched_overflow_protection_hits)
+UPSGI_WORKER_CORE_TOTAL(body_sched_queue_full_events)
+UPSGI_WORKER_CORE_TOTAL(body_sched_disabled_fallbacks)
+UPSGI_WORKER_CORE_TOTAL(body_sched_full_budget_turns)
+UPSGI_WORKER_CORE_TOTAL(body_sched_wait_relief_events)
+UPSGI_WORKER_CORE_TOTAL(body_sched_yield_hints)
+
+#undef UPSGI_WORKER_CORE_TOTAL
+
 void upsgi_curse(int wid, int sig) {
 	upsgi.workers[wid].cursed_at = upsgi_now();
         upsgi.workers[wid].no_mercy_at = upsgi.workers[wid].cursed_at + upsgi.worker_reload_mercy;
@@ -24,33 +137,10 @@ void upsgi_curse(int wid, int sig) {
 	}
 }
 
-void upsgi_curse_mule(int mid, int sig) {
-	upsgi.mules[mid].cursed_at = upsgi_now();
-	upsgi.mules[mid].no_mercy_at = upsgi.mules[mid].cursed_at + upsgi.mule_reload_mercy;
-
-	if (sig) {
-		(void) kill(upsgi.mules[mid].pid, sig);
-	}
-}
-
-static void upsgi_signal_spoolers(int signum) {
-
-        struct upsgi_spooler *uspool = upsgi.spoolers;
-        while (uspool) {
-                if (uspool->pid > 0) {
-                        kill(uspool->pid, signum);
-                        upsgi_log("killing the spooler with pid %d\n", uspool->pid);
-                }
-                uspool = uspool->next;
-        }
-
-}
 void upsgi_destroy_processes() {
 
 	int i;
 	int waitpid_status;
-
-        upsgi_signal_spoolers(SIGKILL);
 
         upsgi_detach_daemons();
 
@@ -471,8 +561,8 @@ void upsgi_reload(char **argv) {
 
 	if (!upsgi.master_is_reforked) {
 
-		// call a series of waitpid to ensure all processes (gateways, mules and daemons) are dead
-		for (i = 0; i < (ushared->gateways_cnt + upsgi.daemons_cnt + upsgi.mules_cnt); i++) {
+		// call a series of waitpid to ensure all processes (gateways and daemons) are dead
+		for (i = 0; i < (ushared->gateways_cnt + upsgi.daemons_cnt); i++) {
 			waitpid(WAIT_ANY, &waitpid_status, WNOHANG);
 		}
 
@@ -611,7 +701,7 @@ void upsgi_reload(char **argv) {
 
 }
 
-void upsgi_fixup_fds(int wid, int muleid, struct upsgi_gateway *ug) {
+void upsgi_fixup_fds(int wid, int runtime_id, struct upsgi_gateway *ug) {
 
 	int i;
 
@@ -649,45 +739,6 @@ void upsgi_fixup_fds(int wid, int muleid, struct upsgi_gateway *ug) {
 		}
 
 		
-		if (upsgi.shared->spooler_signal_pipe[0] != -1)
-                	close(upsgi.shared->spooler_signal_pipe[0]);
-		if (upsgi.i_am_a_spooler && upsgi.i_am_a_spooler->pid != getpid()) {
-			if (upsgi.shared->spooler_signal_pipe[1] != -1)
-				close(upsgi.shared->spooler_signal_pipe[1]);
-		}
-
-		if (upsgi.shared->mule_signal_pipe[0] != -1)
-			close(upsgi.shared->mule_signal_pipe[0]);
-
-		if (muleid == 0) {
-			if (upsgi.shared->mule_signal_pipe[1] != -1)
-				close(upsgi.shared->mule_signal_pipe[1]);
-			if (upsgi.shared->mule_queue_pipe[1] != -1)
-				close(upsgi.shared->mule_queue_pipe[1]);
-		}
-
-		for (i = 0; i < upsgi.mules_cnt; i++) {
-			if (upsgi.mules[i].signal_pipe[0] != -1)
-				close(upsgi.mules[i].signal_pipe[0]);
-			if (muleid != i + 1) {
-				if (upsgi.mules[i].signal_pipe[1] != -1)
-					close(upsgi.mules[i].signal_pipe[1]);
-				if (upsgi.mules[i].queue_pipe[1] != -1)
-					close(upsgi.mules[i].queue_pipe[1]);
-			}
-		}
-
-		for (i = 0; i < upsgi.farms_cnt; i++) {
-			if (upsgi.farms[i].signal_pipe[0] != -1)
-				close(upsgi.farms[i].signal_pipe[0]);
-
-			if (muleid == 0) {
-				if (upsgi.farms[i].signal_pipe[1] != -1)
-					close(upsgi.farms[i].signal_pipe[1]);
-				if (upsgi.farms[i].queue_pipe[1] != -1)
-					close(upsgi.farms[i].queue_pipe[1]);
-			}
-		}
 
 		if (upsgi.master_fifo_fd > -1) close(upsgi.master_fifo_fd);
 
@@ -889,6 +940,58 @@ struct upsgi_stats *upsgi_master_generate_stats() {
 	if (upsgi_stats_keylong_comma(us, "log_dropped_messages", (unsigned long long) upsgi.shared->log_dropped_messages))
 		goto end;
 	if (upsgi_stats_keylong_comma(us, "req_log_dropped_messages", (unsigned long long) upsgi.shared->req_log_dropped_messages))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_queue_depth", (unsigned long long) upsgi.shared->log_queue_depth))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_queue_bytes", (unsigned long long) upsgi.shared->log_queue_bytes))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_queue_depth_max", (unsigned long long) upsgi.shared->log_queue_depth_max))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_queue_bytes_max", (unsigned long long) upsgi.shared->log_queue_bytes_max))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_queue_enqueue_events", (unsigned long long) upsgi.shared->log_queue_enqueue_events))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_queue_flush_events", (unsigned long long) upsgi.shared->log_queue_flush_events))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_queue_backpressure_events", (unsigned long long) upsgi.shared->log_queue_backpressure_events))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_queue_full_events", (unsigned long long) upsgi.shared->log_queue_full_events))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_queue_sink_retry_events", (unsigned long long) upsgi.shared->log_queue_sink_retry_events))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_queue_batch_flush_events", (unsigned long long) upsgi.shared->log_queue_batch_flush_events))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_queue_batch_items", (unsigned long long) upsgi.shared->log_queue_batch_items))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_sink_recovery_attempts", (unsigned long long) upsgi.shared->log_sink_recovery_attempts))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "log_sink_recovery_successes", (unsigned long long) upsgi.shared->log_sink_recovery_successes))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_queue_depth", (unsigned long long) upsgi.shared->req_log_queue_depth))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_queue_bytes", (unsigned long long) upsgi.shared->req_log_queue_bytes))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_queue_depth_max", (unsigned long long) upsgi.shared->req_log_queue_depth_max))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_queue_bytes_max", (unsigned long long) upsgi.shared->req_log_queue_bytes_max))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_queue_enqueue_events", (unsigned long long) upsgi.shared->req_log_queue_enqueue_events))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_queue_flush_events", (unsigned long long) upsgi.shared->req_log_queue_flush_events))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_queue_backpressure_events", (unsigned long long) upsgi.shared->req_log_queue_backpressure_events))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_queue_full_events", (unsigned long long) upsgi.shared->req_log_queue_full_events))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_queue_sink_retry_events", (unsigned long long) upsgi.shared->req_log_queue_sink_retry_events))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_queue_batch_flush_events", (unsigned long long) upsgi.shared->req_log_queue_batch_flush_events))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_queue_batch_items", (unsigned long long) upsgi.shared->req_log_queue_batch_items))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_sink_recovery_attempts", (unsigned long long) upsgi.shared->req_log_sink_recovery_attempts))
+		goto end;
+	if (upsgi_stats_keylong_comma(us, "req_log_sink_recovery_successes", (unsigned long long) upsgi.shared->req_log_sink_recovery_successes))
 		goto end;
 	if (upsgi_stats_keylong_comma(us, "load", (unsigned long long) upsgi.shared->load))
 		goto end;
@@ -1221,6 +1324,90 @@ struct upsgi_stats *upsgi_master_generate_stats() {
 			goto end;
 		if (upsgi_stats_keylong_comma(us, "avg_rt", (unsigned long long) upsgi.workers[i + 1].avg_response_time))
 			goto end;
+		if (upsgi_stats_keylong_comma(us, "thunder_lock_acquires", (unsigned long long) upsgi.workers[i + 1].thunder_lock_acquires))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "thunder_lock_contention_events", (unsigned long long) upsgi.workers[i + 1].thunder_lock_contention_events))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "thunder_lock_wait_us", (unsigned long long) upsgi.workers[i + 1].thunder_lock_wait_us))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "thunder_lock_hold_us", (unsigned long long) upsgi.workers[i + 1].thunder_lock_hold_us))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "thunder_lock_bypass_count", (unsigned long long) upsgi.workers[i + 1].thunder_lock_bypass_count))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "static_path_cache_hits", (unsigned long long) upsgi_worker_static_path_cache_hits(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "static_path_cache_misses", (unsigned long long) upsgi_worker_static_path_cache_misses(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "static_realpath_calls", (unsigned long long) upsgi_worker_static_realpath_calls(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "static_stat_calls", (unsigned long long) upsgi_worker_static_stat_calls(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "static_open_calls", (unsigned long long) upsgi_worker_static_open_calls(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "static_open_failures", (unsigned long long) upsgi_worker_static_open_failures(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "static_index_checks", (unsigned long long) upsgi_worker_static_index_checks(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_rounds", (unsigned long long) upsgi_worker_body_sched_rounds(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_interactive_turns", (unsigned long long) upsgi_worker_body_sched_interactive_turns(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_bulk_turns", (unsigned long long) upsgi_worker_body_sched_bulk_turns(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_requeues", (unsigned long long) upsgi_worker_body_sched_requeues(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_promotions_to_bulk", (unsigned long long) upsgi_worker_body_sched_promotions_to_bulk(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_no_credit_skips", (unsigned long long) upsgi_worker_body_sched_no_credit_skips(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_empty_read_events", (unsigned long long) upsgi_worker_body_sched_empty_read_events(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_eagain_events", (unsigned long long) upsgi_worker_body_sched_eagain_events(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_completed_items", (unsigned long long) upsgi_worker_body_sched_completed_items(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_bytes_interactive", (unsigned long long) upsgi_worker_body_sched_bytes_interactive(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_bytes_bulk", (unsigned long long) upsgi_worker_body_sched_bytes_bulk(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_bytes_total", (unsigned long long) upsgi_worker_body_sched_bytes_total(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_credit_granted_bytes", (unsigned long long) upsgi_worker_body_sched_credit_granted_bytes(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_credit_unused_bytes", (unsigned long long) upsgi_worker_body_sched_credit_unused_bytes(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_active_items", (unsigned long long) upsgi_worker_body_sched_active_items(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_interactive_depth_max", (unsigned long long) upsgi_worker_body_sched_interactive_depth_max(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_bulk_depth_max", (unsigned long long) upsgi_worker_body_sched_bulk_depth_max(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_residency_us_max", (unsigned long long) upsgi_worker_body_sched_residency_us_max(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_residency_us_p50_sample", (unsigned long long) upsgi_worker_body_sched_residency_us_p50_sample(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_residency_us_p95_sample", (unsigned long long) upsgi_worker_body_sched_residency_us_p95_sample(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_items_promoted_by_bytes", (unsigned long long) upsgi_worker_body_sched_items_promoted_by_bytes(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_items_promoted_by_rounds", (unsigned long long) upsgi_worker_body_sched_items_promoted_by_rounds(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_items_promoted_by_residency", (unsigned long long) upsgi_worker_body_sched_items_promoted_by_residency(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_near_complete_fastfinishes", (unsigned long long) upsgi_worker_body_sched_near_complete_fastfinishes(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_overflow_protection_hits", (unsigned long long) upsgi_worker_body_sched_overflow_protection_hits(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_queue_full_events", (unsigned long long) upsgi_worker_body_sched_queue_full_events(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_disabled_fallbacks", (unsigned long long) upsgi_worker_body_sched_disabled_fallbacks(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_full_budget_turns", (unsigned long long) upsgi_worker_body_sched_full_budget_turns(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_wait_relief_events", (unsigned long long) upsgi_worker_body_sched_wait_relief_events(i + 1)))
+			goto end;
+		if (upsgi_stats_keylong_comma(us, "body_sched_yield_hints", (unsigned long long) upsgi_worker_body_sched_yield_hints(i + 1)))
+			goto end;
 
 		// applications list
 		if (upsgi_stats_key(us, "apps"))
@@ -1295,6 +1482,80 @@ struct upsgi_stats *upsgi_master_generate_stats() {
 
 			if (upsgi_stats_keylong_comma(us, "static_requests", (unsigned long long) uc->static_requests))
 				goto end;
+			if (upsgi_stats_keylong_comma(us, "static_path_cache_hits", (unsigned long long) uc->static_path_cache_hits))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "static_path_cache_misses", (unsigned long long) uc->static_path_cache_misses))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "static_realpath_calls", (unsigned long long) uc->static_realpath_calls))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "static_stat_calls", (unsigned long long) uc->static_stat_calls))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "static_open_calls", (unsigned long long) uc->static_open_calls))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "static_open_failures", (unsigned long long) uc->static_open_failures))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "static_index_checks", (unsigned long long) uc->static_index_checks))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_rounds", (unsigned long long) uc->body_sched_rounds))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_interactive_turns", (unsigned long long) uc->body_sched_interactive_turns))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_bulk_turns", (unsigned long long) uc->body_sched_bulk_turns))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_requeues", (unsigned long long) uc->body_sched_requeues))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_promotions_to_bulk", (unsigned long long) uc->body_sched_promotions_to_bulk))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_no_credit_skips", (unsigned long long) uc->body_sched_no_credit_skips))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_empty_read_events", (unsigned long long) uc->body_sched_empty_read_events))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_eagain_events", (unsigned long long) uc->body_sched_eagain_events))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_completed_items", (unsigned long long) uc->body_sched_completed_items))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_bytes_interactive", (unsigned long long) uc->body_sched_bytes_interactive))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_bytes_bulk", (unsigned long long) uc->body_sched_bytes_bulk))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_bytes_total", (unsigned long long) uc->body_sched_bytes_total))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_credit_granted_bytes", (unsigned long long) uc->body_sched_credit_granted_bytes))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_credit_unused_bytes", (unsigned long long) uc->body_sched_credit_unused_bytes))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_active_items", (unsigned long long) uc->body_sched_active_items))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_interactive_depth_max", (unsigned long long) uc->body_sched_interactive_depth_max))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_bulk_depth_max", (unsigned long long) uc->body_sched_bulk_depth_max))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_residency_us_max", (unsigned long long) uc->body_sched_residency_us_max))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_residency_us_p50_sample", (unsigned long long) uc->body_sched_residency_us_p50_sample))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_residency_us_p95_sample", (unsigned long long) uc->body_sched_residency_us_p95_sample))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_items_promoted_by_bytes", (unsigned long long) uc->body_sched_items_promoted_by_bytes))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_items_promoted_by_rounds", (unsigned long long) uc->body_sched_items_promoted_by_rounds))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_items_promoted_by_residency", (unsigned long long) uc->body_sched_items_promoted_by_residency))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_near_complete_fastfinishes", (unsigned long long) uc->body_sched_near_complete_fastfinishes))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_overflow_protection_hits", (unsigned long long) uc->body_sched_overflow_protection_hits))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_queue_full_events", (unsigned long long) uc->body_sched_queue_full_events))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_disabled_fallbacks", (unsigned long long) uc->body_sched_disabled_fallbacks))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_full_budget_turns", (unsigned long long) uc->body_sched_full_budget_turns))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_wait_relief_events", (unsigned long long) uc->body_sched_wait_relief_events))
+				goto end;
+			if (upsgi_stats_keylong_comma(us, "body_sched_yield_hints", (unsigned long long) uc->body_sched_yield_hints))
+				goto end;
 
 			if (upsgi_stats_keylong_comma(us, "routed_requests", (unsigned long long) uc->routed_requests))
 				goto end;
@@ -1362,44 +1623,6 @@ nocores:
 	if (upsgi_stats_list_close(us))
 		goto end;
 
-	struct upsgi_spooler *uspool = upsgi.spoolers;
-	if (uspool) {
-		if (upsgi_stats_comma(us))
-			goto end;
-		if (upsgi_stats_key(us, "spoolers"))
-			goto end;
-		if (upsgi_stats_list_open(us))
-			goto end;
-		while (uspool) {
-			if (upsgi_stats_object_open(us))
-				goto end;
-
-			if (upsgi_stats_keyval_comma(us, "dir", uspool->dir))
-				goto end;
-
-			if (upsgi_stats_keylong_comma(us, "pid", (unsigned long long) uspool->pid))
-				goto end;
-
-			if (upsgi_stats_keylong_comma(us, "tasks", (unsigned long long) uspool->tasks))
-				goto end;
-
-			if (upsgi_stats_keylong_comma(us, "respawns", (unsigned long long) uspool->respawned))
-				goto end;
-
-			if (upsgi_stats_keylong(us, "running", (unsigned long long) uspool->running))
-				goto end;
-
-			if (upsgi_stats_object_close(us))
-				goto end;
-			uspool = uspool->next;
-			if (uspool) {
-				if (upsgi_stats_comma(us))
-					goto end;
-			}
-		}
-		if (upsgi_stats_list_close(us))
-			goto end;
-	}
 
 	struct upsgi_cron *ucron = upsgi.crons;
 	if (ucron) {
@@ -1439,10 +1662,6 @@ nocores:
 			if (upsgi_stats_keylong_comma(us, "unique", (unsigned long long) ucron->unique))
 				goto end;
 
-#ifdef UPSGI_SSL
-			if (upsgi_stats_keyval_comma(us, "legion", ucron->legion ? ucron->legion : ""))
-				goto end;
-#endif
 
 			if (upsgi_stats_keyslong_comma(us, "pid", (long long) ucron->pid))
 				goto end;
@@ -1463,146 +1682,11 @@ nocores:
 			goto end;
 	}
 
-#ifdef UPSGI_SSL
-	struct upsgi_legion *legion = NULL;
-	if (upsgi.legions) {
-
-		if (upsgi_stats_comma(us))
-			goto end;
-
-		if (upsgi_stats_key(us, "legions"))
-			goto end;
-
-		if (upsgi_stats_list_open(us))
-			goto end;
-
-		legion = upsgi.legions;
-		while (legion) {
-			if (upsgi_stats_object_open(us))
-				goto end;
-
-			if (upsgi_stats_keyval_comma(us, "legion", legion->legion))
-				goto end;
-
-			if (upsgi_stats_keyval_comma(us, "addr", legion->addr))
-				goto end;
-
-			if (upsgi_stats_keyval_comma(us, "uuid", legion->uuid))
-				goto end;
-
-			if (upsgi_stats_keylong_comma(us, "valor", (unsigned long long) legion->valor))
-				goto end;
-
-			if (upsgi_stats_keylong_comma(us, "checksum", (unsigned long long) legion->checksum))
-				goto end;
-
-			if (upsgi_stats_keylong_comma(us, "quorum", (unsigned long long) legion->quorum))
-				goto end;
-
-			if (upsgi_stats_keylong_comma(us, "i_am_the_lord", (unsigned long long) legion->i_am_the_lord))
-				goto end;
-
-			if (upsgi_stats_keylong_comma(us, "lord_valor", (unsigned long long) legion->lord_valor))
-				goto end;
-
-			if (upsgi_stats_keyvaln_comma(us, "lord_uuid", legion->lord_uuid, 36))
-				goto end;
-
-			// legion nodes start
-			if (upsgi_stats_key(us, "nodes"))
-                                goto end;
-
-                        if (upsgi_stats_list_open(us))
-                                goto end;
-
-                        struct upsgi_string_list *nodes = legion->nodes;
-                        while (nodes) {
-
-				if (upsgi_stats_str(us, nodes->value))
-                                	goto end;
-
-                                nodes = nodes->next;
-                                if (nodes) {
-                                        if (upsgi_stats_comma(us))
-                                                goto end;
-                                }
-                        }
-
-			if (upsgi_stats_list_close(us))
-				goto end;
-
-                        if (upsgi_stats_comma(us))
-                        	goto end;
-
-
-			// legion members start
-			if (upsgi_stats_key(us, "members"))
-				goto end;
-
-			if (upsgi_stats_list_open(us))
-				goto end;
-
-			upsgi_rlock(legion->lock);
-			struct upsgi_legion_node *node = legion->nodes_head;
-			while (node) {
-				if (upsgi_stats_object_open(us))
-					goto unlock_legion_mutex;
-
-				if (upsgi_stats_keyvaln_comma(us, "name", node->name, node->name_len))
-					goto unlock_legion_mutex;
-
-				if (upsgi_stats_keyval_comma(us, "uuid", node->uuid))
-					goto unlock_legion_mutex;
-
-				if (upsgi_stats_keylong_comma(us, "valor", (unsigned long long) node->valor))
-					goto unlock_legion_mutex;
-
-				if (upsgi_stats_keylong_comma(us, "checksum", (unsigned long long) node->checksum))
-					goto unlock_legion_mutex;
-
-				if (upsgi_stats_keylong(us, "last_seen", (unsigned long long) node->last_seen))
-					goto unlock_legion_mutex;
-
-				if (upsgi_stats_object_close(us))
-					goto unlock_legion_mutex;
-
-				node = node->next;
-				if (node) {
-					if (upsgi_stats_comma(us))
-						goto unlock_legion_mutex;
-				}
-			}
-			upsgi_rwunlock(legion->lock);
-
-			if (upsgi_stats_list_close(us))
-				goto end;
-			// legion nodes end
-
-			if (upsgi_stats_object_close(us))
-				goto end;
-
-			legion = legion->next;
-			if (legion) {
-				if (upsgi_stats_comma(us))
-					goto end;
-			}
-		}
-
-		if (upsgi_stats_list_close(us))
-			goto end;
-
-	}
-#endif
 
 	if (upsgi_stats_object_close(us))
 		goto end;
 
 	return us;
-#ifdef UPSGI_SSL
-unlock_legion_mutex:
-	if (legion)
-		upsgi_rwunlock(legion->lock);
-#endif
 end:
 	free(us->base);
 	free(us);

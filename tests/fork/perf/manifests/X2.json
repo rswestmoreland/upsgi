@@ -1,0 +1,61 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [
+      "receiver invalid corpus",
+      "log sink config"
+    ],
+    "repo_fixtures": []
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "bounded logging"
+      ],
+      "source": "syslog-ng"
+    },
+    {
+      "ideas": [
+        "backpressure"
+      ],
+      "source": "Kafka"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "X2",
+  "lane": "X",
+  "parameters": {
+    "measurement_focus": [
+      "log backpressure events",
+      "sink stalls",
+      "dropped logs",
+      "latency impact"
+    ]
+  },
+  "phase": "P7",
+  "purpose": "Determine whether logging becomes a hidden bottleneck.",
+  "questions": [
+    "Does logging become hidden flow-control debt?",
+    "Do we need stricter sink isolation or queue caps?"
+  ],
+  "schema_version": "1",
+  "status": "planned",
+  "title": "Logging-pressure run",
+  "traffic_shape": {
+    "mix": [
+      "normal traffic",
+      "high-invalid-rate receiver burst"
+    ]
+  }
+}

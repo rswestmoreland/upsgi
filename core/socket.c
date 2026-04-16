@@ -985,6 +985,7 @@ struct upsgi_socket *upsgi_new_shared_socket(char *name) {
 	memset(upsgi_sock, 0, sizeof(struct upsgi_socket));
 	upsgi_sock->name = name;
 	upsgi_sock->fd = -1;
+	upsgi_sock->configured_socket_num = upsgi_get_socket_num(upsgi_sock);
 
 	return upsgi_sock;
 }
@@ -1680,7 +1681,7 @@ void upsgi_map_sockets() {
 				upsgi_log("invalid socket mapping, must be socket:worker[,worker...]\n");
 				exit(1);
 			}
-			if ((int) upsgi_str_num(usl->value, colon - usl->value) == upsgi_get_socket_num(upsgi_sock)) {
+			if ((int) upsgi_str_num(usl->value, colon - usl->value) == upsgi_sock->configured_socket_num) {
 				enabled = 0;
 				char *p, *ctx = NULL;
 				upsgi_foreach_token(colon + 1, ",", p, ctx) {
@@ -1691,7 +1692,7 @@ void upsgi_map_sockets() {
 					}
 					if (w == upsgi.mywid) {
 						enabled = 1;
-						upsgi_log("mapped socket %d (%s) to worker %d\n", upsgi_get_socket_num(upsgi_sock), upsgi_sock->name, upsgi.mywid);
+						upsgi_log("mapped socket %d (%s) to worker %d\n", upsgi_sock->configured_socket_num, upsgi_sock->name, upsgi.mywid);
 						break;
 					}
 				}
@@ -1723,12 +1724,12 @@ void upsgi_map_sockets() {
 
 }
 
-static int upsgi_socket_mapping_is_worker_exclusive(struct upsgi_socket *upsgi_sock) {
+int upsgi_socket_mapping_is_worker_exclusive(struct upsgi_socket *upsgi_sock) {
 	struct upsgi_string_list *usl = upsgi.map_socket;
 	int found = 0;
 	int my_worker = 0;
 	int other_workers = 0;
-	int sock_num = upsgi_get_socket_num(upsgi_sock);
+	int sock_num = upsgi_sock->configured_socket_num;
 
 	while (usl) {
 		char *colon = strchr(usl->value, ':');

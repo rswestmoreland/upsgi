@@ -1,0 +1,77 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt"
+  ],
+  "assets": {
+    "external": [],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/A3/app_static_fanout.psgi",
+      "tests/fork/perf/assets/A3/config.yaml.in",
+      "tests/fork/perf/assets/A3/fanout_sequence.json",
+      "tests/fork/perf/assets/A3/static",
+      "tests/fork/perf/assets/A3/fanout_bench.py",
+      "tests/fork/perf/assets/A3/run_a3_measured.sh"
+    ],
+    "runner": "tests/fork/perf/assets/A3/run_a3_measured.sh"
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "stat cache",
+        "cheap static paths"
+      ],
+      "source": "lighttpd"
+    },
+    {
+      "ideas": [
+        "static cold-read awareness"
+      ],
+      "source": "H2O"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "A3",
+  "lane": "A",
+  "notes": [
+    "Repo-local A3 asset pack now exists.",
+    "Can use existing W5 static counters and static-serving regressions for interpretation.",
+    "Focused measured A3 runner now exists for cold-vs-warm static fanout comparison."
+  ],
+  "parameters": {
+    "measurement_focus": [
+      "static hit latency",
+      "stat/open frequency",
+      "worker RSS drift",
+      "app latency under asset fanout",
+      "W5 static counters"
+    ]
+  },
+  "phase": "P3",
+  "purpose": "Measure static-serving benefit when one page fans out into many asset requests.",
+  "questions": [
+    "Did W5 buy enough to matter for real page-load pressure?",
+    "Should broader static metadata or compression caching be revisited later?"
+  ],
+  "schema_version": "1",
+  "status": "asset_packaged",
+  "title": "Static fanout page load",
+  "traffic_shape": {
+    "mix": [
+      "1 HTML/document request",
+      "10-30 CSS/JS/image requests"
+    ],
+    "variants": [
+      "warm cache",
+      "cold cache"
+    ]
+  }
+}

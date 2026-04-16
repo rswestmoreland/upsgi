@@ -188,19 +188,23 @@ static int consume_body_for_readline(struct wsgi_request *wsgi_req) {
 	}
 
 	// read from socket
-	ssize_t len = wsgi_req->socket->proto_read_body(wsgi_req, wsgi_req->post_readline_buf + wsgi_req->post_readline_watermark , remains);
+	size_t read_budget = upsgi_body_sched_read_budget(wsgi_req, remains);
+	ssize_t len = wsgi_req->socket->proto_read_body(wsgi_req, wsgi_req->post_readline_buf + wsgi_req->post_readline_watermark , read_budget);
 	if (len > 0) {
+		upsgi_body_sched_note_bytes(wsgi_req, (size_t) len);
 		wsgi_req->post_pos += len;
 		wsgi_req->post_readline_watermark += len;
 		return 0;
 	}
 	if (len == 0) {
+		upsgi_body_sched_note_empty_read(wsgi_req);
 		upsgi_read_error(remains);
 		wsgi_req->read_errors++;
 		return -1;	
 	}
 	if (len < 0) {
 		if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS) {
+			upsgi_body_sched_note_eagain(wsgi_req);
 			goto wait;
 		}
 		upsgi_read_error(remains);
@@ -210,11 +214,20 @@ static int consume_body_for_readline(struct wsgi_request *wsgi_req) {
 wait:
 	ret = upsgi_wait_read_req(wsgi_req);
         if (ret > 0) {
-        	len = wsgi_req->socket->proto_read_body(wsgi_req, wsgi_req->post_readline_buf + wsgi_req->post_readline_watermark , remains);
+        	read_budget = upsgi_body_sched_read_budget(wsgi_req, remains);
+        	len = wsgi_req->socket->proto_read_body(wsgi_req, wsgi_req->post_readline_buf + wsgi_req->post_readline_watermark , read_budget);
                 if (len > 0) {
+			upsgi_body_sched_note_bytes(wsgi_req, (size_t) len);
 			wsgi_req->post_pos += len;
 			wsgi_req->post_readline_watermark += len;
 			return 0;
+		}
+		if (len == 0) {
+			upsgi_body_sched_note_empty_read(wsgi_req);
+		}
+		else if (len < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS)) {
+			upsgi_body_sched_note_eagain(wsgi_req);
+			goto wait;
 		}
 		upsgi_read_error(remains);
 		wsgi_req->read_errors++;
@@ -332,6 +345,7 @@ char *upsgi_request_body_read(struct wsgi_request *wsgi_req, ssize_t hint, ssize
 			return NULL;
 		}
 		if (chunked->pos == 0) {
+			upsgi_body_sched_note_chunked_complete(wsgi_req);
 			upsgi_buffer_destroy(chunked);
 			return upsgi.empty;
 		}
@@ -456,8 +470,10 @@ char *upsgi_request_body_read(struct wsgi_request *wsgi_req, ssize_t hint, ssize
 	// ok read all the required bytes...
 	while(remains > 0) {
 		// here we first try to read (as data could be already available)
-		ssize_t len = wsgi_req->socket->proto_read_body(wsgi_req, wsgi_req->post_read_buf + *rlen , remains);
+		size_t read_budget = upsgi_body_sched_read_budget(wsgi_req, remains);
+		ssize_t len = wsgi_req->socket->proto_read_body(wsgi_req, wsgi_req->post_read_buf + *rlen , read_budget);
 		if (len > 0) {
+			upsgi_body_sched_note_bytes(wsgi_req, (size_t) len);
 			wsgi_req->post_pos+=len;
 			remains -= len;
 			*rlen += len;
@@ -465,12 +481,14 @@ char *upsgi_request_body_read(struct wsgi_request *wsgi_req, ssize_t hint, ssize
 		}
 		// client closed connection...
 		if (len == 0) {
+			upsgi_body_sched_note_empty_read(wsgi_req);
 			*rlen = -1;
 			upsgi_read_error0(remains);
 			return NULL;
 		}
 		if (len < 0) {
 			if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS) {
+				upsgi_body_sched_note_eagain(wsgi_req);
 				goto wait;
 			}
 			*rlen = -1;
@@ -481,17 +499,21 @@ char *upsgi_request_body_read(struct wsgi_request *wsgi_req, ssize_t hint, ssize
 wait:
 		ret = upsgi_wait_read_req(wsgi_req);
         	if (ret > 0) {
-			len = wsgi_req->socket->proto_read_body(wsgi_req, wsgi_req->post_read_buf + *rlen, remains);
+			read_budget = upsgi_body_sched_read_budget(wsgi_req, remains);
+			len = wsgi_req->socket->proto_read_body(wsgi_req, wsgi_req->post_read_buf + *rlen, read_budget);
 			if (len > 0) {
+				upsgi_body_sched_note_bytes(wsgi_req, (size_t) len);
 				wsgi_req->post_pos+=len;
 				remains -= len;
                         	*rlen += len;
                         	continue;
 			}else if (len < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS)) {
+				upsgi_body_sched_note_eagain(wsgi_req);
 				goto wait;
 			}
 			*rlen = -1;
 			if (len == 0) {
+				upsgi_body_sched_note_empty_read(wsgi_req);
 				upsgi_read_error0(remains);
 			}
 			else {
@@ -542,18 +564,22 @@ int upsgi_postbuffer_do_in_mem(struct wsgi_request *wsgi_req) {
                         inc_harakiri(wsgi_req, upsgi.harakiri_options.workers);
                 }
 
-                ssize_t rlen = wsgi_req->socket->proto_read_body(wsgi_req, ptr, remains);
+                size_t read_budget = upsgi_body_sched_read_budget(wsgi_req, remains);
+                ssize_t rlen = wsgi_req->socket->proto_read_body(wsgi_req, ptr, read_budget);
                 if (rlen > 0) {
+			upsgi_body_sched_note_bytes(wsgi_req, (size_t) rlen);
 			remains -= rlen;
 			ptr += rlen;
 			continue;
 		}
                 if (rlen == 0) {
+			upsgi_body_sched_note_empty_read(wsgi_req);
 			upsgi_read_error0(remains);
 			return -1; 
 		}
                 if (rlen < 0) {
                         if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS) {
+                                upsgi_body_sched_note_eagain(wsgi_req);
                                 goto wait;
                         }
 			upsgi_read_error(remains);
@@ -564,11 +590,20 @@ int upsgi_postbuffer_do_in_mem(struct wsgi_request *wsgi_req) {
 wait:
                 ret = upsgi_wait_read_req(wsgi_req);
                 if (ret > 0) {
-			rlen = wsgi_req->socket->proto_read_body(wsgi_req, ptr, remains);
+			read_budget = upsgi_body_sched_read_budget(wsgi_req, remains);
+			rlen = wsgi_req->socket->proto_read_body(wsgi_req, ptr, read_budget);
 			if (rlen > 0) {
+				upsgi_body_sched_note_bytes(wsgi_req, (size_t) rlen);
 				remains -= rlen;
 				ptr += rlen;
 				continue;
+			}
+			if (rlen == 0) {
+				upsgi_body_sched_note_empty_read(wsgi_req);
+			}
+			else if (rlen < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS)) {
+				upsgi_body_sched_note_eagain(wsgi_req);
+				goto wait;
 			}
 		}
                 if (ret < 0) {
@@ -620,14 +655,20 @@ int upsgi_postbuffer_do_in_disk(struct wsgi_request *wsgi_req) {
                 size_t remains = UMIN(post_remains, upsgi.post_buffering_bufsize);
 
                 // first try to read data (there could be something already available
-                ssize_t rlen = wsgi_req->socket->proto_read_body(wsgi_req, wsgi_req->post_buffering_buf, remains);
-                if (rlen > 0) goto write;
+                size_t read_budget = upsgi_body_sched_read_budget(wsgi_req, remains);
+                ssize_t rlen = wsgi_req->socket->proto_read_body(wsgi_req, wsgi_req->post_buffering_buf, read_budget);
+                if (rlen > 0) {
+			upsgi_body_sched_note_bytes(wsgi_req, (size_t) rlen);
+			goto write;
+		}
                 if (rlen == 0) {
+			upsgi_body_sched_note_empty_read(wsgi_req);
 			upsgi_read_error0(remains);
 			goto end;
 		}
                 if (rlen < 0) {
                         if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS) {
+                                upsgi_body_sched_note_eagain(wsgi_req);
                                 goto wait;
                         }
 			upsgi_read_error(remains);
@@ -638,12 +679,21 @@ int upsgi_postbuffer_do_in_disk(struct wsgi_request *wsgi_req) {
 wait:
                 ret = upsgi_wait_read_req(wsgi_req);
                 if (ret > 0) {
-			rlen = wsgi_req->socket->proto_read_body(wsgi_req, wsgi_req->post_buffering_buf, remains);
-			if (rlen > 0) goto write;
+			read_budget = upsgi_body_sched_read_budget(wsgi_req, remains);
+			rlen = wsgi_req->socket->proto_read_body(wsgi_req, wsgi_req->post_buffering_buf, read_budget);
+			if (rlen > 0) {
+				upsgi_body_sched_note_bytes(wsgi_req, (size_t) rlen);
+				goto write;
+			}
 			if (rlen == 0) {
+				upsgi_body_sched_note_empty_read(wsgi_req);
 				upsgi_read_error0(remains);
 			}
 			else {
+				if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS) {
+					upsgi_body_sched_note_eagain(wsgi_req);
+					goto wait;
+				}
 				upsgi_read_error(remains);
 				wsgi_req->read_errors++;
 			}

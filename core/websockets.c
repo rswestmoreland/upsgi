@@ -86,21 +86,6 @@ static int upsgi_websocket_send_do(struct wsgi_request *wsgi_req, char *msg, siz
 	return upsgi_response_write_body_do(wsgi_req, ub->buf, ub->pos);
 }
 
-static int upsgi_websocket_send_from_sharedarea_do(struct wsgi_request *wsgi_req, int id, uint64_t pos, uint64_t len, uint8_t opcode) {
-	struct upsgi_sharedarea *sa = upsgi_sharedarea_get_by_id(id, pos);
-	if (!sa) return -1;
-	if (!len) {
-		len = sa->honour_used ? sa->used-pos : ((sa->max_pos+1)-pos);
-	}
-	upsgi_rlock(sa->lock);
-	sa->hits++;
-        struct upsgi_buffer *ub = upsgi_websocket_message(wsgi_req, sa->area, len, opcode);
-	upsgi_rwunlock(sa->lock);
-        if (!ub) return -1;
-
-        return upsgi_response_write_body_do(wsgi_req, ub->buf, ub->pos);
-}
-
 int upsgi_websocket_send(struct wsgi_request *wsgi_req, char *msg, size_t len) {
 	if (wsgi_req->websocket_closed) {
                 return -1;
@@ -112,33 +97,11 @@ int upsgi_websocket_send(struct wsgi_request *wsgi_req, char *msg, size_t len) {
 	return ret;
 }
 
-int upsgi_websocket_send_from_sharedarea(struct wsgi_request *wsgi_req, int id, uint64_t pos, uint64_t len) {
-        if (wsgi_req->websocket_closed) {
-                return -1;
-        }
-        ssize_t ret = upsgi_websocket_send_from_sharedarea_do(wsgi_req, id, pos, len, 0x81);
-        if (ret < 0) {
-                wsgi_req->websocket_closed = 1;
-        }
-        return ret;
-}
-
 int upsgi_websocket_send_binary(struct wsgi_request *wsgi_req, char *msg, size_t len) {
         if (wsgi_req->websocket_closed) {
                 return -1;
         }
         ssize_t ret = upsgi_websocket_send_do(wsgi_req, msg, len, 0x82);
-        if (ret < 0) {
-                wsgi_req->websocket_closed = 1;
-        }
-        return ret;
-}
-
-int upsgi_websocket_send_binary_from_sharedarea(struct wsgi_request *wsgi_req, int id, uint64_t pos, uint64_t len) {
-        if (wsgi_req->websocket_closed) {
-                return -1;
-        }
-        ssize_t ret = upsgi_websocket_send_from_sharedarea_do(wsgi_req, id, pos, len, 0x82);
         if (ret < 0) {
                 wsgi_req->websocket_closed = 1;
         }
@@ -155,14 +118,13 @@ static void upsgi_websocket_parse_header(struct wsgi_request *wsgi_req) {
 }
 
 static struct upsgi_buffer *upsgi_websockets_parse(struct wsgi_request *wsgi_req) {
-	// de-mask buffer
 	uint8_t *ptr = (uint8_t *) (wsgi_req->websocket_buf->buf + (wsgi_req->websocket_pktsize - wsgi_req->websocket_size));
 	size_t i;
 
 	if (wsgi_req->websocket_has_mask) {
 		uint8_t *mask = ptr-4;
 		for(i=0;i<wsgi_req->websocket_size;i++) {
-			ptr[i] = ptr[i] ^ mask[i%4];	
+			ptr[i] = ptr[i] ^ mask[i%4];
 		}
 	}
 
@@ -177,18 +139,16 @@ static struct upsgi_buffer *upsgi_websockets_parse(struct wsgi_request *wsgi_req
 	else {
 		ub = upsgi_buffer_new(wsgi_req->websocket_size);
 	}
-	if (upsgi_buffer_append(ub, (char *) ptr, wsgi_req->websocket_size)) goto error;	
+	if (upsgi_buffer_append(ub, (char *) ptr, wsgi_req->websocket_size)) goto error;
 	if (upsgi_buffer_decapitate(wsgi_req->websocket_buf, wsgi_req->websocket_pktsize)) goto error;
 	wsgi_req->websocket_phase = 0;
 	wsgi_req->websocket_need = 2;
 
 	if (wsgi_req->websocket_is_fin) {
 		upsgi.websockets_continuation_buffer = NULL;
-		/// Freeing websockets_continuation_buffer is done by the caller
 		return ub;
 	}
 	upsgi.websockets_continuation_buffer = ub;
-	/// Message is not complete, send empty dummy buffer to signal waiting for full message
 	ub = upsgi_buffer_new(1);
 	upsgi_buffer_append(ub, "\0", 1);
 	return ub;
@@ -200,7 +160,6 @@ error:
 	upsgi.websockets_continuation_buffer = NULL;
 	return NULL;
 }
-
 
 static ssize_t upsgi_websockets_recv_pkt(struct wsgi_request *wsgi_req, int nb) {
 
@@ -235,7 +194,6 @@ wait:
                         upsgi_req_error("upsgi_websockets_recv_pkt()");
 			return -1;
                 }
-		// send unsolicited pong
 		if (upsgi_websockets_check_pingpong(wsgi_req)) {
 			return -1;
 		}
@@ -244,21 +202,16 @@ wait:
         return -1;
 }
 
-
 static struct upsgi_buffer *upsgi_websocket_recv_do(struct wsgi_request *wsgi_req, int nb) {
 	if (!wsgi_req->websocket_buf) {
-		// this buffer will be destroyed on connection close
 		wsgi_req->websocket_buf = upsgi_buffer_new(upsgi.page_size);
-		// need 2 byte header
 		wsgi_req->websocket_need = 2;
 	}
 
 	for(;;) {
 		size_t remains = wsgi_req->websocket_buf->pos;
-		// i have data;
 		if (remains >= wsgi_req->websocket_need) {
 			switch(wsgi_req->websocket_phase) {
-				// header
 				case 0:
 					upsgi_websocket_parse_header(wsgi_req);
 					wsgi_req->websocket_pktsize = 2 + (wsgi_req->websocket_has_mask*4);
@@ -276,7 +229,6 @@ static struct upsgi_buffer *upsgi_websocket_recv_do(struct wsgi_request *wsgi_re
 						wsgi_req->websocket_phase = 2;
 					}
 					break;
-				// size
 				case 1:
 					if (wsgi_req->websocket_size == 126) {
 						wsgi_req->websocket_size = upsgi_be16(wsgi_req->websocket_buf->buf+2);
@@ -294,7 +246,6 @@ static struct upsgi_buffer *upsgi_websocket_recv_do(struct wsgi_request *wsgi_re
 					}
 					wsgi_req->websocket_phase = 2;
 					break;
-				// mask check
 				case 2:
 					if (wsgi_req->websocket_has_mask) {
 						wsgi_req->websocket_need += 4;
@@ -306,61 +257,49 @@ static struct upsgi_buffer *upsgi_websocket_recv_do(struct wsgi_request *wsgi_re
 						wsgi_req->websocket_phase = 4;
 					}
 					break;
-				// mask
 				case 3:
 					wsgi_req->websocket_pktsize += wsgi_req->websocket_size;
 					wsgi_req->websocket_need += wsgi_req->websocket_size;
                                         wsgi_req->websocket_phase = 4;
 					break;
-				// message
 				case 4:
 					switch (wsgi_req->websocket_opcode) {
-						// message
 						case 0:
 						case 1:
 						case 2:
 							return upsgi_websockets_parse(wsgi_req);
-						// close
 						case 0x8:
 							upsgi_websockets_close(wsgi_req);
 							return NULL;
-						// ping
 						case 0x9:
 							if (upsgi_websockets_pong(wsgi_req)) {
 								return NULL;
 							}
 							break;
-						// pong
 						case 0xA:
 							wsgi_req->websocket_last_pong = upsgi_now();
 							break;
 						default:
-							break;	
+							break;
 					}
-					// reset the status
-					wsgi_req->websocket_phase = 0;	
-					wsgi_req->websocket_need = 2;	
-					// decapitate the buffer
+					wsgi_req->websocket_phase = 0;
+					wsgi_req->websocket_need = 2;
 					if (upsgi_buffer_decapitate(wsgi_req->websocket_buf, wsgi_req->websocket_pktsize)) return NULL;
 					break;
-				// oops
 				default:
 					upsgi_log("[upsgi-websocket] \"%.*s %.*s\" (%.*s) BUG error in websocket parser\n", REQ_DATA);
 					return NULL;
 			}
 		}
-		// need more data
 		else {
 			if (upsgi_buffer_ensure(wsgi_req->websocket_buf, upsgi.page_size)) return NULL;
 			ssize_t len = upsgi_websockets_recv_pkt(wsgi_req, nb);
 			if (len <= 0) {
 				if (nb == 1 && len == 0) {
-					// return an empty buffer to signal blocking event
 					return upsgi_buffer_new(0);
 				}
-				return NULL;	
+				return NULL;
 			}
-			// update buffer size
 			wsgi_req->websocket_buf->pos+=len;
 		}
 	}

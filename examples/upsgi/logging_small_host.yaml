@@ -1,0 +1,12 @@
+upsgi:
+  master: true
+  workers: 1
+  need-app: true
+  strict: true
+  vacuum: true
+  die-on-term: true
+  http-socket: 127.0.0.1:9093
+  psgi: examples/psgi/hello.psgi
+  logto: /tmp/upsgi-small-host.log
+  log-queue-records: 256
+  log-queue-bytes: 262144

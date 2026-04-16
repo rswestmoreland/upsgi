@@ -49,19 +49,6 @@ int upsgi_signal_handler(struct wsgi_request *wsgi_req, uint8_t sig) {
 			set_harakiri(wsgi_req, upsgi.harakiri_options.workers);
 		}
 	}
-	else if (upsgi.muleid > 0) {
-		upsgi.mules[upsgi.muleid - 1].sig = 1;
-		upsgi.mules[upsgi.muleid - 1].signum = sig;
-		upsgi.mules[upsgi.muleid - 1].signals++;
-		if (upsgi.harakiri_options.mules > 0) {
-			set_mule_harakiri(upsgi.harakiri_options.mules);
-		}
-	}
-	else if (upsgi.i_am_a_spooler && (getpid() == upsgi.i_am_a_spooler->pid)) {
-		if (upsgi.harakiri_options.spoolers > 0) {
-			set_spooler_harakiri(upsgi.harakiri_options.spoolers);
-		}
-	}
 
 	int ret = upsgi.p[use->modifier1]->signal_handler(sig, use->handler);
 
@@ -69,17 +56,6 @@ int upsgi_signal_handler(struct wsgi_request *wsgi_req, uint8_t sig) {
 		upsgi.workers[upsgi.mywid].sig = 0;
 		if (upsgi.workers[upsgi.mywid].cores[wsgi_req->async_id].harakiri > 0) {
 			set_harakiri(wsgi_req, 0);
-		}
-	}
-	else if (upsgi.muleid > 0) {
-		upsgi.mules[upsgi.muleid - 1].sig = 0;
-		if (upsgi.mules[upsgi.muleid - 1].harakiri > 0) {
-			set_mule_harakiri(0);
-		}
-	}
-	else if (upsgi.i_am_a_spooler && (getpid() == upsgi.i_am_a_spooler->pid)) {
-		if (upsgi.harakiri_options.spoolers > 0) {
-			set_spooler_harakiri(0);
 		}
 	}
 
@@ -360,59 +336,6 @@ void upsgi_route_signal(uint8_t sig) {
 	}
 	// route to subscribed
 	else if (!strcmp(use->receiver, "subscribed")) {
-	}
-	// route to spooler
-	else if (!strcmp(use->receiver, "spooler")) {
-		if (ushared->worker_signal_pipe[0] != -1) {
-			if (upsgi_signal_send(ushared->spooler_signal_pipe[0], sig)) {
-				upsgi_log("could not deliver signal %d to the spooler\n", sig);
-			}
-		}
-	}
-	else if (!strcmp(use->receiver, "mules")) {
-		for (i = 0; i < upsgi.mules_cnt; i++) {
-			if (upsgi_signal_send(upsgi.mules[i].signal_pipe[0], sig)) {
-				upsgi_log("could not deliver signal %d to mule %d\n", sig, i + 1);
-			}
-		}
-	}
-	else if (!strncmp(use->receiver, "mule", 4)) {
-		i = atoi(use->receiver + 4);
-		if (i > upsgi.mules_cnt) {
-			upsgi_log("invalid signal target: %s\n", use->receiver);
-		}
-		else if (i == 0) {
-			if (upsgi_signal_send(ushared->mule_signal_pipe[0], sig)) {
-				upsgi_log("could not deliver signal %d to a mule\n", sig);
-			}
-		}
-		else {
-			if (upsgi_signal_send(upsgi.mules[i - 1].signal_pipe[0], sig)) {
-				upsgi_log("could not deliver signal %d to mule %d\n", sig, i);
-			}
-		}
-	}
-	else if (!strncmp(use->receiver, "farm_", 5)) {
-		char *name = use->receiver + 5;
-		struct upsgi_farm *uf = get_farm_by_name(name);
-		if (!uf) {
-			upsgi_log("unknown farm: %s\n", name);
-			return;
-		}
-		if (upsgi_signal_send(uf->signal_pipe[0], sig)) {
-			upsgi_log("could not deliver signal %d to farm %d (%s)\n", sig, uf->id, uf->name);
-		}
-	}
-	else if (!strncmp(use->receiver, "farm", 4)) {
-		i = atoi(use->receiver + 4);
-		if (i > upsgi.farms_cnt || i <= 0) {
-			upsgi_log("invalid signal target: %s\n", use->receiver);
-		}
-		else {
-			if (upsgi_signal_send(upsgi.farms[i - 1].signal_pipe[0], sig)) {
-				upsgi_log("could not deliver signal %d to farm %d (%s)\n", sig, i, upsgi.farms[i - 1].name);
-			}
-		}
 	}
 
 	else {

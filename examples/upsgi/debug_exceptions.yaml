@@ -5,7 +5,7 @@ upsgi:
   strict: true
   vacuum: true
   die-on-term: true
-  http-socket: :9090
-  psgi: examples/upsgi/app.psgi
-  logto: ./upsgi.log
+  http-socket: 127.0.0.1:9091
+  psgi: examples/psgi/hello.psgi
+  logto: /tmp/upsgi-debug.log
   log-exceptions: true

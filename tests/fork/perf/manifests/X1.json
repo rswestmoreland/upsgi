@@ -1,0 +1,133 @@
+{
+  "artifacts": [
+    "manifest.lock.json",
+    "run_plan.md",
+    "collector_contract.json",
+    "commands.todo.txt",
+    "x1_measured.json",
+    "control_instance/stats_before.json",
+    "control_instance/stats_after.json",
+    "upload_instance/stats_before.json",
+    "upload_instance/stats_after.json",
+    "receiver_instance/stats_before.json",
+    "receiver_instance/stats_after.json",
+    "control_instance/p1_stats/",
+    "upload_instance/p1_stats/",
+    "receiver_instance/p1_stats/",
+    "p5_disk_profile.log"
+  ],
+  "assets": {
+    "external": [
+      "A1 control-lane assets",
+      "A5 upload-lane assets",
+      "R2/R5 receiver-lane assets"
+    ],
+    "repo_fixtures": [
+      "tests/fork/perf/assets/X1/run_x1_measured.sh",
+      "tests/fork/perf/assets/X1/mixed_qos_bench.py"
+    ]
+  },
+  "borrowed_ideas": [
+    {
+      "ideas": [
+        "fairness"
+      ],
+      "source": "HAProxy"
+    },
+    {
+      "ideas": [
+        "keepalive discipline"
+      ],
+      "source": "Mojolicious"
+    },
+    {
+      "ideas": [
+        "overload-state thinking"
+      ],
+      "source": "Wazuh"
+    }
+  ],
+  "collectors": [
+    "P1_upsgi_stats_sampler",
+    "P2_strace_fc",
+    "P3_perf_record",
+    "P4_smaps_rollup_sampler",
+    "P5_disk_profile"
+  ],
+  "id": "X1",
+  "lane": "X",
+  "parameters": {
+    "append_delay_control": "PERF_R_APPEND_DELAY_MS",
+    "measurement_focus": [
+      "control-lane p50/p95/p99/max",
+      "control success rate",
+      "queue growth",
+      "worker RSS drift",
+      "body-read versus sink-pressure discrimination"
+    ],
+    "modes": [
+      "s1",
+      "s2",
+      "s3"
+    ],
+    "receiver_profiles": [
+      "r2_4x_32768",
+      "r2_10x_32768",
+      "r2_10x_131072"
+    ],
+    "upload_profiles": [
+      "medium",
+      "large4m",
+      "large16m",
+      "manymedium"
+    ]
+  },
+  "phase": "P6",
+  "purpose": "Determine whether mixed app and receiver workloads can coexist on the same small host, and whether control-lane harm is body-read-driven, sink-driven, or mixed.",
+  "questions": [
+    "Can the control lane remain stable while upload and ingest workloads run together on the same host?",
+    "Does mixed-host pain track body/read pressure, sink/append pressure, or both?",
+    "Are a few very large bodies worse than many medium bodies with similar aggregate bytes in flight?"
+  ],
+  "schema_version": "1",
+  "status": "read-vs-sink-complete",
+  "title": "Mixed host, two workloads at once",
+  "traffic_shape": {
+    "mixes": [
+      "s1: A1 control lane + A5 upload lane",
+      "s2: A1 control lane + R2 receiver lane",
+      "s3: A1 control lane + A5 upload lane + R2 receiver lane",
+      "repeat s3 at append delays 0/5/20 ms for sink-pressure discrimination"
+    ]
+  },
+  "completed_runs": [
+    {
+      "mode": "s1",
+      "upload_profile": "medium",
+      "append_delay_ms": 0
+    },
+    {
+      "mode": "s2",
+      "receiver_profile": "r2_10x_32768",
+      "append_delay_ms": 0
+    },
+    {
+      "mode": "s3",
+      "upload_profile": "medium",
+      "receiver_profile": "r2_10x_32768",
+      "append_delay_ms": 0
+    },
+    {
+      "mode": "s3",
+      "upload_profile": "medium",
+      "receiver_profile": "r2_10x_32768",
+      "append_delay_ms": 5
+    },
+    {
+      "mode": "s3",
+      "upload_profile": "medium",
+      "receiver_profile": "r2_10x_32768",
+      "append_delay_ms": 20
+    }
+  ]
+}

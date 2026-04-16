@@ -8,6 +8,54 @@
 #include <perl.h>
 #include "XSUB.h"
 
+enum upsgi_psgi_output_mode {
+	UPSGI_PSGI_OUTPUT_NONE = 0,
+	UPSGI_PSGI_OUTPUT_ASYNC_GETLINE = 1,
+	UPSGI_PSGI_OUTPUT_XS_STREAMING = 2,
+	UPSGI_PSGI_OUTPUT_LEGACY_OTHER = 3,
+};
+
+enum upsgi_psgi_output_owner_kind {
+	UPSGI_PSGI_OWNER_NONE = 0,
+	UPSGI_PSGI_OWNER_PERL_SV = 1,
+	UPSGI_PSGI_OWNER_REQUEST_BUFFER = 2,
+};
+
+enum upsgi_psgi_output_resume_kind {
+	UPSGI_PSGI_RESUME_NONE = 0,
+	UPSGI_PSGI_RESUME_CHUNK_BOUNDARY = 1,
+	UPSGI_PSGI_RESUME_OWNED_BUFFER = 2,
+};
+
+enum upsgi_psgi_step_result {
+	UPSGI_PSGI_STEP_HARD_FAIL = -1,
+	UPSGI_PSGI_STEP_CHUNK_DONE = 0,
+	UPSGI_PSGI_STEP_CHUNK_PARTIAL = 1,
+};
+
+#define upsgi_psgi_output_active(wsgi_req) ((wsgi_req)->psgi_output_len > 0)
+
+static inline void upsgi_psgi_output_state_reset(struct wsgi_request *wsgi_req) {
+	wsgi_req->psgi_output_mode = UPSGI_PSGI_OUTPUT_NONE;
+	wsgi_req->psgi_output_flags = 0;
+	wsgi_req->psgi_chunk_owner_kind = UPSGI_PSGI_OWNER_NONE;
+	wsgi_req->psgi_output_resume_kind = UPSGI_PSGI_RESUME_NONE;
+	wsgi_req->psgi_output_owner_ref = NULL;
+	wsgi_req->psgi_output_pos = 0;
+	wsgi_req->psgi_output_len = 0;
+	if (wsgi_req->psgi_output_buf) {
+		wsgi_req->psgi_output_buf->pos = 0;
+	}
+}
+
+static inline void upsgi_psgi_output_state_release(struct wsgi_request *wsgi_req) {
+	if (wsgi_req->psgi_output_buf) {
+		upsgi_buffer_destroy(wsgi_req->psgi_output_buf);
+		wsgi_req->psgi_output_buf = NULL;
+	}
+	upsgi_psgi_output_state_reset(wsgi_req);
+}
+
 #define upsgi_pl_check_write_errors if (wsgi_req->write_errors > 0 && upsgi.write_errors_exception_only) {\
                         croak("error writing to client");\
                 }\
@@ -57,6 +105,10 @@ struct upsgi_perl {
 	SV *postfork;
 	SV *atexit;
 
+	/* Cached immutable PSGI scalar values reused across request env builds. */
+	SV *psgi_scheme_http;
+	SV *psgi_scheme_https;
+
 	int loaded;
 
 	struct upsgi_string_list *exec;
@@ -72,7 +124,6 @@ struct upsgi_perl {
 	char *shell;
 	int shell_oneshot;
 
-	CV *spooler;
 
 	int no_plack;
 
@@ -91,11 +142,12 @@ int psgi_informational_response(struct wsgi_request *, int, AV *);
 
 /* Perl bridge and app loading layer */
 void upsgi_psgi_app(void);
+HV *upsgi_psgi_build_base_env(void);
+HV **upsgi_psgi_build_slot_env_bases(SV **logger_refs, SV **informational_refs, int include_informational);
 SV *upsgi_perl_obj_call(SV *, char *);
 int upsgi_perl_obj_can(SV *, char *, size_t);
 int init_psgi_app(struct wsgi_request *, char *, uint16_t, PerlInterpreter **);
 PerlInterpreter *upsgi_perl_new_interpreter(void);
-int upsgi_perl_mule(char *);
 void upsgi_perl_run_hook(SV *);
 void upsgi_perl_exec(char *);
 void upsgi_perl_check_auto_reload(void);

@@ -13,6 +13,7 @@ sub {
     my $path = shift->{PATH_INFO};
 
     my $body = $path eq '/Array'      ? [ split //, $code ]
+             : $path eq '/EmptyArray' ? [ '' ]
              : $path eq '/Code'       ? sub {}
              : $path eq '/DATA'       ? \*DATA
              : $path eq '/DIRHANDLE'  ? do { opendir my $fh, '.'; $fh }

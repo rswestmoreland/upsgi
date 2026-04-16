@@ -1,0 +1,18 @@
+{
+  "document": "/page",
+  "api_probe": "/api/ping",
+  "assets": [
+    "/assets/css/reset.css",
+    "/assets/css/layout.css",
+    "/assets/css/theme.css",
+    "/assets/js/runtime.js",
+    "/assets/js/vendor.js",
+    "/assets/js/app.js",
+    "/assets/img/logo.svg",
+    "/assets/img/hero.txt",
+    "/assets/img/icon-16.txt",
+    "/assets/img/icon-32.txt",
+    "/assets/img/icon-64.txt",
+    "/assets/img/bg-pattern.txt"
+  ]
+}

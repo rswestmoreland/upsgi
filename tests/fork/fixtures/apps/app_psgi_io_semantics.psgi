@@ -6,7 +6,11 @@ return sub {
         my $body = join '',
             'input_buffered=', ($env->{'psgix.input.buffered'} ? '1' : '0'), "\n",
             'has_logger=', (defined $env->{'psgix.logger'} ? '1' : '0'), "\n",
-            'has_errors=', (defined $env->{'psgi.errors'} ? '1' : '0'), "\n";
+            'has_errors=', (defined $env->{'psgi.errors'} ? '1' : '0'), "\n",
+            'has_io=', (defined $env->{'psgix.io'} ? '1' : '0'), "\n",
+            'io_class=', (defined $env->{'psgix.io'} ? ref($env->{'psgix.io'}) : 'NA'), "\n",
+            'io_fileno=', (defined $env->{'psgix.io'} ? $env->{'psgix.io'}->fileno : 'NA'), "\n",
+            'io_autoflush=', (defined $env->{'psgix.io'} ? $env->{'psgix.io'}->autoflush : 'NA'), "\n";
         return [
             200,
             [ 'Content-Type' => 'text/plain', 'X-UpSGI-App' => 'psgi-io-semantics' ],
@@ -44,6 +48,30 @@ return sub {
             200,
             [ 'Content-Type' => 'text/plain' ],
             [ "unexpected logger success\n" ],
+        ];
+    }
+
+
+    if ($path eq '/io-methods') {
+        my $io = $env->{'psgix.io'};
+        my $connected = defined $io ? scalar($io->connected) : undef;
+        my $peername = defined $io ? scalar($io->peername) : undef;
+        my $sockname = defined $io ? scalar($io->sockname) : undef;
+        my $sockdomain = defined $io ? $io->sockdomain : undef;
+        my $socktype = defined $io ? $io->socktype : undef;
+        my $protocol = defined $io ? $io->protocol : undef;
+        my $body = join '',
+            'has_io=', (defined $io ? '1' : '0'), "\n",
+            'connected_len=', (defined $connected ? length($connected) : 'NA'), "\n",
+            'peername_len=', (defined $peername ? length($peername) : 'NA'), "\n",
+            'sockname_len=', (defined $sockname ? length($sockname) : 'NA'), "\n",
+            'sockdomain=', (defined $sockdomain ? $sockdomain : 'NA'), "\n",
+            'socktype=', (defined $socktype ? $socktype : 'NA'), "\n",
+            'protocol=', (defined $protocol ? $protocol : 'NA'), "\n";
+        return [
+            200,
+            [ 'Content-Type' => 'text/plain' ],
+            [ $body ],
         ];
     }
 

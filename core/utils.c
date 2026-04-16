@@ -75,44 +75,10 @@ void set_user_harakiri(struct wsgi_request *wsgi_req, int sec) {
 	// a 0 seconds value, reset the timer
 	time_t timeout = sec == 0 ? 0 : upsgi_now() + sec;
 
-	if (upsgi.muleid > 0) {
-		upsgi.mules[upsgi.muleid - 1].user_harakiri = timeout;
-	}
-	else if (upsgi.i_am_a_spooler) {
-		struct upsgi_spooler *uspool = upsgi.i_am_a_spooler;
-		uspool->user_harakiri = timeout;
-	}
-	else if (wsgi_req) {
+	if (wsgi_req) {
 		upsgi.workers[upsgi.mywid].cores[wsgi_req->async_id].user_harakiri = timeout;
 	}
 }
-
-// set mule harakiri
-void set_mule_harakiri(int sec) {
-	if (sec == 0) {
-		upsgi.mules[upsgi.muleid - 1].harakiri = 0;
-	}
-	else {
-		upsgi.mules[upsgi.muleid - 1].harakiri = upsgi_now() + sec;
-	}
-	if (!upsgi.master_process) {
-		alarm(sec);
-	}
-}
-
-// set spooler harakiri
-void set_spooler_harakiri(int sec) {
-	if (sec == 0) {
-		upsgi.i_am_a_spooler->harakiri = 0;
-	}
-	else {
-		upsgi.i_am_a_spooler->harakiri = upsgi_now() + sec;
-	}
-	if (!upsgi.master_process) {
-		alarm(sec);
-	}
-}
-
 
 // daemonize to the specified logfile
 void daemonize(char *logfile) {
@@ -1005,6 +971,8 @@ nonroot:
 
 static void close_and_free_request(struct wsgi_request *wsgi_req) {
 
+	upsgi_body_sched_finish(wsgi_req);
+
 	// close the connection with the client
         if (!wsgi_req->fd_closed) {
                 // NOTE, if we close the socket before receiving eventually sent data, socket layer will send a RST
@@ -1515,6 +1483,86 @@ void upsgi_heartbeat() {
 
 }
 
+enum upsgi_accept_lock_mode {
+	UPSGI_ACCEPT_LOCK_NONE = 0,
+	UPSGI_ACCEPT_LOCK_THUNDER = 1,
+	UPSGI_ACCEPT_LOCK_THREAD = 2,
+};
+
+static struct upsgi_socket *upsgi_accept_socket_for_fd(struct wsgi_request *wsgi_req, int interesting_fd) {
+	struct upsgi_socket *upsgi_sock = upsgi.sockets;
+
+	while (upsgi_sock) {
+		if (interesting_fd == upsgi_sock->fd || (upsgi_sock->retry && upsgi_sock->retry[wsgi_req->async_id]) || (upsgi_sock->fd_threads && interesting_fd == upsgi_sock->fd_threads[wsgi_req->async_id])) {
+			return upsgi_sock;
+		}
+		upsgi_sock = upsgi_sock->next;
+	}
+
+	return NULL;
+}
+
+static int upsgi_accept_lock_record_acquire(struct upsgi_lock_item *lock, uint64_t *hold_start_us) {
+	uint64_t wait_start_us;
+	uint64_t wait_elapsed_us;
+	struct upsgi_worker *uw = &upsgi.workers[upsgi.mywid];
+
+	wait_start_us = upsgi_micros();
+	upsgi_lock(lock);
+	wait_elapsed_us = upsgi_micros() - wait_start_us;
+	uw->thunder_lock_acquires++;
+	uw->thunder_lock_wait_us += wait_elapsed_us;
+	if (wait_elapsed_us > 0) {
+		uw->thunder_lock_contention_events++;
+	}
+	*hold_start_us = upsgi_micros();
+	return 0;
+}
+
+static int upsgi_accept_wait_lock_acquire(uint64_t *hold_start_us) {
+	struct upsgi_worker *uw = &upsgi.workers[upsgi.mywid];
+
+	*hold_start_us = 0;
+
+	if (upsgi.is_et) {
+		return UPSGI_ACCEPT_LOCK_NONE;
+	}
+
+	if (upsgi.use_thunder_lock && upsgi.skip_thunder_lock) {
+		uw->thunder_lock_bypass_count++;
+	}
+
+	if (upsgi.use_thunder_lock && !upsgi.skip_thunder_lock) {
+		upsgi_accept_lock_record_acquire(upsgi.the_thunder_lock, hold_start_us);
+		return UPSGI_ACCEPT_LOCK_THUNDER;
+	}
+
+	if (upsgi.threads > 1) {
+		pthread_mutex_lock(&upsgi.thunder_mutex);
+		return UPSGI_ACCEPT_LOCK_THREAD;
+	}
+
+	return UPSGI_ACCEPT_LOCK_NONE;
+}
+
+
+static void upsgi_accept_lock_release(int lock_mode, uint64_t hold_start_us) {
+	struct upsgi_worker *uw = &upsgi.workers[upsgi.mywid];
+
+	if (lock_mode == UPSGI_ACCEPT_LOCK_THUNDER) {
+		if (hold_start_us > 0) {
+			uw->thunder_lock_hold_us += (upsgi_micros() - hold_start_us);
+		}
+		upsgi_unlock(upsgi.the_thunder_lock);
+		return;
+	}
+
+
+	if (lock_mode == UPSGI_ACCEPT_LOCK_THREAD) {
+		pthread_mutex_unlock(&upsgi.thunder_mutex);
+	}
+}
+
 // accept a request
 int wsgi_req_accept(int queue, struct wsgi_request *wsgi_req) {
 
@@ -1522,17 +1570,15 @@ int wsgi_req_accept(int queue, struct wsgi_request *wsgi_req) {
 	int interesting_fd = -1;
 	struct upsgi_socket *upsgi_sock = upsgi.sockets;
 	int timeout = -1;
+	int wait_lock_mode;
+	uint64_t wait_lock_hold_start_us = 0;
 
+	wait_lock_mode = upsgi_accept_wait_lock_acquire(&wait_lock_hold_start_us);
 
-	thunder_lock;
-
-	// Recheck the manage_next_request before going forward.
-	// This is because the worker might get cheaped while it's
-	// blocking on the thunder_lock, because thunder_lock is
-	// not interruptable, it'll slow down the cheaping process
-	// (the worker will handle the next request before shuts down).
+	// Recheck manage_next_request before waiting so shutdown does not block behind
+	// a shared accept lock.
 	if (!upsgi.workers[upsgi.mywid].manage_next_request) {
-		thunder_unlock;
+		upsgi_accept_lock_release(wait_lock_mode, wait_lock_hold_start_us);
 		return -1;
 	}
 
@@ -1565,7 +1611,7 @@ int wsgi_req_accept(int queue, struct wsgi_request *wsgi_req) {
 
 	ret = event_queue_wait(queue, timeout, &interesting_fd);
 	if (ret < 0) {
-		thunder_unlock;
+		upsgi_accept_lock_release(wait_lock_mode, wait_lock_hold_start_us);
 		return -1;
 	}
 
@@ -1574,42 +1620,35 @@ int wsgi_req_accept(int queue, struct wsgi_request *wsgi_req) {
 		upsgi_heartbeat();
 		// no need to continue if timed-out
 		if (ret == 0) {
-			thunder_unlock;
+			upsgi_accept_lock_release(wait_lock_mode, wait_lock_hold_start_us);
 			return -1;
 		}
 	}
 
 	if (upsgi.signal_socket > -1 && (interesting_fd == upsgi.signal_socket || interesting_fd == upsgi.my_signal_socket)) {
-
-		thunder_unlock;
-
+		upsgi_accept_lock_release(wait_lock_mode, wait_lock_hold_start_us);
 		upsgi_receive_signal(wsgi_req, interesting_fd, "worker", upsgi.mywid);
-
 		return -1;
 	}
 
-
-	while (upsgi_sock) {
-		if (interesting_fd == upsgi_sock->fd || (upsgi_sock->retry && upsgi_sock->retry[wsgi_req->async_id]) || (upsgi_sock->fd_threads && interesting_fd == upsgi_sock->fd_threads[wsgi_req->async_id])) {
-			wsgi_req->socket = upsgi_sock;
-			wsgi_req->fd = wsgi_req->socket->proto_accept(wsgi_req, interesting_fd);
-			thunder_unlock;
-			if (wsgi_req->fd < 0) {
-				return -1;
-			}
-
-			if (!upsgi_sock->edge_trigger) {
-				upsgi_post_accept(wsgi_req);
-			}
-
-			return 0;
-		}
-
-		upsgi_sock = upsgi_sock->next;
+	upsgi_sock = upsgi_accept_socket_for_fd(wsgi_req, interesting_fd);
+	if (!upsgi_sock) {
+		upsgi_accept_lock_release(wait_lock_mode, wait_lock_hold_start_us);
+		return -1;
 	}
 
-	thunder_unlock;
-	return -1;
+	wsgi_req->socket = upsgi_sock;
+	wsgi_req->fd = wsgi_req->socket->proto_accept(wsgi_req, interesting_fd);
+	upsgi_accept_lock_release(wait_lock_mode, wait_lock_hold_start_us);
+	if (wsgi_req->fd < 0) {
+		return -1;
+	}
+
+	if (!upsgi_sock->edge_trigger) {
+		upsgi_post_accept(wsgi_req);
+	}
+
+	return 0;
 }
 
 // translate a OS env to a upsgi option
@@ -3644,6 +3683,29 @@ void upsgi_validate_runtime_tunables() {
 		upsgi_log("excessive log-drain-burst %d, clamping to 1024\n", upsgi.log_drain_burst);
 		upsgi.log_drain_burst = 1024;
 	}
+
+	if (upsgi.log_queue_records < 1) {
+		upsgi_log("invalid log-queue-records %llu, clamping to 1\n", (unsigned long long) upsgi.log_queue_records);
+		upsgi.log_queue_records = 1;
+	}
+	else if (upsgi.log_queue_records > 1048576ULL) {
+		upsgi_log("excessive log-queue-records %llu, clamping to 1048576\n", (unsigned long long) upsgi.log_queue_records);
+		upsgi.log_queue_records = 1048576ULL;
+	}
+
+	if (upsgi.log_queue_bytes < 4096ULL) {
+		upsgi_log("invalid log-queue-bytes %llu, clamping to 4096\n", (unsigned long long) upsgi.log_queue_bytes);
+		upsgi.log_queue_bytes = 4096ULL;
+	}
+	else if (upsgi.log_queue_bytes > (1024ULL * 1024ULL * 1024ULL)) {
+		upsgi_log("excessive log-queue-bytes %llu, clamping to 1073741824\n", (unsigned long long) upsgi.log_queue_bytes);
+		upsgi.log_queue_bytes = 1024ULL * 1024ULL * 1024ULL;
+	}
+
+	upsgi.logger_queue.records_cap = upsgi.log_queue_records;
+	upsgi.logger_queue.bytes_cap = upsgi.log_queue_bytes;
+	upsgi.req_logger_queue.records_cap = upsgi.log_queue_records;
+	upsgi.req_logger_queue.bytes_cap = upsgi.log_queue_bytes;
 }
 
 void upsgi_setup_post_buffering() {
@@ -3695,23 +3757,26 @@ void upsgi_write_pidfile_explicit(char *pidfile_name, pid_t pid) {
 }
 
 char *upsgi_expand_path(char *dir, int dir_len, char *ptr) {
+	char src[PATH_MAX + 1];
+	char *dst = ptr;
+
 	if (dir_len > PATH_MAX)
 	{
 		upsgi_log("invalid path size: %d (max %d)\n", dir_len, PATH_MAX);
 		return NULL;
 	}
-	char *src = upsgi_concat2n(dir, dir_len, "", 0);
-	char *dst = ptr;
+
+	memcpy(src, dir, dir_len);
+	src[dir_len] = 0;
+
 	if (!dst)
 		dst = upsgi_malloc(PATH_MAX + 1);
 	if (!realpath(src, dst)) {
 		upsgi_error_realpath(src);
 		if (!ptr)
 			free(dst);
-		free(src);
 		return NULL;
 	}
-	free(src);
 	return dst;
 }
 
@@ -4362,15 +4427,7 @@ void http_url_encode(char *buf, uint16_t * len, char *dst) {
 }
 
 void upsgi_takeover() {
-	if (upsgi.i_am_a_spooler) {
-		upsgi_spooler_run();
-	}
-	else if (upsgi.muleid) {
-		upsgi_mule_run();
-	}
-	else {
-		upsgi_worker_run();
-	}
+	upsgi_worker_run();
 }
 
 // create a message pipe

@@ -237,113 +237,6 @@ static void cache_sync_hook(char *k, uint16_t kl, char *v, uint16_t vl, void *da
 	}
 }
 
-static void upsgi_cache_add_items(struct upsgi_cache *uc) {
-	struct upsgi_string_list *usl = upsgi.add_cache_item;
-	while(usl) {
-		char *space = strchr(usl->value, ' ');
-		char *key = usl->value;
-		uint16_t key_len;
-		if (space) {
-			// need to skip ?
-			if (upsgi_strncmp(uc->name, uc->name_len, usl->value, space-usl->value)) {
-				goto next;
-			}
-			key = space+1;
-		}
-		char *value = strchr(key, '=');
-		if (!value) {
-			upsgi_log("[cache] unable to store item %s\n", usl->value);
-			goto next;
-		}
-		key_len = value - key;
-		value++;
-		uint64_t len = (usl->value + usl->len) - value;
-		upsgi_wlock(uc->lock);
-		if (!upsgi_cache_set2(uc, key, key_len, value, len, 0, 0)) {
-			upsgi_log("[cache] stored \"%.*s\" in \"%s\"\n", key_len, key, uc->name);
-		}
-		else {
-			upsgi_log("[cache-error] unable to store \"%.*s\" in \"%s\"\n", key_len, key, uc->name);
-		}
-		upsgi_rwunlock(uc->lock);
-next:
-		usl = usl->next;
-	}
-}
-
-static void upsgi_cache_load_files(struct upsgi_cache *uc) {
-
-	struct upsgi_string_list *usl = upsgi.load_file_in_cache;
-	while(usl) {
-		size_t len = 0;
-		char *value = NULL;
-		char *key = usl->value;
-		uint16_t key_len = usl->len;
-		char *space = strchr(usl->value, ' ');
-		if (space) {
-			// need to skip ?
-			if (upsgi_strncmp(uc->name, uc->name_len, usl->value, space-usl->value)) {
-				goto next;
-			}
-			key = space+1;
-			key_len = usl->len - ((space-usl->value)+1);
-		}
-		value = upsgi_open_and_read(key, &len, 0, NULL);
-		if (value) {
-			upsgi_wlock(uc->lock);
-			if (!upsgi_cache_set2(uc, key, key_len, value, len, 0, 0)) {
-				upsgi_log("[cache] stored \"%.*s\" in \"%s\"\n", key_len, key, uc->name);
-			}		
-			else {
-				upsgi_log("[cache-error] unable to store \"%.*s\" in \"%s\"\n", key_len, key, uc->name);
-			}
-			upsgi_rwunlock(uc->lock);
-			free(value);
-		}
-		else {
-			upsgi_log("[cache-error] unable to read file \"%.*s\"\n", key_len, key);
-		}
-next:
-		usl = usl->next;
-	}
-
-#ifdef UPSGI_ZLIB
-	usl = upsgi.load_file_in_cache_gzip;
-        while(usl) {
-                size_t len = 0;
-                char *value = NULL;
-                char *key = usl->value;
-                uint16_t key_len = usl->len;
-                char *space = strchr(usl->value, ' ');
-                if (space) {
-                        // need to skip ?
-                        if (upsgi_strncmp(uc->name, uc->name_len, usl->value, space-usl->value)) {
-                                goto next2;
-                        }
-                        key = space+1;
-                        key_len = usl->len - ((space-usl->value)+1);
-                }
-                value = upsgi_open_and_read(key, &len, 0, NULL);
-                if (value) {
-			struct upsgi_buffer *gzipped = upsgi_gzip(value, len);
-			if (gzipped) {
-                        	upsgi_wlock(uc->lock);
-                        	if (!upsgi_cache_set2(uc, key, key_len, gzipped->buf, gzipped->len, 0, 0)) {
-                                	upsgi_log("[cache-gzip] stored \"%.*s\" in \"%s\"\n", key_len, key, uc->name);
-                        	}
-                        	upsgi_rwunlock(uc->lock);
-				upsgi_buffer_destroy(gzipped);
-			}
-                        free(value);
-                }
-next2:
-                usl = usl->next;
-        }
-#endif
-}
-
-
-
 void upsgi_cache_init(struct upsgi_cache *uc) {
 
 	uc->hashtable = upsgi_calloc_shared(sizeof(uint64_t) * uc->hashsize);
@@ -454,10 +347,6 @@ void upsgi_cache_init(struct upsgi_cache *uc) {
 	upsgi_socket_nb(uc->udp_node_socket);
 
 	upsgi_cache_sync_from_nodes(uc);
-
-	upsgi_cache_load_files(uc);
-
-	upsgi_cache_add_items(uc);
 
 }
 
@@ -1161,9 +1050,7 @@ static void *cache_sweeper_loop(void *ucache) {
 		struct upsgi_cache *uc;
 
 		for (uc = (struct upsgi_cache *)ucache; uc; uc = uc->next) {
-			uint64_t freed_items = cache_sweeper_free_items(uc);
-			if (upsgi.cache_report_freed_items && freed_items)
-				upsgi_log("freed %llu items for cache \"%s\"\n", (unsigned long long)freed_items, uc->name);
+			cache_sweeper_free_items(uc);
 		}
 
 		sleep(upsgi.cache_expire_freq);
@@ -1244,27 +1131,17 @@ struct upsgi_cache *upsgi_cache_create(char *arg) {
 		upsgi.caches = uc;
 	}
 
-	// default (old-style) cache ?
+	// retained local cache definition
 	if (!arg) {
 		uc->name = "default";
 		uc->name_len = strlen(uc->name);
-		uc->blocksize = upsgi.cache_blocksize;
-		if (!uc->blocksize) uc->blocksize = UMAX16;
+		uc->blocksize = UMAX16;
 		uc->max_item_size = uc->blocksize;
-		uc->max_items = upsgi.cache_max_items;
-		uc->blocks = upsgi.cache_max_items;
+		uc->max_items = 64;
+		uc->blocks = uc->max_items;
 		uc->keysize = 2048;
 		uc->hashsize = UMAX16;
 		uc->hash = upsgi_hash_algo_get("djb33x");
-		uc->store = upsgi.cache_store;
-		uc->nodes = upsgi.cache_udp_node;
-		uc->udp_servers = upsgi.cache_udp_server;
-		uc->store_sync = upsgi.cache_store_sync;
-		uc->use_last_modified = (uint8_t) upsgi.cache_use_last_modified;
-
-		if (upsgi.cache_sync) {
-			upsgi_string_new_list(&uc->sync_nodes, upsgi.cache_sync);
-		}
 	}
 	else {
 		char *c_name = NULL;
@@ -1274,14 +1151,7 @@ struct upsgi_cache *upsgi_cache_create(char *arg) {
 		char *c_hash = NULL;
 		char *c_hashsize = NULL;
 		char *c_keysize = NULL;
-		char *c_store = NULL;
-		char *c_store_sync = NULL;
-		char *c_store_delete = NULL;
-		char *c_nodes = NULL;
-		char *c_sync = NULL;
-		char *c_udp_servers = NULL;
 		char *c_bitmap = NULL;
-		char *c_use_last_modified = NULL;
 		char *c_math_initial = NULL;
 		char *c_ignore_full = NULL;
 		char *c_purge_lru = NULL;
@@ -1302,21 +1172,7 @@ struct upsgi_cache *upsgi_cache_create(char *arg) {
                         "hash_size", &c_hashsize,
                         "keysize", &c_keysize,
                         "key_size", &c_keysize,
-                        "store", &c_store,
-                        "store_sync", &c_store_sync,
-                        "storesync", &c_store_sync,
-                        "store_delete", &c_store_delete,
-                        "storedelete", &c_store_delete,
-                        "node", &c_nodes,
-                        "nodes", &c_nodes,
-                        "sync", &c_sync,
-                        "udp", &c_udp_servers,
-                        "udp_servers", &c_udp_servers,
-                        "udp_server", &c_udp_servers,
-                        "udpservers", &c_udp_servers,
-                        "udpserver", &c_udp_servers,
                         "bitmap", &c_bitmap,
-                        "lastmod", &c_use_last_modified,
                         "math_initial", &c_math_initial,
                         "ignore_full", &c_ignore_full,
 			"purge_lru", &c_purge_lru,
@@ -1372,10 +1228,8 @@ struct upsgi_cache *upsgi_cache_create(char *arg) {
 			uc->use_blocks_bitmap = 1; 
 			uc->max_item_size = uc->blocksize * uc->blocks;
 		}
-		if (c_use_last_modified) uc->use_last_modified = 1;
 		if (c_ignore_full) uc->ignore_full = 1;
 
-		if (c_store_delete) uc->store_delete = 1;
 
 		if (c_math_initial) uc->math_initial = strtol(c_math_initial, NULL, 10);
 
@@ -1386,37 +1240,13 @@ struct upsgi_cache *upsgi_cache_create(char *arg) {
 		if (c_clear_on_full) uc->clear_on_full = 1;
 		if (c_no_expire) uc->no_expire = 1;
 
-		uc->store_sync = upsgi.cache_store_sync;
-		if (c_store_sync) { uc->store_sync = upsgi_n64(c_store_sync); }
 
 		if (uc->blocks < uc->max_items) {
 			upsgi_log("invalid number of cache blocks for \"%s\", must be higher than max_items (%llu)\n", uc->name, uc->max_items);
 			exit(1);
 		}
 
-		uc->store = c_store;
 
-		if (c_nodes) {
-			char *p, *ctx = NULL;
-			upsgi_foreach_token(c_nodes, ";", p, ctx) {
-				upsgi_string_new_list(&uc->nodes, p);
-			}
-		}
-
-		if (c_sync) {
-			char *p, *ctx = NULL;
-			upsgi_foreach_token(c_sync, ";", p, ctx) {
-                                upsgi_string_new_list(&uc->sync_nodes, p);
-                        }
-		}
-
-		if (c_udp_servers) {
-			char *p, *ctx = NULL;
-                        upsgi_foreach_token(c_udp_servers, ";", p, ctx) {
-                                upsgi_string_new_list(&uc->udp_servers, p);
-                        }
-                }
-		
 		if (c_purge_lru)
 			uc->purge_lru = 1;
 	}
@@ -1437,6 +1267,40 @@ struct upsgi_cache *upsgi_cache_by_name(char *name) {
 		uc = uc->next;
 	}
 	return NULL;
+}
+
+struct upsgi_cache *upsgi_cache_ensure_named_local(char *name, uint64_t max_items, uint64_t blocksize) {
+	struct upsgi_cache *uc = upsgi_cache_by_name(name);
+	if (uc) {
+		return uc;
+	}
+	if (!upsgi.cache_setup) {
+		upsgi_hash_algo_register_all();
+		upsgi.cache_setup = 1;
+	}
+	uc = upsgi_calloc_shared(sizeof(struct upsgi_cache));
+	uc->name = upsgi_malloc_shared(strlen(name) + 1);
+	strcpy(uc->name, name);
+	uc->name_len = strlen(name);
+	uc->max_items = max_items;
+	uc->blocks = max_items;
+	uc->blocksize = blocksize;
+	uc->max_item_size = blocksize;
+	uc->keysize = 2048;
+	uc->hashsize = UMAX16;
+	uc->hash = upsgi_hash_algo_get("djb33x");
+	if (!upsgi.caches) {
+		upsgi.caches = uc;
+	}
+	else {
+		struct upsgi_cache *tail = upsgi.caches;
+		while (tail->next) {
+			tail = tail->next;
+		}
+		tail->next = uc;
+	}
+	upsgi_cache_init(uc);
+	return uc;
 }
 
 struct upsgi_cache *upsgi_cache_by_namelen(char *name, uint16_t len) {
@@ -1460,10 +1324,6 @@ void upsgi_cache_create_all() {
 	// register embedded hash algorithms
         upsgi_hash_algo_register_all();
 
-        // setup default cache
-        if (upsgi.cache_max_items > 0) {
-                upsgi_cache_create(NULL);
-        }
 
         // setup new generation caches
         struct upsgi_string_list *usl = upsgi.cache2;
